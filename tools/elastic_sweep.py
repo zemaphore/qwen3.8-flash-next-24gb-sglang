@@ -12,7 +12,7 @@ H = os.path.dirname(os.path.abspath(__file__))
 CTL = os.environ.get("SGLANG_MOE_ELASTIC_CTL", os.path.join(H, "elastic.ctl"))
 BENCH = os.path.join(H, "..", "release", "tools", "bench_speed.py")
 PY = os.path.expanduser("~/quant/venv/bin/python3")
-URL = "http://127.0.0.1:30000/generate"
+URL = os.environ.get("SGLANG_URL", "http://127.0.0.1:30000/generate")
 
 
 def poke(n=1):

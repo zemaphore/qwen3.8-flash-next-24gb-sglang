@@ -9,7 +9,7 @@ the answer, prefill/decode timings, and appends a line to perf/needle_results.ts
 """
 import json, os, random, re, sys, time, urllib.request
 
-URL = "http://127.0.0.1:30000/generate"
+URL = os.environ.get("SGLANG_URL", "http://127.0.0.1:30000/generate")
 H = os.path.dirname(os.path.abspath(__file__))
 WORDS = ("river valley harbour lantern quiet measure ancient signal garden copper thread window silent motor "
          "ledger orchard basalt canvas meadow saddle tunnel velvet anchor pigment glacier compass marble "

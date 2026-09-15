@@ -1,0 +1,28 @@
+M4 warmed end-to-end benchmark, RTX 3090, Triton 3.7.1
+Command: SGLANG_URL=http://127.0.0.1:30001/generate /root/quant/venv-sglang/bin/python tools/bench_speed.py 200
+
+   context  prefill s  prefill t/s  decode t/s tokens
+  ------------------------------------------------------
+       101       0.56          180        49.3    200
+       421       1.06          398        52.0    200
+      1701       2.30          739        52.5    200
+      6821       8.31          821        50.9    200
+     10001      11.80          847        49.9    200
+
+Prior baseline (/root/quant/logs/bench_3090_smoke.txt):
+   context  prefill s  prefill t/s  decode t/s tokens
+  ------------------------------------------------------
+       101       0.59          171        49.3    200
+       421       1.08          388        50.2    200
+      1701       2.75          618        49.8    200
+      6821       8.66          788        46.9    200
+     10001      12.29          814        46.7    200
+
+Natural-corpus llama-benchy 0.4.0, pp2048 @ d2048, tg256, three measured runs:
+                    PP tok/s          TG tok/s
+untuned       226.21 +/- 7.38   37.18 +/- 0.98
+M4           230.17 +/- 3.61   39.71 +/- 1.25
+
+Deterministic 4,565-token code-review prompt (tools/bench_agentic.py):
+untuned cold 256-278 PP tok/s; M4 cold 269 PP tok/s
+untuned warmed 457 PP tok/s; M4 warmed 461 and 447 PP tok/s

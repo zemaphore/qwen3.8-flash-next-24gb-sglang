@@ -9,7 +9,7 @@ kernel reordering shows up as a divergence position; report it rather than hide 
 """
 import json, sys, os, urllib.request
 
-URL = "http://127.0.0.1:30000/generate"
+URL = os.environ.get("SGLANG_URL", "http://127.0.0.1:30000/generate")
 D = os.path.join(os.path.dirname(os.path.abspath(__file__)), "greedy")
 PROMPTS = [
     "Erkläre in einem zusammenhängenden Absatz, warum Mixture-of-Experts-Modelle bei gleicher "

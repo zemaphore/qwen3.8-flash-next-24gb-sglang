@@ -7,9 +7,9 @@ request, so prefill jitter does not leak into the decode number.
 
   python3 bench_speed.py [tokens]        default 200 decode tokens per context
 """
-import json, sys, time, urllib.request
+import json, os, sys, time, urllib.request
 
-URL = "http://127.0.0.1:30000/generate"
+URL = os.environ.get("SGLANG_URL", "http://127.0.0.1:30000/generate")
 
 
 def stream(text, n):

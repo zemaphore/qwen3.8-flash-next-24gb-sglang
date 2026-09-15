@@ -4836,7 +4836,7 @@ index 93b552ee1c..84fd075a84 100644
 +        except Exception as _ex:               # pragma: no cover
 +            logger.warning("Qwen4 PLE: posix_fadvise(RANDOM) failed: %s", _ex)
 +        from concurrent.futures import ThreadPoolExecutor
-+        self._pool = ThreadPoolExecutor(max_workers=16)
++        self._pool = ThreadPoolExecutor(max_workers=int(os.environ.get("SGLANG_QWEN4_PLE_WORKERS", "16")))
 +        self._row_bytes = self._dim * itemsize
 +
 +        scale = torch.tensor([float(meta["weight_scale"])], dtype=torch.bfloat16)

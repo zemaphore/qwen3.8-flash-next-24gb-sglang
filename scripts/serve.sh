@@ -39,7 +39,7 @@ setsid systemd-run --user --scope --unit="sglang-$(date +%s)" -p MemoryMax=30G \
       SGLANG_KV_LAZY_SAFETY=0.77 \
       SGLANG_KV_TIERS_W=8192 \
   "$VENV/bin/python3" -m sglang.launch_server \
-    --host 127.0.0.1 --port 30000 --tp-size 1 --cpu-offload-gb 19 --no-ple-offload-embedding \
+    --host "${HOST:-0.0.0.0}" --port 30000 --tp-size 1 --cpu-offload-gb 19 --no-ple-offload-embedding \
     --mem-fraction-static 0.95 --language-model-only --page-size 1 --disable-overlap-schedule \
     --disable-radix-cache --weight-loader-drop-cache-after-load \
     --chunked-prefill-size 1024 --max-prefill-tokens 32768 --cuda-graph-backend-decode breakable \

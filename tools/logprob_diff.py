@@ -14,7 +14,7 @@ server itself (first call with logprob_start_len=0 returns the input token ids).
 """
 import json, os, sys, urllib.request
 
-URL = "http://127.0.0.1:30000/generate"
+URL = os.environ.get("SGLANG_URL", "http://127.0.0.1:30000/generate")
 D = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logprob")
 from greedy_diff import PROMPTS  # noqa: E402
 
