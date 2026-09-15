@@ -22,6 +22,7 @@ to the scripts and are git-ignored, except the two oracle inputs listed below.
 | `keepalive.sh` | One tiny request every 5 s to keep the server processes from being swapped out during long measurements. |
 | `expert_freq.py` | Builds the routing-mass histogram (`assets/expert_freq.pt`) from a `SGLANG_ROUTE_DUMP` directory (`host_fixes.py` item `dump`). Imports torch. |
 | `pp5_presence.py` | Offline layer-matched prefill-placement analysis; filters tiny launcher warmups and can reproduce `assets/expert_presence_code.pt`. |
+| `capture_pp5b_arm.py` | Auditable PP5c per-arm capture against an already-running server: validates the live placement/PP11 environment, then retains raw canonical and held-out code outputs, GPU samples, exactness oracles, elastic status, launcher snapshot, server log and checksums. It never starts or stops the server. |
 | `pp11_batch_copy_bench.py` | Model-free PP11 microbenchmark comparing the per-row PyTorch copy loop with one `cudaMemcpyBatchAsync` submission for the production row shape/count. |
 | `test_pp5_presence.py`, `test_pp_patch_helpers.py` | CPU regressions for PP5 layer/chunk accounting and PP7/PP11 patch-helper round trips, launcher migration, and mixed-state rejection. |
 | `spec_lossless.py` | Lossless gate for NGRAM speculation (spec-path logprobs vs teacher forcing, near-tie rule). |

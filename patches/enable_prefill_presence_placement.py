@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Set the accepted PP5b prefill-presence placement on the RTX 3090 launcher.
+"""Set the PP5c prefill-presence placement as the RTX 3090 launcher default.
 
-The launcher passes ``SGLANG_MOE_PLACEMENT`` through, so the accepted
-``assets/expert_presence_code.pt`` candidate becomes the default while an
-explicit environment value can still select ``assets/expert_freq.pt`` (routing
-mass) or any other placement file for an A/B.
+The launcher passes ``SGLANG_MOE_PLACEMENT`` through, so
+``assets/expert_presence_code.pt`` is the general default while an explicit
+environment value can still select ``assets/expert_freq.pt`` (routing mass) or
+any other placement file for an A/B. PP5c accepted presence on captured
+evidence: canonical +5.17% over pooled mass with held-out code -0.91%/+1.47%
+(non-material, exact oracles). Use ``revert`` to return to routing mass.
 """
 
 from __future__ import annotations
@@ -42,7 +44,7 @@ def state() -> tuple[bool, bool]:
 def check() -> None:
     clean, applied = state()
     status = "APPLIED" if applied else ("clean" if clean else "MISMATCH")
-    print(f"  {status:<8} {LAUNCHER}: PP5b prefill-presence placement default")
+    print(f"  {status:<8} {LAUNCHER}: PP5c presence-placement launcher default")
     if status == "MISMATCH":
         raise SystemExit(1)
 

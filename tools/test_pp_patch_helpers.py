@@ -7,6 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tools.capture_pp5b_arm import ROW_RE, status_values
+
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -104,6 +106,39 @@ class LauncherHelperTests(unittest.TestCase):
             )
             self.assertIn(new, launcher.read_text(encoding="utf-8"))
             self.assertNotIn(old, launcher.read_text(encoding="utf-8"))
+
+
+class CaptureHelperTests(unittest.TestCase):
+    def test_benchmark_row_parser(self):
+        output = """  target   actual  prefill s  prefill t/s  decode t/s
+  ---------------------------------------------------------
+      4096     4565       3.67          1244        41.5
+"""
+        match = ROW_RE.search(output)
+        self.assertIsNotNone(match)
+        self.assertEqual(
+            match.groupdict(),
+            {
+                "actual": "4565",
+                "prefill_s": "3.67",
+                "prefill_tps": "1244",
+                "decode_tps": "41.5",
+            },
+        )
+
+    def test_elastic_status_parser(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            status = Path(tmp) / "elastic.status"
+            raw = (
+                "time 19:30:46\n"
+                "S_min 184 S_max 184 floor 184\n"
+                "mass_covered 0.4665\n"
+            )
+            status.write_text(raw, encoding="utf-8")
+            actual_raw, values = status_values(status)
+            self.assertEqual(actual_raw, raw)
+            self.assertEqual(values["S_min"], "184 S_max 184 floor 184")
+            self.assertEqual(values["mass_covered"], "0.4665")
 
 
 class SourcePatchTests(unittest.TestCase):
