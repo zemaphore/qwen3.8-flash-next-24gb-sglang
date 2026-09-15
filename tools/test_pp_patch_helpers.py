@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""Round-trip and mixed-state tests for PP launcher/source patch helpers."""
+
+import os
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+
+REPO = Path(__file__).resolve().parents[1]
+
+
+def run(script, command, env):
+    return subprocess.run(
+        ["python3", str(REPO / script), command],
+        env={**os.environ, **env},
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+class LauncherHelperTests(unittest.TestCase):
+    def round_trip(self, script, anchor, line):
+        with tempfile.TemporaryDirectory() as tmp:
+            launcher = Path(tmp) / "serve.sh"
+            original = "#!/bin/sh\n" + anchor + "exec true\n"
+            launcher.write_text(original, encoding="utf-8")
+            env = {"SGLANG_3090_LAUNCHER": str(launcher)}
+
+            self.assertEqual(run(script, "apply", env).returncode, 0)
+            self.assertIn(line, launcher.read_text(encoding="utf-8"))
+            self.assertEqual(run(script, "--check", env).returncode, 0)
+            self.assertEqual(run(script, "revert", env).returncode, 0)
+            self.assertEqual(launcher.read_text(encoding="utf-8"), original)
+            self.assertEqual(run(script, "--check", env).returncode, 0)
+
+    def test_dma_launcher_round_trip(self):
+        self.round_trip(
+            "patches/enable_moe_host_dma_gather.py",
+            '      SGLANG_MOE_GATHER_BLOCK="${SGLANG_MOE_GATHER_BLOCK:-2048}" \\\n',
+            '      SGLANG_MOE_GATHER_DMA="${SGLANG_MOE_GATHER_DMA:-1}" \\\n',
+        )
+
+    def test_gather_block_launcher_round_trip(self):
+        self.round_trip(
+            "patches/enable_moe_gather_block.py",
+            "      SGLANG_MOE_EXPERT_STREAM=1 \\\n",
+            '      SGLANG_MOE_GATHER_BLOCK="${SGLANG_MOE_GATHER_BLOCK:-2048}" \\\n',
+        )
+
+
+class SourcePatchTests(unittest.TestCase):
+    def make_tree(self, root):
+        import sys
+
+        sys.path.insert(0, str(REPO / "patches"))
+        import moe_host_dma_gather as patch
+
+        stream = root / "python/sglang/srt/layers/moe/expert_stream.py"
+        elastic = root / "python/sglang/srt/layers/moe/expert_elastic.py"
+        stream.parent.mkdir(parents=True)
+        stream.write_text(
+            patch.BEFORE_DMA_CONST + patch.BEFORE_DISPATCH + patch.BEFORE_TAIL,
+            encoding="utf-8",
+        )
+        elastic.write_text(patch.BEFORE_PLACED, encoding="utf-8")
+        return patch, stream, elastic
+
+    def test_source_patch_round_trip_and_mixed_state_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            patch, stream, elastic = self.make_tree(root)
+            original_stream = stream.read_text(encoding="utf-8")
+            original_elastic = elastic.read_text(encoding="utf-8")
+            env = {"SGLANG": str(root)}
+            script = "patches/moe_host_dma_gather.py"
+
+            self.assertEqual(run(script, "apply", env).returncode, 0)
+            self.assertEqual(run(script, "--check", env).returncode, 0)
+            self.assertEqual(run(script, "revert", env).returncode, 0)
+            self.assertEqual(stream.read_text(encoding="utf-8"), original_stream)
+            self.assertEqual(elastic.read_text(encoding="utf-8"), original_elastic)
+
+            self.assertEqual(run(script, "apply", env).returncode, 0)
+            text = stream.read_text(encoding="utf-8")
+            stream.write_text(
+                text.replace(patch.AFTER_DISPATCH, patch.BEFORE_DISPATCH, 1),
+                encoding="utf-8",
+            )
+            self.assertNotEqual(run(script, "--check", env).returncode, 0)
+            self.assertNotEqual(run(script, "revert", env).returncode, 0)
+
+
+if __name__ == "__main__":
+    unittest.main()

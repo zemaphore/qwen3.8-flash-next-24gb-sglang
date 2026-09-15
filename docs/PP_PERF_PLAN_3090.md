@@ -10,9 +10,9 @@ its own plan in [DECODE_PERF_PLAN.md](DECODE_PERF_PLAN.md).
 
 The tuned INT2 MoE kernel is not the dominant end-to-end PP opportunity.  M4
 improved its standalone path by 1.38x geometric mean but moved end-to-end PP by
-only 1.8-4.1% in the earlier measurements.  Work should now target PLE storage,
-expert routing/gather preparation, chunk amortization, and the 36-layer GDN
-pipeline.
+only 1.8-4.1% in the earlier measurements.  The remaining measured PP target is
+expert staging-path CPU/synchronization overhead; GDN tuning and static
+prefill-aware placement have both missed their acceptance gates.
 
 The PLE work now has a bounded policy that covers both measured regimes:
 
@@ -29,9 +29,11 @@ reduced residency from S224 to S184 and increased the chunk to 2,048 tokens,
 raising warmed code PP to **636.3 tok/s**: +25.9% over PP2a while retaining
 3.17 GiB post-workload free VRAM.  PP4 intra-layer overlap was then rejected:
 the largest shared/router candidate averaged 636.0 tok/s, effectively unchanged.
-PP5 static presence-ranked placement was then rejected too: a code chunk routes
-to ~329 of 512 experts per layer, so every static S=184 set leaves ~210 distinct
-cold rows and the best-ranked alternative moved that by only -0.2%.  PP7 found
+PP5's first static-placement analysis was invalidated on review: it included
+two launcher warmups and crossed the chunk and layer axes.  The repaired
+analysis found 236.68 -> 211.16 cold rows/layer-chunk (-10.8%) for presence,
+but a bracketing PP7 E2E A/B measured only **+3.1%** (1110.0 -> 1144.8 tok/s),
+below the 5% gate, so routing mass remains the default.  PP7 found
 the true wall: the ~46 ms/layer-chunk of expert staging was SM host-read bound
 at ~7.5-10 GB/s in every geometry, so the DMA engine (~22 GB/s) was used to
 stage the cold rows instead, giving **1111.8 tok/s** warmed, +74.8% over PP3,
@@ -42,7 +44,9 @@ torch-profiler capture of the PP7 stack (PP6) then measured the steady
 of the span while the single-threaded CPU staging path (unique2, tolist syncs,
 ~50k per-row copies) consumes 78% of the CPU wall.  The next lever is
 therefore PP11: eliminate the staging path's CPU serialization so DMA and
-compute interleave, with a rough 2x ceiling.
+compute interleave.  Its ceiling is below 1.59x before other dependent work,
+not the earlier rough 2x estimate, because DMA and the routed fused MoE remain
+serial within each layer.
 
 ## Status key
 
@@ -98,7 +102,7 @@ must never be silently mixed into an exact A/B.
 | PP2 | SUPERSEDED | Direct/hybrid expert execution | Stage only selected cold experts; avoid copying resident rows | No longer needed for PP: PP7 DMA staging made full-row transfer cheap; low-token direct GEMV was +3.4% slower |
 | PP3 | **DONE** | Prefill residency/chunk trade | Fewer 1536/2048-token chunks amortize expert census and transfer | Exact; 2048/S184 is +25.9%, with 3.17 GiB free VRAM |
 | PP4 | **REJECTED** | Eager intra-layer dual-stream overlap | Hide shared/projection compute behind routed-expert work | Shared/router A/B was flat; GDN/QSA profile upper bounds are below 5% |
-| PP5 | **REJECTED** | Prefill-aware expert placement | Presence-per-chunk is a better transfer objective than routing mass | Static rankings tie within 0.2% of mass; placement objective is saturated |
+| PP5 | **REJECTED** | Prefill-aware expert placement | Presence-per-chunk is a better transfer objective than routing mass | Corrected analysis saves 10.8% cold rows, but bracketing PP7 E2E is only +3.1%, below gate; keep mass |
 | PP6 | REJECTED | RTX 3090 GDN pipeline tuning/fusion | 36 Triton GDN layers contain more untuned PP time than fused MoE | Profiled: GDN is 40.2 ms of a 1,773 ms chunk (2.3%) versus 238.0 ms fused MoE; 5% gate unreachable |
 | PP7 | **DONE** | Hybrid cold-expert execution | Full-row transfer is wasteful for experts assigned few tokens | Low-token direct GEMV rejected (SM host reads ~7.5-10 GB/s either way); the host-row DMA staging form is bit-exact and +74.8% warmed PP |
 | PP8 | RESEARCH | Dense/shared-expert format sweep | Ampere may prefer BF16 cuBLAS or W8A8 over W8A16 Marlin at M=1024 | Memory-neutral enough to retain S; quality gate if W8A8 |
@@ -223,20 +227,27 @@ The source patch remains installed but disabled by default for future research.
 
 ## PP5 — prefill-aware placement
 
-Completed and rejected in the static form.  `patches/prefill_route_dump.py`
+Completed and rejected in the static form after a corrected E2E test.
+`patches/prefill_route_dump.py`
 (opt-in `SGLANG_PREFILL_ROUTE_DUMP`, installed and left disabled) recorded
-routing ids for nine 2,048-token code chunks; `tools/pp5_presence.py` compared
-top-S=184 residency by routing mass versus per-chunk presence and token
-counts.  A code chunk routes to ~329 distinct experts per layer, so every
-static set stages ~210 cold rows per layer-chunk and the presence ranking
-improved that by only 0.2% (210.09 -> 209.66) despite a 56% resident-set
-disagreement with mass.  The gate was unreachable before any A/B: mass
-placement is kept and nothing numerically changed.  The dump histogram shows
-22% of staged cold rows carry <= 2 tokens for 1% of the tokens — that is
-PP7's size estimate, and request-local promotion cannot beat it either since
-presence was already measured per chunk.
+routing ids for the canonical code prompt. Review found that the original
+analyzer admitted M=3/M=6 launcher warmups and paired chunks with layer sets
+on its final cold-row loop. The repaired tool admits nine real chunks (six
+2,048 plus three 469), matches each layer to its own resident set, and breaks
+presence ties by routing mass. Corrected cold rows are 236.68 mass versus
+211.16 presence (-10.8%), with 71.5% resident-set overlap and 66.0% routing
+mass coverage.
 
-Evidence: [PP5 presence-vs-mass placement](logs/pp5_presence_placement_3090_2026-09-15.md)
+That result earned a real A/B on the accepted PP7 DMA stack. Five warmed
+presence samples averaged **1144.8 tok/s**; two bracketing mass controls pooled
+to **1110.0 tok/s**. The +3.1% gain is directionally consistent but below the
+5% gate. Decode did not regress (39.94 versus 38.65 tok/s pooled), and both
+machine oracles were unchanged. Keep mass placement as the default; retain
+`assets/expert_presence_code.pt` only as a reproducibility artifact.
+
+Evidence: [corrected PP5/PP7 placement recheck](logs/pp5_presence_placement_recheck_3090_2026-09-15.md).
+The [original analysis](logs/pp5_presence_placement_3090_2026-09-15.md) is
+retained but marked superseded.
 
 Restart caveat learned in this line of sessions: after repeated weight loads
 the PLE page cache re-warms slowly and the first warmed triplets read ~5% low
@@ -326,10 +337,13 @@ order:
    resize to kill the 119.8k `aten::select` calls.
 3. Overlap `_unique2` with the previous layer's compute instead of blocking.
 
-Ceiling if fully successful: span wall approaches max(DMA ~875 ms, SM ~652 ms)
-plus tail effects, roughly 2x current warmed PP.  Acceptance: staging bytes
-identical (bit-exact by construction or machine-local oracle pass), warmed
-code A/B per protocol, adopt at >= 5% e2e.
+DMA (875 ms) and routed fused MoE (238 ms) remain serial inside each layer:
+the router must produce ids before DMA can be submitted, and the next layer
+depends on the current MoE result. Their sum is already ~1.11 s, so the hard
+ceiling is below 1.59x before accounting for other dependent work; only
+independent branches can overlap. Acceptance: staging bytes identical
+(bit-exact by construction or machine-local oracle pass), warmed code A/B per
+protocol, adopt at >= 5% e2e. PP11 is defined but not started.
 
 ## Later research
 
@@ -369,15 +383,27 @@ code A/B per protocol, adopt at >= 5% e2e.
    SGLANG=/root/sglang python3 patches/moe_config_buckets.py --check
    ```
 
-5. Continue with PP11 unless the owner reprioritizes.
+5. PP11 is the next defined experiment, but do not start it until the owner
+   explicitly resumes the PP campaign.
 6. After every experiment, update the status table, append a dated result under
    the relevant section, and link the raw log/artifact.
+
+Optional regression checks before future PP work:
+
+```bash
+/root/quant/venv-sglang/bin/python -m unittest \
+  tools/test_pp5_presence.py tools/test_pp_patch_helpers.py
+# With the model server stopped and the GPU free:
+PYTHONPATH=/root/sglang/python /root/quant/venv-sglang/bin/python -m unittest \
+  gemv/test_moe_host_dma_gather.py
+```
 
 State at this update: bulk pread, the 128 MiB recent-row cache, the 2,048-byte
 expert-gather tile, host-row DMA staging, a 2,048-token prefill chunk, and S184
 residency are enabled; profiling is disabled.  The prefill route dump is applied
 and pass-through in `/root/quant/serve-3090.sh` but off unless
 `SGLANG_PREFILL_ROUTE_DUMP` names a directory.  The server is running on port
-30001 in `sglang-1789491753.scope` with `--sleep-on-idle`.  This is transient
+30001 in `sglang-1789496308.scope` with `--sleep-on-idle` and the routing-mass
+placement restored after the PP5 recheck.  This is transient
 operational state, not a prerequisite for resuming.  The PP6 profile was taken
 through the live `/start_profile` endpoint with no code change or restart.

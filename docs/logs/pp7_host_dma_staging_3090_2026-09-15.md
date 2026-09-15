@@ -127,3 +127,10 @@ Server left running: `sglang-1789491753.scope`, `SGLANG_MOE_GATHER_DMA=1`.
 Raw transport experiments: `/tmp/opencode/pp7_transport.py`,
 `/tmp/opencode/pp7_dma2.py`, `/tmp/opencode/pp7_dma_exact.py` (session
 scratch); the reproducible hybrid bench is `tools/pp7_hybrid_bench.py`.
+
+Post-review hardening: `gemv/test_moe_host_dma_gather.py` now permanently
+covers mixed/all-host/all-resident/duplicate-id staging and a simulated elastic
+resize, and passed on the 3090. The source and launcher patch helpers now use
+unambiguous state detection, reject mixed states, and round-trip cleanly; their
+six CPU-side regression tests pass. The PP5 placement recheck did not alter or
+supersede PP7: both placement arms retained DMA staging and its exact oracles.

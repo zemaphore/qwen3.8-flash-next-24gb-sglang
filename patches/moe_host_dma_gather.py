@@ -135,51 +135,76 @@ EDITS = [
 def state(path: str, before: str, after: str) -> tuple[bool, bool]:
     with open(path, encoding="utf-8") as source:
         text = source.read()
-    return before in text, after in text
+    masked = text.replace(after, "\x00")
+    return masked.count(before) == 1, text.count(after) == 1
+
+
+def states() -> list[tuple[bool, bool]]:
+    return [state(path, before, after) for path, before, after in EDITS]
+
+
+def all_applied(values) -> bool:
+    return all(applied and not clean for clean, applied in values)
+
+
+def all_clean(values) -> bool:
+    return all(clean and not applied for clean, applied in values)
 
 
 def check() -> None:
-    ok = True
-    for path, before, after in EDITS:
-        clean, applied = state(path, before, after)
+    values = states()
+    for (path, before, after), (clean, applied) in zip(EDITS, values):
         status = "APPLIED" if applied else ("clean" if clean else "MISMATCH")
-        ok = ok and (applied or clean)
         print(f"  {status:<8} {os.path.relpath(path, SG)}: "
               f"{before.splitlines()[0].strip()[:60]}")
-    if not ok:
+    if not (all_applied(values) or all_clean(values)):
         raise SystemExit(1)
 
 
 def apply() -> None:
+    values = states()
+    if all_applied(values):
+        print("  already applied")
+        return
+    if not all_clean(values):
+        check()
+        raise RuntimeError("patch state mismatch")
+    changed = {}
     for path, before, after in EDITS:
-        clean, applied = state(path, before, after)
-        if applied:
-            continue
-        if not clean:
-            raise RuntimeError(f"anchor mismatch in {path}")
-        with open(path, encoding="utf-8") as source:
-            text = source.read()
+        if path not in changed:
+            with open(path, encoding="utf-8") as source:
+                changed[path] = source.read()
+        text = changed[path]
         if text.count(before) != 1:
             raise RuntimeError(f"expected one anchor in {path}, found "
                                f"{text.count(before)}")
+        changed[path] = text.replace(before, after, 1)
+    for path, text in changed.items():
         with open(path, "w", encoding="utf-8") as out:
-            out.write(text.replace(before, after, 1))
+            out.write(text)
     print("  applied (set SGLANG_MOE_GATHER_DMA=1 to enable)")
 
 
 def revert() -> None:
+    values = states()
+    if all_clean(values):
+        print("  already clean")
+        return
+    if not all_applied(values):
+        check()
+        raise RuntimeError("patch state mismatch")
+    changed = {}
     for path, before, after in reversed(EDITS):
-        clean, applied = state(path, before, after)
-        if clean:
-            continue
-        if not applied:
-            raise RuntimeError(f"anchor mismatch in {path}")
-        with open(path, encoding="utf-8") as source:
-            text = source.read()
+        if path not in changed:
+            with open(path, encoding="utf-8") as source:
+                changed[path] = source.read()
+        text = changed[path]
         if text.count(after) != 1:
             raise RuntimeError(f"expected one block in {path}")
+        changed[path] = text.replace(after, before, 1)
+    for path, text in changed.items():
         with open(path, "w", encoding="utf-8") as out:
-            out.write(text.replace(after, before, 1))
+            out.write(text)
     print("  reverted")
 
 

@@ -1,4 +1,8 @@
-# PP5 — prefill-aware expert placement (presence vs mass): REJECTED
+# PP5 — original prefill-aware placement analysis: SUPERSEDED
+
+> This analysis admitted the launcher's 3/6-token warmups and compared each
+> chunk's layers against one resident-layer set.  Its conclusion is invalid.
+> See [the corrected analysis and E2E recheck](pp5_presence_placement_recheck_3090_2026-09-15.md).
 
 Date: 2026-09-15. Host: RTX 3090, PP3 baseline (2,048-token chunks, S184,
 bulk pread + 128 MiB recent-row cache, 2,048-byte gather tile).
