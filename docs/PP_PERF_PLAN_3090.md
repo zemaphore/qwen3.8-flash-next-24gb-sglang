@@ -14,9 +14,11 @@ only 1.8-4.1% in the earlier measurements.  The remaining measured PP target is
 expert staging-path CPU/synchronization overhead. PP11 removed the per-row
 Python copy-submission bottleneck with `cudaMemcpyBatchAsync`: bracketing code
 controls pooled to 1110.9 tok/s while PP11 reached **1183.4 tok/s (+6.53%)**,
-so it is accepted and enabled by default. GDN tuning and static prefill-aware
-placement missed their original standalone gates, but PP5 is queued for an
-interaction test on top of PP11 at the owner's request.
+so it is accepted and enabled by default. GDN tuning missed its standalone gate.
+Static prefill-aware placement missed its original gate on PP7, but the PP5b
+interaction test on PP11 measured presence **1244.0** versus pooled mass controls
+**1177.3 tok/s (+5.67%)** with unchanged exactness oracles, and the owner
+accepted it; prefill-presence placement is now the launcher default.
 
 The PLE work now has a bounded policy that covers both measured regimes:
 
@@ -107,8 +109,8 @@ must never be silently mixed into an exact A/B.
 | PP2 | SUPERSEDED | Direct/hybrid expert execution | Stage only selected cold experts; avoid copying resident rows | No longer needed for PP: PP7 DMA staging made full-row transfer cheap; low-token direct GEMV was +3.4% slower |
 | PP3 | **DONE** | Prefill residency/chunk trade | Fewer 1536/2048-token chunks amortize expert census and transfer | Exact; 2048/S184 is +25.9%, with 3.17 GiB free VRAM |
 | PP4 | **REJECTED** | Eager intra-layer dual-stream overlap | Hide shared/projection compute behind routed-expert work | Shared/router A/B was flat; GDN/QSA profile upper bounds are below 5% |
-| PP5 | **REJECTED** | Prefill-aware expert placement | Presence-per-chunk is a better transfer objective than routing mass | Corrected analysis saves 10.8% cold rows, but bracketing PP7 E2E is only +3.1%, below the original gate; mass remains default pending PP5b |
-| PP5b | **QUEUED** | PP11 + presence-placement interaction | Fewer cold rows and cheaper batched submission may compound; the earlier +3.1% is still useful | Bracket PP11/mass -> PP11/presence -> PP11/mass; exact; report a sub-5% positive result for owner decision |
+| PP5 | **SUPERSEDED** | Prefill-aware expert placement | Presence-per-chunk is a better transfer objective than routing mass | Corrected analysis saves 10.8% cold rows; bracketing PP7 E2E was only +3.1%, below the original gate, which kept mass as default until PP5b overturned it on the PP11 stack |
+| PP5b | **DONE** | PP11 + presence-placement interaction | Fewer cold rows and cheaper batched submission may compound; the earlier +3.1% is still useful | Presence 1244.0 +/- 25.3 vs pooled mass 1177.3 +/- 26.1 tok/s (**+5.67%**, +4.94% vs bracketing control A, +6.40% vs B); every presence sample beat every mass sample; oracles exact; owner accepted and `assets/expert_presence_code.pt` is the launcher default |
 | PP6 | REJECTED | RTX 3090 GDN pipeline tuning/fusion | 36 Triton GDN layers contain more untuned PP time than fused MoE | Profiled: GDN is 40.2 ms of a 1,773 ms chunk (2.3%) versus 238.0 ms fused MoE; 5% gate unreachable |
 | PP7 | **DONE** | Hybrid cold-expert execution | Full-row transfer is wasteful for experts assigned few tokens | Low-token direct GEMV rejected (SM host reads ~7.5-10 GB/s either way); the host-row DMA staging form is bit-exact and +74.8% warmed PP |
 | PP8 | RESEARCH | Dense/shared-expert format sweep | Ampere may prefer BF16 cuBLAS or W8A8 over W8A16 Marlin at M=1024 | Memory-neutral enough to retain S; quality gate if W8A8 |
@@ -261,6 +263,37 @@ the PLE page cache re-warms slowly and the first warmed triplets read ~5% low
 likewise read 597-645 before holding).  Run at least four warm samples before
 accepting any delta under ~5%.
 
+### PP5b — PP11 interaction: accepted
+
+The earlier +3.1% presence gain was measured on PP7.  Re-tested on the accepted
+PP11 batched-DMA stack, the only functional variable being
+`SGLANG_MOE_PLACEMENT`, one excluded request plus five measured code samples per
+restart, mass arms bracketing the candidate:
+
+| Arm | Placement | Scope | Measured PP tok/s | Mean +/- sample SD | Decode mean |
+|---|---|---|---:|---:|---:|
+| A control | mass | `sglang-1789499399.scope` | 1183 / 1182 / 1190 / 1161 / 1211 | 1185.4 +/- 17.9 | 38.94 |
+| B candidate | presence | `sglang-1789499716.scope` | 1254 / 1214 / 1263 / 1220 / 1269 | **1244.0 +/- 25.3** | 41.52 |
+| C control | mass | `sglang-1789500049.scope` | 1203 / 1129 / 1200 / 1167 / 1147 | 1169.2 +/- 32.4 | 38.68 |
+| Pooled controls | mass | A + C | ten samples | 1177.3 +/- 26.1 | 38.81 |
+
+Presence is **+5.67%** over pooled mass (t = 4.76; smallest presence sample
+1214 > largest mass sample 1211), but only +4.94% against the stronger
+bracketing control A.  The predeclared pooled bracketing method clears 5%, so
+the owner accepted it; the boundary is recorded rather than smoothed over.
+Both oracles are unchanged (`m4_3090_untuned` 0/0, `lp2`
+0.168757/0.011632), decode did not regress, and post-workload free VRAM was
+2,941 MiB (presence) versus 3,239 MiB (mass).
+
+The launcher now defaults `SGLANG_MOE_PLACEMENT` to
+`assets/expert_presence_code.pt` through
+`patches/enable_prefill_presence_placement.py`; the routing-mass histogram
+remains selectable with `SGLANG_MOE_PLACEMENT=$ASSETS/expert_freq.pt`.  Caveat:
+presence is derived from the canonical code prompt's routing, so it is
+workload-specific in a way the general-domain mass histogram is not.
+
+Evidence: [PP5b PP11+presence interaction](logs/pp5b_presence_pp11_3090_2026-09-15.md).
+
 ## PP7 — hybrid cold-expert execution
 
 Completed in two halves.  The planned low-token direct-GEMV variant was
@@ -396,14 +429,16 @@ Evidence: [PP11 batched host-row DMA](logs/pp11_dma_batch_3090_2026-09-15.md).
    python3 patches/enable_moe_host_dma_gather.py --check
    SGLANG=/root/sglang python3 patches/moe_host_dma_batch.py --check
    python3 patches/enable_moe_host_dma_batch.py --check
+   python3 patches/enable_prefill_presence_placement.py --check
    SGLANG=/root/sglang python3 patches/prefill_route_dump.py --check
    python3 patches/enable_prefill_chunk_residency.py --check
    SGLANG=/root/sglang python3 patches/moe_config_buckets.py --check
    ```
 
-5. PP11 is accepted. The next defined controlled experiment is PP5b, the
-   interaction between accepted PP11 and presence placement; start it only
-   when the owner continues the PP campaign.
+5. PP11 and PP5b are accepted; the launcher default is now prefill-presence
+   placement. The remaining defined experiments are the research items PP8,
+   PP9, PP10 and the later-research list; start one only when the owner
+   continues the PP campaign.
 6. After every experiment, update the status table, append a dated result under
    the relevant section, and link the raw log/artifact.
 
@@ -418,11 +453,13 @@ PYTHONPATH=/root/sglang/python /root/quant/venv-sglang/bin/python -m unittest \
 ```
 
 State at this update: bulk pread, the 128 MiB recent-row cache, the 2,048-byte
-expert-gather tile, host-row DMA staging and PP11 DMA batching, a 2,048-token
-prefill chunk, and S184 residency are enabled; profiling is disabled. The prefill route dump is applied
+expert-gather tile, host-row DMA staging, PP11 DMA batching and PP5b
+prefill-presence placement, a 2,048-token prefill chunk, and S184 residency are
+enabled; profiling is disabled. The prefill route dump is applied
 and pass-through in `/root/quant/serve-3090.sh` but off unless
 `SGLANG_PREFILL_ROUTE_DUMP` names a directory. The server runs on port 30001
-with `--sleep-on-idle` and routing-mass placement. Its scope id is transient
+with `--sleep-on-idle` and presence placement (fallback routing mass via
+`SGLANG_MOE_PLACEMENT`). Its scope id is transient
 and must be discovered at resume time. This is transient
 operational state, not a prerequisite for resuming.  The PP6 profile was taken
 through the live `/start_profile` endpoint with no code change or restart.

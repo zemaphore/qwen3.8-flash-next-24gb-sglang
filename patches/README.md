@@ -68,9 +68,11 @@ damage.
 
 * `assets/moe_configs/` — tuned Triton configs for `dtype=int2_w2a16` / `int2_w2a16_down` at E = 10
   (decode) and E = 512 (prefill), `SGLANG_MOE_CONFIG_DIR` (S0b, +13 % decode, CAMPAIGN.md:252).
-* `assets/expert_freq.pt` — routing-mass histogram `[48, 512]`, `SGLANG_MOE_PLACEMENT`.
-* `assets/expert_presence_code.pt` — rejected PP5 code-prompt placement candidate,
-  retained only to reproduce the corrected +3.1% E2E result; not a launcher default.
+* `assets/expert_freq.pt` — routing-mass histogram `[48, 512]`, selectable
+  `SGLANG_MOE_PLACEMENT` fallback.
+* `assets/expert_presence_code.pt` — accepted PP5b code-prompt presence placement,
+  now the launcher default via `patches/enable_prefill_presence_placement.py`
+  (+5.67% over pooled mass controls on the PP11 stack; workload-specific).
 * a writable control file for `SGLANG_MOE_ELASTIC_CTL` (contents `S 184`; the server writes
   `<file>.status`).
 

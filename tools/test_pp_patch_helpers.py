@@ -57,6 +57,35 @@ class LauncherHelperTests(unittest.TestCase):
             '      SGLANG_MOE_GATHER_DMA_BATCH="${SGLANG_MOE_GATHER_DMA_BATCH:-1}" \\\n',
         )
 
+    def test_presence_placement_launcher_round_trip(self):
+        self.round_trip(
+            "patches/enable_prefill_presence_placement.py",
+            '      SGLANG_MOE_PLACEMENT="${SGLANG_MOE_PLACEMENT:-$ASSETS/expert_freq.pt}" \\\n',
+            '      SGLANG_MOE_PLACEMENT="${SGLANG_MOE_PLACEMENT:-$ASSETS/expert_presence_code.pt}" \\\n',
+        )
+
+    def test_presence_placement_launcher_migrates_old_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            launcher = Path(tmp) / "serve.sh"
+            old = '      SGLANG_MOE_PLACEMENT="$ASSETS/expert_freq.pt" \\\n'
+            new = (
+                '      SGLANG_MOE_PLACEMENT="${SGLANG_MOE_PLACEMENT:-'
+                '$ASSETS/expert_presence_code.pt}" \\\n'
+            )
+            launcher.write_text("#!/bin/sh\n" + old + "exec true\n", encoding="utf-8")
+            env = {"SGLANG_3090_LAUNCHER": str(launcher)}
+
+            self.assertEqual(
+                run("patches/enable_prefill_presence_placement.py", "apply", env).returncode,
+                0,
+            )
+            self.assertIn(new, launcher.read_text(encoding="utf-8"))
+            self.assertNotIn(old, launcher.read_text(encoding="utf-8"))
+            self.assertEqual(
+                run("patches/enable_prefill_presence_placement.py", "--check", env).returncode,
+                0,
+            )
+
     def test_dma_batch_launcher_migrates_old_default(self):
         with tempfile.TemporaryDirectory() as tmp:
             launcher = Path(tmp) / "serve.sh"
