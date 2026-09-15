@@ -29,7 +29,10 @@ reduced residency from S224 to S184 and increased the chunk to 2,048 tokens,
 raising warmed code PP to **636.3 tok/s**: +25.9% over PP2a while retaining
 3.17 GiB post-workload free VRAM.  PP4 intra-layer overlap was then rejected:
 the largest shared/router candidate averaged 636.0 tok/s, effectively unchanged.
-PP5 prefill-aware placement is next.
+PP5 static presence-ranked placement was then rejected too: a code chunk routes
+to ~329 of 512 experts per layer, so every static S=184 set leaves ~210 distinct
+cold rows and the best-ranked alternative moved that by only -0.2%.  PP7 hybrid
+cold-expert execution (22% of staged rows carry <= 2 tokens) is next.
 
 ## Status key
 
@@ -84,9 +87,9 @@ must never be silently mixed into an exact A/B.
 | PP2 | RESEARCH | Direct/hybrid expert execution | Stage only selected cold experts; avoid copying resident rows | Profile shows staging dominates; fixed `E=512` alone is insufficient |
 | PP3 | **DONE** | Prefill residency/chunk trade | Fewer 1536/2048-token chunks amortize expert census and transfer | Exact; 2048/S184 is +25.9%, with 3.17 GiB free VRAM |
 | PP4 | **REJECTED** | Eager intra-layer dual-stream overlap | Hide shared/projection compute behind routed-expert work | Shared/router A/B was flat; GDN/QSA profile upper bounds are below 5% |
-| PP5 | **NEXT** | Prefill-aware expert placement | Presence-per-chunk is a better transfer objective than routing mass | Fewer distinct cold rows and >=5% cold code PP |
+| PP5 | **REJECTED** | Prefill-aware expert placement | Presence-per-chunk is a better transfer objective than routing mass | Static rankings tie within 0.2% of mass; placement objective is saturated |
 | PP6 | RESEARCH | RTX 3090 GDN pipeline tuning/fusion | 36 Triton GDN layers contain more untuned PP time than fused MoE | Profile first; retain only an end-to-end gain |
-| PP7 | RESEARCH | Hybrid cold-expert execution | Full-row transfer is wasteful for experts assigned few tokens | Exact; transfer-time gain exceeds merge/launch cost |
+| PP7 | **NEXT** | Hybrid cold-expert execution | Full-row transfer is wasteful for experts assigned few tokens | Exact; transfer-time gain exceeds merge/launch cost |
 | PP8 | RESEARCH | Dense/shared-expert format sweep | Ampere may prefer BF16 cuBLAS or W8A8 over W8A16 Marlin at M=1024 | Memory-neutral enough to retain S; quality gate if W8A8 |
 | PP9 | RESEARCH | Fused QSA score/mask/top-k | Avoid full FP32 logits materialization at long prefixes | Prioritize only after 4.5k code PP work |
 | PP10 | QUEUED | Host/PCIe operational audit | Link downgrade, IOMMU, VM scheduling, or CPU affinity may cap transfers | Read-only audit, then one controlled setting per A/B |
@@ -208,26 +211,35 @@ The source patch remains installed but disabled by default for future research.
 
 ## PP5 — prefill-aware placement
 
-`assets/expert_freq.pt` contains only 2,496 general-domain tokens and ranks by
-routing mass.  Prefill transfer pays for a complete row if an expert appears at
-least once, so the correct primary statistic is per-chunk presence probability.
+Completed and rejected in the static form.  `patches/prefill_route_dump.py`
+(opt-in `SGLANG_PREFILL_ROUTE_DUMP`, installed and left disabled) recorded
+routing ids for nine 2,048-token code chunks; `tools/pp5_presence.py` compared
+top-S=184 residency by routing mass versus per-chunk presence and token
+counts.  A code chunk routes to ~329 distinct experts per layer, so every
+static set stages ~210 cold rows per layer-chunk and the presence ranking
+improved that by only 0.2% (210.09 -> 209.66) despite a 56% resident-set
+disagreement with mass.  The gate was unreachable before any A/B: mass
+placement is kept and nothing numerically changed.  The dump histogram shows
+22% of staged cold rows carry <= 2 tokens for 1% of the tokens — that is
+PP7's size estimate, and request-local promotion cannot beat it either since
+presence was already measured per chunk.
 
-1. Record route IDs from representative code/agent chunks without synchronizing
-   every layer.
-2. Build `[layer, expert]` occurrence counts and distinct-cold-row estimates.
-3. Compare the current mass placement against presence-ranked placement at the
-   same S and memory usage.
-4. If static placement wins, investigate request-local promotion after the
-   first chunk; retain mass placement for decode.
+Evidence: [PP5 presence-vs-mass placement](logs/pp5_presence_placement_3090_2026-09-15.md)
+
+Restart caveat learned this session: after repeated weight loads the PLE page
+cache re-warms slowly and the first warmed triplets read ~5% low (600 then
+625.7 versus the 629.7 steady baseline).  Run at least four warm samples
+before accepting any delta under ~5%.
 
 ## PP6 and later research
 
+- PP7 (NEXT): for routed experts with very low token counts, compare exact
+  direct pinned-host GEMV/tiny-GEMM against staging a roughly 1.3 MB row.
+  Stage high-count cold experts and merge the two result paths.  PP5 measured
+  the size: 22% of staged cold rows carry <= 2 tokens for 1% of the tokens.
 - Profile the complete GDN pipeline at M=1024.  Tune its existing Triton
   configuration points and look for intermediate/launch fusion; the 3090 cannot
   use the SM90+ FlashInfer GDN path.
-- For routed experts with very low token counts, compare exact direct pinned-host
-  GEMV/tiny-GEMM against staging a roughly 1.3 MB row.  Stage high-count cold
-  experts and merge the two result paths.
 - Benchmark shared-expert W8A16 Marlin against selectively materialized BF16.
   Only then consider calibrated W8A8.
 - At long prefixes, profile QSA's full FP32 score tensor and consider fusing
@@ -254,16 +266,19 @@ least once, so the correct primary statistic is per-chunk presence probability.
    python3 patches/enable_moe_gather_block.py --check
    SGLANG=/root/sglang python3 patches/moe_eager_shared_overlap.py --check
    python3 patches/enable_moe_eager_shared_overlap.py --check
+   SGLANG=/root/sglang python3 patches/prefill_route_dump.py --check
    python3 patches/enable_prefill_chunk_residency.py --check
    SGLANG=/root/sglang python3 patches/moe_config_buckets.py --check
    ```
 
-5. Continue with PP5 unless the owner reprioritizes.
+5. Continue with PP7 unless the owner reprioritizes.
 6. After every experiment, update the status table, append a dated result under
    the relevant section, and link the raw log/artifact.
 
 State at this update: bulk pread, the 128 MiB recent-row cache, the 2,048-byte
 expert-gather tile, a 2,048-token prefill chunk, and S184 residency are enabled;
-profiling is disabled.  The server is running on port 30001 in
-`sglang-1789478336.scope` with `--sleep-on-idle`.  This is transient operational
+profiling is disabled.  The prefill route dump is applied and pass-through in
+`/root/quant/serve-3090.sh` but off unless `SGLANG_PREFILL_ROUTE_DUMP` names a
+directory.  The server is running on port 30001 in
+`sglang-1789483328.scope` with `--sleep-on-idle`.  This is transient operational
 state, not a prerequisite for resuming.
