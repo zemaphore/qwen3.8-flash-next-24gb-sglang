@@ -11,8 +11,12 @@ its own plan in [DECODE_PERF_PLAN.md](DECODE_PERF_PLAN.md).
 The tuned INT2 MoE kernel is not the dominant end-to-end PP opportunity.  M4
 improved its standalone path by 1.38x geometric mean but moved end-to-end PP by
 only 1.8-4.1% in the earlier measurements.  The remaining measured PP target is
-expert staging-path CPU/synchronization overhead; GDN tuning and static
-prefill-aware placement have both missed their acceptance gates.
+expert staging-path CPU/synchronization overhead. PP11 removed the per-row
+Python copy-submission bottleneck with `cudaMemcpyBatchAsync`: bracketing code
+controls pooled to 1110.9 tok/s while PP11 reached **1183.4 tok/s (+6.53%)**,
+so it is accepted and enabled by default. GDN tuning and static prefill-aware
+placement missed their original standalone gates, but PP5 is queued for an
+interaction test on top of PP11 at the owner's request.
 
 The PLE work now has a bounded policy that covers both measured regimes:
 
@@ -43,10 +47,11 @@ torch-profiler capture of the PP7 stack (PP6) then measured the steady
 172.4 ms Marlin, and only 40.2 ms across all 36 GDN layers; the SMs idle ~63%
 of the span while the single-threaded CPU staging path (unique2, tolist syncs,
 ~50k per-row copies) consumes 78% of the CPU wall.  The next lever is
-therefore PP11: eliminate the staging path's CPU serialization so DMA and
-compute interleave.  Its ceiling is below 1.59x before other dependent work,
-not the earlier rough 2x estimate, because DMA and the routed fused MoE remain
-serial within each layer.
+therefore motivated PP11. Batching the cold-row copies reduced CPU submission
+and reached **1183.4 tok/s**, +6.53% over pooled pre/post controls, while keeping
+the staging bytes and machine oracles unchanged. The authors' original
+repeated-sentence speed tool reached 1,909 tok/s at 10,001 tokens, about 84% of
+the repository's 2,271 tok/s reference.
 
 ## Status key
 
@@ -102,13 +107,14 @@ must never be silently mixed into an exact A/B.
 | PP2 | SUPERSEDED | Direct/hybrid expert execution | Stage only selected cold experts; avoid copying resident rows | No longer needed for PP: PP7 DMA staging made full-row transfer cheap; low-token direct GEMV was +3.4% slower |
 | PP3 | **DONE** | Prefill residency/chunk trade | Fewer 1536/2048-token chunks amortize expert census and transfer | Exact; 2048/S184 is +25.9%, with 3.17 GiB free VRAM |
 | PP4 | **REJECTED** | Eager intra-layer dual-stream overlap | Hide shared/projection compute behind routed-expert work | Shared/router A/B was flat; GDN/QSA profile upper bounds are below 5% |
-| PP5 | **REJECTED** | Prefill-aware expert placement | Presence-per-chunk is a better transfer objective than routing mass | Corrected analysis saves 10.8% cold rows, but bracketing PP7 E2E is only +3.1%, below gate; keep mass |
+| PP5 | **REJECTED** | Prefill-aware expert placement | Presence-per-chunk is a better transfer objective than routing mass | Corrected analysis saves 10.8% cold rows, but bracketing PP7 E2E is only +3.1%, below the original gate; mass remains default pending PP5b |
+| PP5b | **QUEUED** | PP11 + presence-placement interaction | Fewer cold rows and cheaper batched submission may compound; the earlier +3.1% is still useful | Bracket PP11/mass -> PP11/presence -> PP11/mass; exact; report a sub-5% positive result for owner decision |
 | PP6 | REJECTED | RTX 3090 GDN pipeline tuning/fusion | 36 Triton GDN layers contain more untuned PP time than fused MoE | Profiled: GDN is 40.2 ms of a 1,773 ms chunk (2.3%) versus 238.0 ms fused MoE; 5% gate unreachable |
 | PP7 | **DONE** | Hybrid cold-expert execution | Full-row transfer is wasteful for experts assigned few tokens | Low-token direct GEMV rejected (SM host reads ~7.5-10 GB/s either way); the host-row DMA staging form is bit-exact and +74.8% warmed PP |
 | PP8 | RESEARCH | Dense/shared-expert format sweep | Ampere may prefer BF16 cuBLAS or W8A8 over W8A16 Marlin at M=1024 | Memory-neutral enough to retain S; quality gate if W8A8 |
 | PP9 | RESEARCH | Fused QSA score/mask/top-k | Avoid full FP32 logits materialization at long prefixes | Prioritize only after 4.5k code PP work |
 | PP10 | RESEARCH | Host/PCIe operational audit | Link downgrade, IOMMU, VM scheduling, or CPU affinity may cap transfers | Narrowed: 23 GB/s H2D confirmed (Gen4 x16); remaining item is whether a PCIe or memory topology change unlocks more, and the decode GEMV's 10 GB/s SM host reads |
-| PP11 | **NEXT** | Staging-path CPU/sync elimination | The single-threaded staging submission (unique2 + tolist syncs + ~50k per-row copies = 78% of CPU wall) serializes a 63%-idle GPU; unblocking it lets DMA and SM work interleave | Exact staging bytes; warmed PP A/B per protocol; adopt at >= 5% e2e |
+| PP11 | **DONE** | Batched host-row DMA submission | Replace ~50k Python/Tensor row-copy submissions per chunk with four CUDA batch calls while resident gathers overlap on the current stream | Exact; 1183.4 vs 1110.9 pooled control, +6.53%; default on |
 
 ## PP1 — PLE storage experiment
 
@@ -323,27 +329,37 @@ forwards) measured the steady 2,048-token chunk:
 Evidence: [PP6 GDN profile](logs/pp6_gdn_profile_3090_2026-09-15.md), trace
 `/tmp/pp6-profile/1789493729.4675837-TP-0-EXTEND.trace.json.gz`.
 
-## PP11 — staging-path CPU/sync elimination (NEXT)
+## PP11 — batched host-row DMA submission (completed)
 
-The profile shows the pipeline is CPU-serialized: the single scheduler thread
-spends 78% of the span wall inside the MoE staging path while the SMs idle 63%
-and the DMA engine does 875 ms of real work.  Sub-items, in expected value
-order:
+The profile showed the pipeline was CPU-serialized: the single scheduler thread
+spent 78% of the span wall inside the MoE staging path while the SMs idled 63%
+and the DMA engine did 875 ms of real work. The lowest-risk measured sub-item
+was implemented first.
 
-1. Remove the `tolist()`/`item()` syncs from the staging critical path (keep
-   top-k ids on device into the fused MoE; largest structural change).
-2. Batch the ~50k per-row pinned copies per chunk (12392 copies/kind/span)
-   into one batched submission per kind; precompute row views at elastic
-   resize to kill the 119.8k `aten::select` calls.
-3. Overlap `_unique2` with the previous layer's compute instead of blocking.
+`patches/moe_host_dma_batch.py` caches stable pinned source addresses and
+submits each tensor kind with one `cudaMemcpyBatchAsync` call on a dedicated
+non-legacy stream. Resident table gathers remain on the current stream and a
+single bridge at each side of the layer preserves dependencies. A model-free
+258-row benchmark reduced CPU submission from 0.984 to 0.082 ms per tensor kind
+and raised transfer from 20.6 to 22.3 GB/s.
 
-DMA (875 ms) and routed fused MoE (238 ms) remain serial inside each layer:
-the router must produce ids before DMA can be submitted, and the next layer
-depends on the current MoE result. Their sum is already ~1.11 s, so the hard
-ceiling is below 1.59x before accounting for other dependent work; only
-independent branches can overlap. Acceptance: staging bytes identical
-(bit-exact by construction or machine-local oracle pass), warmed code A/B per
-protocol, adopt at >= 5% e2e. PP11 is defined but not started.
+Five measured code samples averaged **1183.4 +/- 18.3 tok/s**. The preceding
+control was 1120.0 +/- 14.8 and the following control 1101.8 +/- 34.3; pooled
+control **1110.9 +/- 26.7**, hence **+6.53%**. The m4 oracle remained exactly
+0/0 and lp2 remained at its established 0.168757/0.011632. The launcher now
+defaults `SGLANG_MOE_GATHER_DMA_BATCH=1`; set it to zero for the PP7 loop.
+
+The authors' original repeated-sentence sweep was also measured as a secondary
+comparison: PP11 produced 258/772/1453/1778/**1909** tok/s at
+101/421/1701/6821/10001 prompt tokens versus the batch-off control's
+231/694/1524/1678/**1834**. Do not use this easier-routing workload for the
+acceptance decision.
+
+Remaining structural ideas—removing the `tolist()`/`item()` synchronization and
+overlapping `_unique2`—are no longer required to call PP11 successful. Reopen
+them only with a fresh profile of the accepted batch path.
+
+Evidence: [PP11 batched host-row DMA](logs/pp11_dma_batch_3090_2026-09-15.md).
 
 ## Later research
 
@@ -378,13 +394,16 @@ protocol, adopt at >= 5% e2e. PP11 is defined but not started.
    python3 patches/enable_moe_eager_shared_overlap.py --check
    SGLANG=/root/sglang python3 patches/moe_host_dma_gather.py --check
    python3 patches/enable_moe_host_dma_gather.py --check
+   SGLANG=/root/sglang python3 patches/moe_host_dma_batch.py --check
+   python3 patches/enable_moe_host_dma_batch.py --check
    SGLANG=/root/sglang python3 patches/prefill_route_dump.py --check
    python3 patches/enable_prefill_chunk_residency.py --check
    SGLANG=/root/sglang python3 patches/moe_config_buckets.py --check
    ```
 
-5. PP11 is the next defined experiment, but do not start it until the owner
-   explicitly resumes the PP campaign.
+5. PP11 is accepted. The next defined controlled experiment is PP5b, the
+   interaction between accepted PP11 and presence placement; start it only
+   when the owner continues the PP campaign.
 6. After every experiment, update the status table, append a dated result under
    the relevant section, and link the raw log/artifact.
 
@@ -399,11 +418,11 @@ PYTHONPATH=/root/sglang/python /root/quant/venv-sglang/bin/python -m unittest \
 ```
 
 State at this update: bulk pread, the 128 MiB recent-row cache, the 2,048-byte
-expert-gather tile, host-row DMA staging, a 2,048-token prefill chunk, and S184
-residency are enabled; profiling is disabled.  The prefill route dump is applied
+expert-gather tile, host-row DMA staging and PP11 DMA batching, a 2,048-token
+prefill chunk, and S184 residency are enabled; profiling is disabled. The prefill route dump is applied
 and pass-through in `/root/quant/serve-3090.sh` but off unless
-`SGLANG_PREFILL_ROUTE_DUMP` names a directory.  The server is running on port
-30001 in `sglang-1789496308.scope` with `--sleep-on-idle` and the routing-mass
-placement restored after the PP5 recheck.  This is transient
+`SGLANG_PREFILL_ROUTE_DUMP` names a directory. The server runs on port 30001
+with `--sleep-on-idle` and routing-mass placement. Its scope id is transient
+and must be discovered at resume time. This is transient
 operational state, not a prerequisite for resuming.  The PP6 profile was taken
 through the live `/start_profile` endpoint with no code change or restart.

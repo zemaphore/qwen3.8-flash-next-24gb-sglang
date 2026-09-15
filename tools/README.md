@@ -22,7 +22,8 @@ to the scripts and are git-ignored, except the two oracle inputs listed below.
 | `keepalive.sh` | One tiny request every 5 s to keep the server processes from being swapped out during long measurements. |
 | `expert_freq.py` | Builds the routing-mass histogram (`assets/expert_freq.pt`) from a `SGLANG_ROUTE_DUMP` directory (`host_fixes.py` item `dump`). Imports torch. |
 | `pp5_presence.py` | Offline layer-matched prefill-placement analysis; filters tiny launcher warmups and can reproduce `assets/expert_presence_code.pt`. |
-| `test_pp5_presence.py`, `test_pp_patch_helpers.py` | CPU regressions for PP5 layer/chunk accounting and PP7 patch-helper round trips/mixed-state rejection. |
+| `pp11_batch_copy_bench.py` | Model-free PP11 microbenchmark comparing the per-row PyTorch copy loop with one `cudaMemcpyBatchAsync` submission for the production row shape/count. |
+| `test_pp5_presence.py`, `test_pp_patch_helpers.py` | CPU regressions for PP5 layer/chunk accounting and PP7/PP11 patch-helper round trips, launcher migration, and mixed-state rejection. |
 | `spec_lossless.py` | Lossless gate for NGRAM speculation (spec-path logprobs vs teacher forcing, near-tie rule). |
 | `probe_trtllm_sm120.py` | Standalone call of FlashInfer's `trtllm_batch_decode_with_kv_cache` (the sparse-decode route `qwen4-main-squashed` takes on exact SM120 since #36806) at the QSA backend's shapes (24 query heads, 2 KV heads, head_dim 256, page 64, topk 2,051) against a torch softmax reference. Needs flashinfer and an nvcc >= 12.9 at `CUDA_HOME`; no server. Output on the reference machine: `docs/logs/probe_trtllm_sm120.log` (`sglang/UPSTREAM.md`, `sglang/upstream/PR-4.md`). |
 | `toolcall_smoke.py` | One chat request with the mini-swe-agent bash tool; checks the reasoning and tool-call parsers. |

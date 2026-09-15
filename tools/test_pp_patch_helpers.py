@@ -50,6 +50,32 @@ class LauncherHelperTests(unittest.TestCase):
             '      SGLANG_MOE_GATHER_BLOCK="${SGLANG_MOE_GATHER_BLOCK:-2048}" \\\n',
         )
 
+    def test_dma_batch_launcher_round_trip(self):
+        self.round_trip(
+            "patches/enable_moe_host_dma_batch.py",
+            '      SGLANG_MOE_GATHER_DMA="${SGLANG_MOE_GATHER_DMA:-1}" \\\n',
+            '      SGLANG_MOE_GATHER_DMA_BATCH="${SGLANG_MOE_GATHER_DMA_BATCH:-1}" \\\n',
+        )
+
+    def test_dma_batch_launcher_migrates_old_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            launcher = Path(tmp) / "serve.sh"
+            old = '      SGLANG_MOE_GATHER_DMA_BATCH="${SGLANG_MOE_GATHER_DMA_BATCH:-0}" \\\n'
+            new = '      SGLANG_MOE_GATHER_DMA_BATCH="${SGLANG_MOE_GATHER_DMA_BATCH:-1}" \\\n'
+            launcher.write_text("#!/bin/sh\n" + old + "exec true\n", encoding="utf-8")
+            env = {"SGLANG_3090_LAUNCHER": str(launcher)}
+
+            self.assertNotEqual(
+                run("patches/enable_moe_host_dma_batch.py", "--check", env).returncode,
+                0,
+            )
+            self.assertEqual(
+                run("patches/enable_moe_host_dma_batch.py", "apply", env).returncode,
+                0,
+            )
+            self.assertIn(new, launcher.read_text(encoding="utf-8"))
+            self.assertNotIn(old, launcher.read_text(encoding="utf-8"))
+
 
 class SourcePatchTests(unittest.TestCase):
     def make_tree(self, root):
@@ -91,6 +117,35 @@ class SourcePatchTests(unittest.TestCase):
             )
             self.assertNotEqual(run(script, "--check", env).returncode, 0)
             self.assertNotEqual(run(script, "revert", env).returncode, 0)
+
+    def test_dma_batch_source_patch_round_trip(self):
+        import sys
+
+        sys.path.insert(0, str(REPO / "patches"))
+        import moe_host_dma_batch as patch
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stream = root / "python/sglang/srt/layers/moe/expert_stream.py"
+            elastic = root / "python/sglang/srt/layers/moe/expert_elastic.py"
+            stream.parent.mkdir(parents=True)
+            original_stream = (
+                patch.BEFORE_IMPORT
+                + patch.BEFORE_CONST
+                + patch.HELPER_ANCHOR
+                + patch.BEFORE_GATHER
+            )
+            original_elastic = patch.BEFORE_INVALIDATE
+            stream.write_text(original_stream, encoding="utf-8")
+            elastic.write_text(original_elastic, encoding="utf-8")
+            env = {"SGLANG": str(root)}
+            script = "patches/moe_host_dma_batch.py"
+
+            self.assertEqual(run(script, "apply", env).returncode, 0)
+            self.assertEqual(run(script, "--check", env).returncode, 0)
+            self.assertEqual(run(script, "revert", env).returncode, 0)
+            self.assertEqual(stream.read_text(encoding="utf-8"), original_stream)
+            self.assertEqual(elastic.read_text(encoding="utf-8"), original_elastic)
 
 
 if __name__ == "__main__":
