@@ -35,7 +35,14 @@ cold rows and the best-ranked alternative moved that by only -0.2%.  PP7 found
 the true wall: the ~46 ms/layer-chunk of expert staging was SM host-read bound
 at ~7.5-10 GB/s in every geometry, so the DMA engine (~22 GB/s) was used to
 stage the cold rows instead, giving **1111.8 tok/s** warmed, +74.8% over PP3,
-bit-identical.  Prompt-processing time on the code workload is now ~4.1 s.
+bit-identical.  Prompt-processing time on the code workload is now ~4.1 s.  A full
+torch-profiler capture of the PP7 stack (PP6) then measured the steady
+2,048-token chunk: 875.2 ms pinned-HtoD DMA staging, 238.0 ms INT2 fused MoE,
+172.4 ms Marlin, and only 40.2 ms across all 36 GDN layers; the SMs idle ~63%
+of the span while the single-threaded CPU staging path (unique2, tolist syncs,
+~50k per-row copies) consumes 78% of the CPU wall.  The next lever is
+therefore PP11: eliminate the staging path's CPU serialization so DMA and
+compute interleave, with a rough 2x ceiling.
 
 ## Status key
 
@@ -92,11 +99,12 @@ must never be silently mixed into an exact A/B.
 | PP3 | **DONE** | Prefill residency/chunk trade | Fewer 1536/2048-token chunks amortize expert census and transfer | Exact; 2048/S184 is +25.9%, with 3.17 GiB free VRAM |
 | PP4 | **REJECTED** | Eager intra-layer dual-stream overlap | Hide shared/projection compute behind routed-expert work | Shared/router A/B was flat; GDN/QSA profile upper bounds are below 5% |
 | PP5 | **REJECTED** | Prefill-aware expert placement | Presence-per-chunk is a better transfer objective than routing mass | Static rankings tie within 0.2% of mass; placement objective is saturated |
-| PP6 | RESEARCH | RTX 3090 GDN pipeline tuning/fusion | 36 Triton GDN layers contain more untuned PP time than fused MoE | Profile first; retain only an end-to-end gain |
+| PP6 | REJECTED | RTX 3090 GDN pipeline tuning/fusion | 36 Triton GDN layers contain more untuned PP time than fused MoE | Profiled: GDN is 40.2 ms of a 1,773 ms chunk (2.3%) versus 238.0 ms fused MoE; 5% gate unreachable |
 | PP7 | **DONE** | Hybrid cold-expert execution | Full-row transfer is wasteful for experts assigned few tokens | Low-token direct GEMV rejected (SM host reads ~7.5-10 GB/s either way); the host-row DMA staging form is bit-exact and +74.8% warmed PP |
 | PP8 | RESEARCH | Dense/shared-expert format sweep | Ampere may prefer BF16 cuBLAS or W8A8 over W8A16 Marlin at M=1024 | Memory-neutral enough to retain S; quality gate if W8A8 |
 | PP9 | RESEARCH | Fused QSA score/mask/top-k | Avoid full FP32 logits materialization at long prefixes | Prioritize only after 4.5k code PP work |
 | PP10 | RESEARCH | Host/PCIe operational audit | Link downgrade, IOMMU, VM scheduling, or CPU affinity may cap transfers | Narrowed: 23 GB/s H2D confirmed (Gen4 x16); remaining item is whether a PCIe or memory topology change unlocks more, and the decode GEMV's 10 GB/s SM host reads |
+| PP11 | **NEXT** | Staging-path CPU/sync elimination | The single-threaded staging submission (unique2 + tolist syncs + ~50k per-row copies = 78% of CPU wall) serializes a 63%-idle GPU; unblocking it lets DMA and SM work interleave | Exact staging bytes; warmed PP A/B per protocol; adopt at >= 5% e2e |
 
 ## PP1 — PLE storage experiment
 
@@ -277,18 +285,62 @@ kernel is no longer needed for PP), narrows PP10 to the decode GEMV's SM host
 reads (a DECODE_PERF_PLAN candidate), and leaves resident-row staging copy
 skipping (~1 ms per layer-chunk) as the small remaining gather item.
 
-## PP6 and later research
+## PP6 — GDN pipeline profile (closed)
 
-- PP6 (NEXT): profile the complete GDN pipeline at M=2048.  Tuning or fusing
-  the 36 Triton GDN layers is the main remaining prefill cost now that expert
-  staging is DMA-bound; the 3090 cannot use the SM90+ FlashInfer GDN path.
-  PP4's overlap rejection was premised on staging dominating; recheck whether
-  GDN/QSA dual-stream overlap now clears 5% with staging at ~12.5 ms/layer.
+Profiled and rejected without an A/B.  A stage-filtered torch-profiler capture
+of the accepted PP7 stack (`/start_profile`, `profile_by_stage`, 3 extend
+forwards) measured the steady 2,048-token chunk:
+
+- GPU occupancy: pinned-HtoD DMA staging 875.2 ms (16.2 GiB, 18.5 GB/s
+  effective, 258 cold rows/layer-chunk x 4 kinds), INT2 fused MoE 238.0 ms,
+  Marlin 172.4 ms, BF16 GEMMs 68.4 ms, QSA 51.9 ms, resident-row tab gather
+  24.9 ms; SMs idle ~63% of the 1,773 ms span.
+- All 36 GDN layers together cost **40.2 ms per chunk (1.12 ms/layer)**, led by
+  `chunk_gated_delta_rule_fwd_kernel_h` at 259.7 us/layer.  The PP6 premise
+  (GDN contains more untuned PP time than fused MoE) is false: fused MoE is
+  5.9x GDN.  Halving every GDN kernel moves PP ~1.1%, below the 5% gate.
+- GDN/QSA overlap recheck: GDN+QSA = 92.1 ms = 5.2% of span wall nominally,
+  but the span is CPU-bound (staging path holds 78% of CPU wall) and layer
+  structure forbids overlap (layer L+1 staging needs layer L+1's router, which
+  needs its attention).  Consistent with PP4's flat A/B; still rejected.
+- CPU attribution per span: `_run_qwen4_exp_mlp` 1,382 ms (28.8 ms/layer, of
+  which `_gather_dma` 829.6 ms), `_unique2` 391 ms, `aten::item` 382 ms,
+  `cudaStreamSynchronize` 381 ms, per-row view/copy submission ~800 ms.
+- The 469-token tail span pays 664 of 1,107 ms for staging: the per-layer-chunk
+  staging cost is fixed, not token-proportional.
+
+Evidence: [PP6 GDN profile](logs/pp6_gdn_profile_3090_2026-09-15.md), trace
+`/tmp/pp6-profile/1789493729.4675837-TP-0-EXTEND.trace.json.gz`.
+
+## PP11 — staging-path CPU/sync elimination (NEXT)
+
+The profile shows the pipeline is CPU-serialized: the single scheduler thread
+spends 78% of the span wall inside the MoE staging path while the SMs idle 63%
+and the DMA engine does 875 ms of real work.  Sub-items, in expected value
+order:
+
+1. Remove the `tolist()`/`item()` syncs from the staging critical path (keep
+   top-k ids on device into the fused MoE; largest structural change).
+2. Batch the ~50k per-row pinned copies per chunk (12392 copies/kind/span)
+   into one batched submission per kind; precompute row views at elastic
+   resize to kill the 119.8k `aten::select` calls.
+3. Overlap `_unique2` with the previous layer's compute instead of blocking.
+
+Ceiling if fully successful: span wall approaches max(DMA ~875 ms, SM ~652 ms)
+plus tail effects, roughly 2x current warmed PP.  Acceptance: staging bytes
+identical (bit-exact by construction or machine-local oracle pass), warmed
+code A/B per protocol, adopt at >= 5% e2e.
+
+## Later research
+
 - Benchmark shared-expert W8A16 Marlin against selectively materialized BF16.
   Only then consider calibrated W8A8.
 - At long prefixes, profile QSA's full FP32 score tensor and consider fusing
   score, mask, and hierarchical top-k.  The previously rejected paged-prefix KV
   kernel should not be repeated unchanged.
+- Tail-chunk staging amortization: the 469-token tail pays nearly a full
+  chunk's fixed staging cost; consider merging or special-casing it (~10% of
+  prompt tokens).
 - Audit negotiated PCIe generation/width, BAR1, clocks/power/thermals, VM CPU
   affinity, NUMA locality, huge pages, and IOMMU mode before attributing a hard
   ceiling to the GPU.
@@ -317,7 +369,7 @@ skipping (~1 ms per layer-chunk) as the small remaining gather item.
    SGLANG=/root/sglang python3 patches/moe_config_buckets.py --check
    ```
 
-5. Continue with PP6 unless the owner reprioritizes.
+5. Continue with PP11 unless the owner reprioritizes.
 6. After every experiment, update the status table, append a dated result under
    the relevant section, and link the raw log/artifact.
 
@@ -327,4 +379,5 @@ residency are enabled; profiling is disabled.  The prefill route dump is applied
 and pass-through in `/root/quant/serve-3090.sh` but off unless
 `SGLANG_PREFILL_ROUTE_DUMP` names a directory.  The server is running on port
 30001 in `sglang-1789491753.scope` with `--sleep-on-idle`.  This is transient
-operational state, not a prerequisite for resuming.
+operational state, not a prerequisite for resuming.  The PP6 profile was taken
+through the live `/start_profile` endpoint with no code change or restart.
