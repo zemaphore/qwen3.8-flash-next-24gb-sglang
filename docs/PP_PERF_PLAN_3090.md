@@ -31,8 +31,11 @@ raising warmed code PP to **636.3 tok/s**: +25.9% over PP2a while retaining
 the largest shared/router candidate averaged 636.0 tok/s, effectively unchanged.
 PP5 static presence-ranked placement was then rejected too: a code chunk routes
 to ~329 of 512 experts per layer, so every static S=184 set leaves ~210 distinct
-cold rows and the best-ranked alternative moved that by only -0.2%.  PP7 hybrid
-cold-expert execution (22% of staged rows carry <= 2 tokens) is next.
+cold rows and the best-ranked alternative moved that by only -0.2%.  PP7 found
+the true wall: the ~46 ms/layer-chunk of expert staging was SM host-read bound
+at ~7.5-10 GB/s in every geometry, so the DMA engine (~22 GB/s) was used to
+stage the cold rows instead, giving **1111.8 tok/s** warmed, +74.8% over PP3,
+bit-identical.  Prompt-processing time on the code workload is now ~4.1 s.
 
 ## Status key
 
@@ -43,6 +46,7 @@ cold-expert execution (22% of staged rows carry <= 2 tokens) is next.
 - **QUEUED**: defined well enough to resume without redesign.
 - **RESEARCH**: promising, but needs profiling or a design decision first.
 - **REJECTED**: measured and not worth continuing in its tested form.
+- **SUPERSEDED**: overtaken by a later result that removed the premise.
 
 ## Canonical PP validation protocol
 
@@ -84,15 +88,15 @@ must never be silently mixed into an exact A/B.
 | PP1 | PARTIAL | Hybrid mmap / parallel PLE pread | NVMe queue depth removes cold random mmap stalls | Cold gain confirmed; warm regression prevents default acceptance |
 | PP1b | **DONE** | Bounded recent PLE row cache | Use pread for misses and exact retained FP8 rows for known-hot chunks | Cold within 1.7% of PP1; warm +11.1% vs same-day pread and +3.0% vs mmap |
 | PP2a | **DONE** | Tune expert row-gather tile to 2,048 bytes | Reduce CTA count for 0.82/0.41 MB qweight rows | Exact; +4.2% warmed PP and -9.5% profiled gather time |
-| PP2 | RESEARCH | Direct/hybrid expert execution | Stage only selected cold experts; avoid copying resident rows | Profile shows staging dominates; fixed `E=512` alone is insufficient |
+| PP2 | SUPERSEDED | Direct/hybrid expert execution | Stage only selected cold experts; avoid copying resident rows | No longer needed for PP: PP7 DMA staging made full-row transfer cheap; low-token direct GEMV was +3.4% slower |
 | PP3 | **DONE** | Prefill residency/chunk trade | Fewer 1536/2048-token chunks amortize expert census and transfer | Exact; 2048/S184 is +25.9%, with 3.17 GiB free VRAM |
 | PP4 | **REJECTED** | Eager intra-layer dual-stream overlap | Hide shared/projection compute behind routed-expert work | Shared/router A/B was flat; GDN/QSA profile upper bounds are below 5% |
 | PP5 | **REJECTED** | Prefill-aware expert placement | Presence-per-chunk is a better transfer objective than routing mass | Static rankings tie within 0.2% of mass; placement objective is saturated |
 | PP6 | RESEARCH | RTX 3090 GDN pipeline tuning/fusion | 36 Triton GDN layers contain more untuned PP time than fused MoE | Profile first; retain only an end-to-end gain |
-| PP7 | **NEXT** | Hybrid cold-expert execution | Full-row transfer is wasteful for experts assigned few tokens | Exact; transfer-time gain exceeds merge/launch cost |
+| PP7 | **DONE** | Hybrid cold-expert execution | Full-row transfer is wasteful for experts assigned few tokens | Low-token direct GEMV rejected (SM host reads ~7.5-10 GB/s either way); the host-row DMA staging form is bit-exact and +74.8% warmed PP |
 | PP8 | RESEARCH | Dense/shared-expert format sweep | Ampere may prefer BF16 cuBLAS or W8A8 over W8A16 Marlin at M=1024 | Memory-neutral enough to retain S; quality gate if W8A8 |
 | PP9 | RESEARCH | Fused QSA score/mask/top-k | Avoid full FP32 logits materialization at long prefixes | Prioritize only after 4.5k code PP work |
-| PP10 | QUEUED | Host/PCIe operational audit | Link downgrade, IOMMU, VM scheduling, or CPU affinity may cap transfers | Read-only audit, then one controlled setting per A/B |
+| PP10 | RESEARCH | Host/PCIe operational audit | Link downgrade, IOMMU, VM scheduling, or CPU affinity may cap transfers | Narrowed: 23 GB/s H2D confirmed (Gen4 x16); remaining item is whether a PCIe or memory topology change unlocks more, and the decode GEMV's 10 GB/s SM host reads |
 
 ## PP1 — PLE storage experiment
 
@@ -226,20 +230,60 @@ presence was already measured per chunk.
 
 Evidence: [PP5 presence-vs-mass placement](logs/pp5_presence_placement_3090_2026-09-15.md)
 
-Restart caveat learned this session: after repeated weight loads the PLE page
-cache re-warms slowly and the first warmed triplets read ~5% low (600 then
-625.7 versus the 629.7 steady baseline).  Run at least four warm samples
-before accepting any delta under ~5%.
+Restart caveat learned in this line of sessions: after repeated weight loads
+the PLE page cache re-warms slowly and the first warmed triplets read ~5% low
+(600 then 625.7 versus the 629.7 steady baseline; the PP7 DMA-off control
+likewise read 597-645 before holding).  Run at least four warm samples before
+accepting any delta under ~5%.
+
+## PP7 — hybrid cold-expert execution
+
+Completed in two halves.  The planned low-token direct-GEMV variant was
+rejected with data: `tools/pp7_hybrid_bench.py` replays real 2,048-token
+code-chunk routing against synthetic S184 placement with the production
+kernels (resident experts staged normally, low-count cold experts executed
+in place through the pointer-table GEMV, results merged), and layer 0 came in
+at +3.4% *slower* - both paths read pinned host through the SMs at the same
+~7.5-10 GB/s, so direct execution pays T row-reads to save one staged row.
+The same measurement program found the real ceiling: `cudaMemcpyAsync` moves
+the identical scattered pinned rows at 21.8-22.2 GB/s (400 MB contiguous
+copy: 23.0 GB/s), ~3x the best SM geometry in any tile/vector configuration.
+
+The accepted form keeps staging for every expert but splits the transport:
+resident rows still go through one existing tab-kernel launch into the
+staging prefix, while each host row is copied into the staging tail by DMA
+from its pinned elastic slot (`_placed["home"]`, added by
+`patches/moe_host_dma_gather.py` to the elastic placement; resize mutates the
+same lists, so it stays authoritative).  Top-k ids are renumbered onto the
+permuted staging order through a position lookup; staged bytes per expert are
+identical and the fused kernel is untouched, so the change is bit-exact by
+construction and needs no extra device sync (the `tolist()` replaces the
+existing `numel()` one).
+
+Warmed code A/B, one variable (`SGLANG_MOE_GATHER_DMA`): variant 1096/1122/
+1111/1110/1120, mean **1111.8** tok/s, sample SD 10.6; same-session DMA-off
+control 597-645, mean 623.7 inside the documented re-warm band; documented
+steady baselines 629.7-636.3.  **Accepted at +74.8%.**  Prefill fell 9.0 ->
+~4.1 s; decode 38.5-39.6 tok/s in both arms (unchanged S184 note from PP3);
+3,239 MiB free VRAM after the workload.  Both machine oracles are identical
+to the accepted stack: `m4_3090_untuned` 0.000000/0.000000 and `lp2`
+0.168757/0.011632.  The `oa` greedy reference predates this machine and
+diverges identically before and after.
+
+Evidence: [PP7 host-row DMA staging](logs/pp7_host_dma_staging_3090_2026-09-15.md)
+
+This retires the PP2 staging-transfer motivation (a pointer-table fused MoE
+kernel is no longer needed for PP), narrows PP10 to the decode GEMV's SM host
+reads (a DECODE_PERF_PLAN candidate), and leaves resident-row staging copy
+skipping (~1 ms per layer-chunk) as the small remaining gather item.
 
 ## PP6 and later research
 
-- PP7 (NEXT): for routed experts with very low token counts, compare exact
-  direct pinned-host GEMV/tiny-GEMM against staging a roughly 1.3 MB row.
-  Stage high-count cold experts and merge the two result paths.  PP5 measured
-  the size: 22% of staged cold rows carry <= 2 tokens for 1% of the tokens.
-- Profile the complete GDN pipeline at M=1024.  Tune its existing Triton
-  configuration points and look for intermediate/launch fusion; the 3090 cannot
-  use the SM90+ FlashInfer GDN path.
+- PP6 (NEXT): profile the complete GDN pipeline at M=2048.  Tuning or fusing
+  the 36 Triton GDN layers is the main remaining prefill cost now that expert
+  staging is DMA-bound; the 3090 cannot use the SM90+ FlashInfer GDN path.
+  PP4's overlap rejection was premised on staging dominating; recheck whether
+  GDN/QSA dual-stream overlap now clears 5% with staging at ~12.5 ms/layer.
 - Benchmark shared-expert W8A16 Marlin against selectively materialized BF16.
   Only then consider calibrated W8A8.
 - At long prefixes, profile QSA's full FP32 score tensor and consider fusing
@@ -266,19 +310,21 @@ before accepting any delta under ~5%.
    python3 patches/enable_moe_gather_block.py --check
    SGLANG=/root/sglang python3 patches/moe_eager_shared_overlap.py --check
    python3 patches/enable_moe_eager_shared_overlap.py --check
+   SGLANG=/root/sglang python3 patches/moe_host_dma_gather.py --check
+   python3 patches/enable_moe_host_dma_gather.py --check
    SGLANG=/root/sglang python3 patches/prefill_route_dump.py --check
    python3 patches/enable_prefill_chunk_residency.py --check
    SGLANG=/root/sglang python3 patches/moe_config_buckets.py --check
    ```
 
-5. Continue with PP7 unless the owner reprioritizes.
+5. Continue with PP6 unless the owner reprioritizes.
 6. After every experiment, update the status table, append a dated result under
    the relevant section, and link the raw log/artifact.
 
 State at this update: bulk pread, the 128 MiB recent-row cache, the 2,048-byte
-expert-gather tile, a 2,048-token prefill chunk, and S184 residency are enabled;
-profiling is disabled.  The prefill route dump is applied and pass-through in
-`/root/quant/serve-3090.sh` but off unless `SGLANG_PREFILL_ROUTE_DUMP` names a
-directory.  The server is running on port 30001 in
-`sglang-1789483328.scope` with `--sleep-on-idle`.  This is transient operational
-state, not a prerequisite for resuming.
+expert-gather tile, host-row DMA staging, a 2,048-token prefill chunk, and S184
+residency are enabled; profiling is disabled.  The prefill route dump is applied
+and pass-through in `/root/quant/serve-3090.sh` but off unless
+`SGLANG_PREFILL_ROUTE_DUMP` names a directory.  The server is running on port
+30001 in `sglang-1789491753.scope` with `--sleep-on-idle`.  This is transient
+operational state, not a prerequisite for resuming.

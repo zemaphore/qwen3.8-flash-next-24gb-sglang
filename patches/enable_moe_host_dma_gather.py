@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Set the RTX 3090 expert row-gather tile to its tuned 2048-byte value."""
+"""Enable PP7 host-row DMA staging on the RTX 3090 launcher."""
 
 from __future__ import annotations
 
@@ -9,11 +9,11 @@ import sys
 
 LAUNCHER = os.environ.get("SGLANG_3090_LAUNCHER", "/root/quant/serve-3090.sh")
 
-BEFORE = """      SGLANG_MOE_EXPERT_STREAM=1 \\
+BEFORE = """      SGLANG_MOE_GATHER_BLOCK="${SGLANG_MOE_GATHER_BLOCK:-2048}" \\
 """
 
-AFTER = """      SGLANG_MOE_EXPERT_STREAM=1 \\
-      SGLANG_MOE_GATHER_BLOCK="${SGLANG_MOE_GATHER_BLOCK:-2048}" \\
+AFTER = """      SGLANG_MOE_GATHER_BLOCK="${SGLANG_MOE_GATHER_BLOCK:-2048}" \\
+      SGLANG_MOE_GATHER_DMA="${SGLANG_MOE_GATHER_DMA:-1}" \\
 """
 
 
@@ -30,7 +30,7 @@ def state() -> tuple[bool, bool]:
 def check() -> None:
     clean, applied = state()
     status = "APPLIED" if applied else ("clean" if clean else "MISMATCH")
-    print(f"  {status:<8} {LAUNCHER}: RTX 3090 expert gather tile")
+    print(f"  {status:<8} {LAUNCHER}: host-row DMA staging environment")
 
 
 def replace(old: str, new: str) -> None:
@@ -49,7 +49,7 @@ def apply() -> None:
     if not clean:
         raise RuntimeError("launcher anchor mismatch")
     replace(BEFORE, AFTER)
-    print("  applied (next launcher start defaults to 2048-byte gather tiles)")
+    print("  applied (next launcher start stages host rows by DMA)")
 
 
 def revert() -> None:

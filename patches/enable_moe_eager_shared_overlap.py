@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Pass the opt-in eager shared/router overlap threshold through the launcher."""
+"""Pass the opt-in eager shared/router overlap threshold through the launcher.
+
+State detection is line-based (the presence of the environment line itself),
+not adjacency-based: later pass-through patches insert sibling env lines and
+must not invalidate this check.
+"""
 
 from __future__ import annotations
 
@@ -9,14 +14,9 @@ import sys
 
 LAUNCHER = os.environ.get("SGLANG_3090_LAUNCHER", "/root/quant/serve-3090.sh")
 
-BEFORE = """      SGLANG_MOE_GATHER_BLOCK="${SGLANG_MOE_GATHER_BLOCK:-2048}" \\
-      SGLANG_MOE_CONFIG_NEAREST_E="${SGLANG_MOE_CONFIG_NEAREST_E:-1}" \\
-"""
-
-AFTER = """      SGLANG_MOE_GATHER_BLOCK="${SGLANG_MOE_GATHER_BLOCK:-2048}" \\
-      SGLANG_MOE_EAGER_SHARED_OVERLAP_MAX_TOKENS="${SGLANG_MOE_EAGER_SHARED_OVERLAP_MAX_TOKENS:-0}" \\
-      SGLANG_MOE_CONFIG_NEAREST_E="${SGLANG_MOE_CONFIG_NEAREST_E:-1}" \\
-"""
+LINE = ('      SGLANG_MOE_EAGER_SHARED_OVERLAP_MAX_TOKENS='
+        '"${SGLANG_MOE_EAGER_SHARED_OVERLAP_MAX_TOKENS:-0}" \\\n')
+ANCHOR = '      SGLANG_MOE_CONFIG_NEAREST_E="${SGLANG_MOE_CONFIG_NEAREST_E:-1}" \\\n'
 
 
 def read() -> str:
@@ -24,44 +24,38 @@ def read() -> str:
         return source.read()
 
 
-def state() -> tuple[bool, bool]:
-    text = read()
-    return BEFORE in text, AFTER in text
-
-
 def check() -> None:
-    clean, applied = state()
-    status = "APPLIED" if applied else ("clean" if clean else "MISMATCH")
+    text = read()
+    if LINE in text:
+        status = "APPLIED"
+    elif ANCHOR in text:
+        status = "clean"
+    else:
+        status = "MISMATCH"
     print(f"  {status:<8} {LAUNCHER}: eager shared/router overlap pass-through")
 
 
-def replace(old: str, new: str) -> None:
-    text = read()
-    if text.count(old) != 1:
-        raise RuntimeError(f"expected exactly one launcher anchor, found {text.count(old)}")
-    with open(LAUNCHER, "w", encoding="utf-8") as output:
-        output.write(text.replace(old, new, 1))
-
-
 def apply() -> None:
-    clean, applied = state()
-    if applied:
+    text = read()
+    if LINE in text:
         print("  already applied")
         return
-    if not clean:
-        raise RuntimeError("launcher anchor mismatch")
-    replace(BEFORE, AFTER)
-    print("  applied (overlap threshold remains disabled by default)")
+    if text.count(ANCHOR) != 1:
+        raise RuntimeError("expected exactly one launcher anchor")
+    with open(LAUNCHER, "w", encoding="utf-8") as output:
+        output.write(text.replace(ANCHOR, LINE + ANCHOR, 1))
+    print("  applied (threshold pass-through present; default 0 = disabled)")
 
 
 def revert() -> None:
-    clean, applied = state()
-    if clean:
+    text = read()
+    if LINE not in text:
         print("  already clean")
         return
-    if not applied:
-        raise RuntimeError("launcher anchor mismatch")
-    replace(AFTER, BEFORE)
+    if text.count(LINE) != 1:
+        raise RuntimeError("expected exactly one overlap line")
+    with open(LAUNCHER, "w", encoding="utf-8") as output:
+        output.write(text.replace(LINE, "", 1))
     print("  reverted")
 
 
