@@ -1,0 +1,8 @@
+suffix logprob (teacher-forced, no sampling): conv_a tokens after the page-aligned base prefix
+trial start_len suffix_tokens reuse_cached coldcold_max coldcold_mean reuse_max reuse_mean first_gen_dlp_cc first_gen_dlp_reuse
+    0      6656            63         6656      1.48563       0.12754   2.09489    0.15271          0.13547                None
+    1      6656            63         6656      1.72533       0.15781   1.51549    0.12742          0.12475             0.11886
+    2      6656            63         6656      1.20495       0.12431   1.71840    0.11774          0.21727              0.0477
+    3      6656            63         6656      2.18186       0.13441   0.94820    0.10730          0.06184                None
+    4      6656            63         6656      1.20519       0.12655   1.82002    0.14237          0.06823             0.10034
+    5      6656            63         6656      0.74189       0.10372   1.46341    0.12121             None                None

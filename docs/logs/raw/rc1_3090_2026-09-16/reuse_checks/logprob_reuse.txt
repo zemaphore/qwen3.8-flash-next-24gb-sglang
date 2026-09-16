@@ -1,0 +1,8 @@
+logprob reuse: cold1 vs cold2 (flush between) and cold1 vs reuse (base then conv_a), 16 greedy tokens
+trial cached coldcold_maxd reuse_maxd ids_cold1==cold2 ids_cold1==reuse text_cold1==cold2 text_cold1==reuse
+    0   6528       0.15722    0.03956             True            False              True            False
+    1   6528       0.26202    0.15851            False            False             False            False
+    2   6528       0.00000    0.22716            False            False             False            False
+    3   6528       0.25192    0.17747            False            False             False            False
+    4   6528       0.00000    0.00000            False            False             False            False
+    5   6528       0.08949    0.09730             True            False              True            False

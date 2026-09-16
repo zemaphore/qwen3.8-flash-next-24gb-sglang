@@ -1,0 +1,94 @@
+{
+  "rows": [
+    {
+      "trial": 0,
+      "cached": [
+        0,
+        6592,
+        6592
+      ],
+      "c_eq_w": true,
+      "w_eq_w2": true,
+      "texts": [
+        "Tool result 2 for det0-6aaac39a: tests",
+        "Tool result 2 for det0-6aaac39a: tests",
+        "Tool result 2 for det0-6aaac39a: tests"
+      ]
+    },
+    {
+      "trial": 1,
+      "cached": [
+        0,
+        6592,
+        6592
+      ],
+      "c_eq_w": true,
+      "w_eq_w2": true,
+      "texts": [
+        "\nuser\nassistant\n<think>\nThe user wants me to",
+        "\nuser\nassistant\n<think>\nThe user wants me to",
+        "\nuser\nassistant\n<think>\nThe user wants me to"
+      ]
+    },
+    {
+      "trial": 2,
+      "cached": [
+        0,
+        6592,
+        6592
+      ],
+      "c_eq_w": true,
+      "w_eq_w2": true,
+      "texts": [
+        "\n\n\n\n",
+        "\n\n\n\n",
+        "\n\n\n\n"
+      ]
+    },
+    {
+      "trial": 3,
+      "cached": [
+        0,
+        6592,
+        6592
+      ],
+      "c_eq_w": true,
+      "w_eq_w2": true,
+      "texts": [
+        "\n\n\n\n",
+        "\n\n\n\n",
+        "\n\n\n\n"
+      ]
+    },
+    {
+      "trial": 4,
+      "cached": [
+        0,
+        6592,
+        6592
+      ],
+      "c_eq_w": false,
+      "w_eq_w2": true,
+      "texts": [
+        "\n\n\n\n",
+        "\n\n",
+        "\n\n"
+      ]
+    },
+    {
+      "trial": 5,
+      "cached": [
+        0,
+        6592,
+        6592
+      ],
+      "c_eq_w": true,
+      "w_eq_w2": false,
+      "texts": [
+        "\nuser\nassistant\n<think>\nThe user wants me to",
+        "\nuser\nassistant\n<think>\nThe user wants me to",
+        "\nassistant\n<think>\nThe user wants me to refactor the handlers in"
+      ]
+    }
+  ]
+}

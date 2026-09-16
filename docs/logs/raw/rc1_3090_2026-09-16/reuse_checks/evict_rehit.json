@@ -1,0 +1,228 @@
+{
+  "pool_tokens": 131072,
+  "a_prompt_tokens": 6597,
+  "expected_full_hit": 6592,
+  "a0_cold": {
+    "cached_tokens": 0,
+    "wall_s": 3.89,
+    "text": "\n\n\n\n"
+  },
+  "short_fillers": [
+    {
+      "prompt_tokens": 730,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 730,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 730,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 730,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 730,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 730,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 730,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 730,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 730,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 730,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 736,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 736,
+      "cached": 0
+    }
+  ],
+  "a1_after_mamba_pressure": {
+    "cached_tokens": 0,
+    "wall_s": 3.631,
+    "vs_a0": {
+      "ids_match": false,
+      "first_divergence": 0,
+      "max_abs_dlogprob_matched_prefix": 0.0,
+      "compared": 0
+    },
+    "text_eq_a0": false
+  },
+  "kv_fillers": [
+    {
+      "prompt_tokens": 6553,
+      "cached": 0,
+      "wall_s": 3.909
+    },
+    {
+      "prompt_tokens": 6553,
+      "cached": 0,
+      "wall_s": 3.936
+    },
+    {
+      "prompt_tokens": 6553,
+      "cached": 0,
+      "wall_s": 3.941
+    },
+    {
+      "prompt_tokens": 6553,
+      "cached": 0,
+      "wall_s": 3.959
+    },
+    {
+      "prompt_tokens": 6553,
+      "cached": 0,
+      "wall_s": 3.923
+    },
+    {
+      "prompt_tokens": 6553,
+      "cached": 0,
+      "wall_s": 3.871
+    },
+    {
+      "prompt_tokens": 6553,
+      "cached": 0,
+      "wall_s": 3.931
+    },
+    {
+      "prompt_tokens": 6553,
+      "cached": 0,
+      "wall_s": 3.891
+    },
+    {
+      "prompt_tokens": 6553,
+      "cached": 0,
+      "wall_s": 3.972
+    },
+    {
+      "prompt_tokens": 6553,
+      "cached": 0,
+      "wall_s": 4.004
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 3.581
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 3.627
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 3.526
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 3.674
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 3.605
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 3.536
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 3.579
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 3.715
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 3.631
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 3.597
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 3.558
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 3.512
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 3.686
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 3.542
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 3.527
+    }
+  ],
+  "kv_filler_tokens": 166040,
+  "free_vram_mib_after_fill": 276,
+  "a2_after_kv_pressure": {
+    "cached_tokens": 0,
+    "wall_s": 3.682,
+    "vs_a0": {
+      "ids_match": false,
+      "first_divergence": 0,
+      "max_abs_dlogprob_matched_prefix": 0.0,
+      "compared": 0
+    },
+    "text_eq_a0": false
+  },
+  "a3_rehit": {
+    "cached_tokens": 6592,
+    "wall_s": 0.532,
+    "vs_a0": {
+      "ids_match": false,
+      "first_divergence": 0,
+      "max_abs_dlogprob_matched_prefix": 0.0,
+      "compared": 0
+    },
+    "vs_a2": {
+      "ids_match": true,
+      "first_divergence": null,
+      "max_abs_dlogprob_matched_prefix": 0.37759,
+      "compared": 16
+    },
+    "text_eq_a2": true
+  }
+}

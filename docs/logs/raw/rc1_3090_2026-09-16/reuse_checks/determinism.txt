@@ -1,0 +1,8 @@
+determinism: identical prompt cold/warm/warm2, max_new=16
+trial 0: cached c=0 w=6592 w2=6592  c==w=True w==w2=True
+trial 1: cached c=0 w=6592 w2=6592  c==w=True w==w2=True
+trial 2: cached c=0 w=6592 w2=6592  c==w=True w==w2=True
+trial 3: cached c=0 w=6592 w2=6592  c==w=True w==w2=True
+trial 4: cached c=0 w=6592 w2=6592  c==w=False w==w2=True
+trial 5: cached c=0 w=6592 w2=6592  c==w=True w==w2=False
+c==w 5/6  w==w2 5/6

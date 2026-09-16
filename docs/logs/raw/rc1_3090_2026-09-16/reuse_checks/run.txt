@@ -1,0 +1,4 @@
+utc 2026-09-16T16:36:10Z
+nonce 6aaac57a
+args {'url': 'http://127.0.0.1:30001', 'out_dir': 'docs/logs/raw/rc1_3090_2026-09-16/reuse_checks', 'max_new': 16, 'trials': 6, 'churn_n': 30, 'pool_tokens': 131072, 'checks': 'suffix_logprob,mamba_capacity'}
+page 64

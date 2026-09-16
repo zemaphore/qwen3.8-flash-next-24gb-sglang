@@ -1,0 +1,7 @@
+churn: 30 unique ~6K conversations, each cold then warm; free VRAM sampled
+  i= 0 pt=6553 cold_cached=0 warm_cached=6528 free_vram=722MiB
+  i= 6 pt=6553 cold_cached=0 warm_cached=6528 free_vram=530MiB
+  i=12 pt=6674 cold_cached=0 warm_cached=6656 free_vram=338MiB
+  i=18 pt=6674 cold_cached=0 warm_cached=6656 free_vram=148MiB
+  i=24 pt=6674 cold_cached=0 warm_cached=6656 free_vram=4MiB
+cold_ok=30/30 warm_hits=30/30 retained_tokens~199490 min_free_vram=4MiB
