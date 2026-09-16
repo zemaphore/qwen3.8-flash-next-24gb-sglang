@@ -1,26 +1,51 @@
 # RAM-backed hybrid prefix caching for agentic workflows
 
 Date: 2026-09-16
-Status: proposed; no implementation, serving changes, or cache benchmarks yet.
-Starting point: accepted RTX 3090 stack; TG0 is running independently.
+Status: RC0 complete (see [RC0 report](logs/rc0_feasibility_3090_2026-09-16.md));
+no serving changes or cache benchmarks yet. Objective corrected before
+implementation (below).
+Starting point: accepted RTX 3090 stack; TG0 complete.
 
 ## Objective
 
 Avoid recomputing conversation prefixes between agent turns by enabling a
-hybrid radix cache with a small GPU hot tier and a bounded RAM tier. Optimize
-warm follow-up time to first token (TTFT) and complete multi-turn task latency,
-while preserving weights, state precision, and correct branch isolation.
+hybrid radix cache with a small GPU hot tier and a bounded RAM tier. Preserve
+weights, state precision, and correct branch isolation.
+
+**The optimized metric is complete multi-turn agentic wall-clock time, not
+isolated PP or TG throughput.** A cache change is judged on the end-to-end time
+of realistic multi-turn traces (shared system/repository prefix, appended tool
+results, forks, interleaved conversations), including deferred spill/checkpoint
+cost. Warm follow-up TTFT is a diagnostic within that, not the target.
+
+### Metric correction and tradeoff authority
+
+This plan supersedes its earlier PP/TG framing. To make room for prefix caching
+and active context, it is authorized to reduce the prefill chunk size and the
+GPU expert residency (S) below the accepted PP defaults, and to use additional
+host RAM for displaced experts and inactive conversation state. The shared
+constraint is the whole trace, not any single stage. Specifically:
+
+- A standalone TG or cold-prefill regression is **not** an automatic rejection.
+  Report it explicitly, but accept it when measured agentic wall-clock time
+  improves substantially and trace-level correctness holds.
+- The old "no reproducible >5% TG or cold-miss PP regression" veto is retired
+  for the agentic profile; it was an isolated-throughput gate. A regression is
+  only disqualifying when the total trace does not improve.
+- The decisive quantity is the crossover: saved prefix recomputation must exceed
+  restore/checkpoint/spill overhead plus any additional suffix-prefill and
+  generation time. Measure it; do not infer it from link specifications.
+- The accepted configuration remains the frozen control and rollback. Any
+  tradeoff is validated as an explicitly selectable agentic profile, never
+  silently promoted to the default.
 
 Keep one active inference request initially. Multiple conversations can remain
 cached without concurrent execution. Restore inactive state to VRAM before
 resuming computation; direct attention reads from RAM, NVMe persistence,
 distributed prefill/decode, speculation, and new quantization are out of scope.
 
-The user reports ample RAM. Measure the usable budget rather than inheriting
-the original host's historical 32 GB constraints. RAM storage solves inactive
-state retention; it does not by itself make the active 256K request plus working
-buffers fit in VRAM. Preserve the 262,144 context setting as the target, and
-report any experimentally necessary capacity tradeoff before promotion.
+Preserve the 262,144 context setting as the target, and report any experimentally
+necessary capacity tradeoff before promotion.
 
 ## Existing machinery and gaps
 
@@ -116,6 +141,15 @@ PLE file-cache working set, swap/reclaim pressure, and other workloads. Assign
 explicit byte budgets for host snapshots, pinned staging, GPU checkpoints, and
 active execution. Do not allocate all `MemAvailable` or pin the whole cache.
 
+**Measured (RC0).** The accepted server already runs at its 56 GiB cgroup cap
+(55.77 GiB used, 833 max-events) with ~25.25 GiB non-reclaimable pinned host
+expert memory and ~25.3 GiB reclaimable PLE page cache. VRAM has 1.6 GiB idle
+free and 40–80 MiB at the accepted 257,456-token smoke. A RAM tier therefore
+does not fit on top of the accepted settings: it must be provisioned from the
+pinned-expert block, the PLE page cache, or a raised cap. Per-conversation cost
+is 7,680 B/token + one ~110 MiB GDN checkpoint + up to 99 MiB ring sidecar
+(≈1.06 GiB per 120K prefix). See the [RC0 report](logs/rc0_feasibility_3090_2026-09-16.md).
+
 Use pageable RAM for retained snapshots and a bounded reusable pinned staging
 pool for transfers. Account for temporary duplicate copies during spill/restore.
 Record achieved bandwidth and CPU packing time on the actual host. Coalesce
@@ -165,7 +199,7 @@ request. Host spill must not create an unbounded queue while the user is idle.
 
 | Stage | Scope | Deliverable / exit gate |
 |---|---|---|
-| RC0 | Read-only inventory after TG0; measure memory budgets and state layouts | Compatibility matrix, snapshot schema, precision contract, explicit budgets and test protocol |
+| RC0 | DONE | Read-only inventory after TG0; measure memory budgets and state layouts | [RC0 report](logs/rc0_feasibility_3090_2026-09-16.md): compatibility matrix, snapshot schema, precision contract, explicit budgets and test protocol |
 | RC1 | Enable GPU-only hybrid cache on an isolated branch with enough state slots | Real cache hits and correct repeated/append/branch behavior at moderate context; no RAM transfer yet |
 | RC2 | Implement quantized KV/QSA and recurrent/PLE host round trip | Bit-preserving component tests, remapping/ring tests and incremental continuation comparisons |
 | RC3 | Integrate RAM entries, restore, eviction and physical-memory accounting | A→B→A reuse works after GPU eviction; bounded RAM/VRAM and safe abort/failure behavior |
@@ -225,17 +259,29 @@ should remain cheap and bypass unprofitable restoration where justified.
 
 ## Promotion and stopping criteria
 
+Acceptance is driven by reproducible **end-to-end multi-turn agentic wall-clock
+improvement** (>=20% lower full-trace time proposed), correct state reuse,
+bounded memory, and a supported context capacity. Warm follow-up TTFT (>=2x on
+long-prefix RAM hits proposed) is a diagnostic, not the gate. Report all
+scenarios and confidence, not just the best hit.
+
+TG and cold-prefill costs **must be reported explicitly**, but the plan's earlier
+automatic >5% veto does not apply to the agentic profile. Quantify the crossover
+for every scenario: saved prefix recomputation versus restore/checkpoint/spill
+overhead plus extra suffix-prefill and generation time. A RAM hit is accepted
+only where it wins on total trace time; short-prefix misses should bypass
+unprofitable restoration.
+
 Before RC4, fix scenario weights and regression tolerances with the measured
-baseline. Proposed targets: >=2x lower warm follow-up TTFT on long-prefix RAM-hit
-scenarios and >=20% lower full-trace agentic wall time, with no reproducible >5%
-TG or cold-miss PP regression. These are acceptance targets, not speed claims;
-report all scenarios and confidence, not just the best hit.
+baseline. Keep repeated runs and confirmation across boots with predeclared
+exclusions.
 
 Correctness/state integrity, bounded memory, safe eviction and continued progress
 are mandatory. No silent reduction of context, state precision, or workload
 support. If near-256K plus caching does not fit, report measured alternatives
-(more aggressive eviction, smaller hot tier, or an explicit agentic context
-profile) and obtain a workload tradeoff decision before making it the default.
+(more aggressive eviction, smaller hot tier, smaller chunks, lower expert
+residency, or an explicit agentic context profile) and obtain a workload tradeoff
+decision before making it the default.
 
 Stop and reconsider if complete snapshots cannot be restored faithfully, RAM
 pressure harms PLE or triggers reclaim, restore costs erase the multi-turn gain,

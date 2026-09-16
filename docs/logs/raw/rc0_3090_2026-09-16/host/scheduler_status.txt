@@ -1,0 +1,61 @@
+Name:	sglang::schedul
+Umask:	0022
+State:	S (sleeping)
+Tgid:	368271
+Ngid:	0
+Pid:	368271
+PPid:	368230
+TracerPid:	0
+Uid:	0	0	0	0
+Gid:	0	0	0	0
+FDSize:	128
+Groups:	0 
+NStgid:	368271
+NSpid:	368271
+NSpgid:	368230
+NSsid:	368230
+Kthread:	0
+VmPeak:	151151572 kB
+VmSize:	144463324 kB
+VmLck:	       0 kB
+VmPin:	       0 kB
+VmHWM:	38544488 kB
+VmRSS:	30034140 kB
+RssAnon:	 2882872 kB
+RssFile:	  668712 kB
+RssShmem:	26482556 kB
+VmData:	 8786296 kB
+VmStk:	     164 kB
+VmExe:	    2956 kB
+VmLib:	 2371844 kB
+VmPTE:	   67996 kB
+VmSwap:	       0 kB
+HugetlbPages:	       0 kB
+CoreDumping:	0
+THP_enabled:	0
+untag_mask:	0xffffffffffffffff
+Threads:	79
+SigQ:	1/256884
+SigPnd:	0000000000000000
+ShdPnd:	0000000000000000
+SigBlk:	0000000000000000
+SigIgn:	0000000001001002
+SigCgt:	00000001080004e8
+CapInh:	0000000000000000
+CapPrm:	000001ffffffffff
+CapEff:	000001ffffffffff
+CapBnd:	000001ffffffffff
+CapAmb:	0000000000000000
+NoNewPrivs:	0
+Seccomp:	0
+Seccomp_filters:	0
+Speculation_Store_Bypass:	thread vulnerable
+SpeculationIndirectBranch:	conditional enabled
+Cpus_allowed:	fff
+Cpus_allowed_list:	0-11
+Mems_allowed:	00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001
+Mems_allowed_list:	0
+voluntary_ctxt_switches:	206684
+nonvoluntary_ctxt_switches:	1203
+x86_Thread_features:	
+x86_Thread_features_locked:	

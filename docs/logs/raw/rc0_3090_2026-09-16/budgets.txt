@@ -1,0 +1,30 @@
+int4 K bytes/token/layer ................ 288  (payload 256 + scale 32)
+int4 K+V bytes/token (12 layers) ........ 6912
+QSA compressed bf16 bytes/token ......... 768
+KV+QSA total bytes/token ................ 7680
+    120K tokens -> KV+QSA 0.858 GiB
+  262144 tokens -> KV+QSA 1.875 GiB
+GDN temporal per slot ................... 108.0 MiB
+GDN conv per slot ....................... 2.11 MiB
+GDN total per slot ...................... 110.1 MiB
+PLE short-conv+ngram per slot ........... 180.0 KiB
+INT8 ring VRAM (k+v+scales+owner) ....... 99.0 MiB
+Ring precision sidecar (full ring) ...... 99.0 MiB
+
+snapshot    8K: KV+QSA  0.059 GiB + sidecar   99.0 MB + GDN 110.1 MiB + PLE 180 KiB = 0.263 GiB
+snapshot   32K: KV+QSA  0.234 GiB + sidecar   99.0 MB + GDN 110.1 MiB + PLE 180 KiB = 0.439 GiB
+snapshot  120K: KV+QSA  0.858 GiB + sidecar   99.0 MB + GDN 110.1 MiB + PLE 180 KiB = 1.063 GiB
+snapshot  262K: KV+QSA  1.875 GiB + sidecar   99.0 MB + GDN 110.1 MiB + PLE 180 KiB = 2.079 GiB
+
+Host RAM (measured, idle accepted server):
+  cgroup MemoryMax ........ 56.00 GiB (60,129,542,144 B)
+  cgroup memory.current ... 55.77 GiB (59,887,382,528 B) -> at cap; memory.events.max=833
+  pinned/shmem experts .... ~25.25 GiB (135 /dev/zero mappings; non-reclaimable)
+  PLE file page cache ..... ~25.3 GiB resident of a 47.7 GiB ext4 file (reclaimable)
+  anonymous ............... ~5.1 GiB
+VRAM (measured, idle accepted server):
+  total/used/free ......... 24.0 / 21.95 / 1.62 GiB (startup available_gpu_mem 4.54 GiB)
+  GPU weights ............. ~18.41 GiB (--cpu-offload-gb 19; S184 presence)
+  mamba pool (2 slots) .... ~0.21 GiB
+  KV int4 full pool ....... 0.84+0.84 GiB (lazy VMM; arena VA 3.3 GiB)
+  int8 ring ............... 99 MiB
