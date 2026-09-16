@@ -1411,3 +1411,5 @@ Running as unit: sglang-1789569284.scope; invocation ID: 9eb14b5a61de47f18dcc950
 [2026-09-16 14:41:53] KV lazy backing: released 48 MB beyond the 4096-token floor
 [2026-09-16 14:41:53] Prefill batch, #new-seq: 1, #new-token: 3648, #cached-token: 0, full token usage: 0.00, mamba usage: 0.00, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 1772.35
 [2026-09-16 14:41:53] INFO:     127.0.0.1:32884 - "POST /generate HTTP/1.1" 200 OK
+[2026-09-16 14:43:44] Prefill batch, #new-seq: 1, #new-token: 64, #cached-token: 0, full token usage: 0.00, mamba usage: 0.00, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 0.58
+[2026-09-16 14:43:44] INFO:     127.0.0.1:55102 - "GET /health HTTP/1.1" 200 OK
