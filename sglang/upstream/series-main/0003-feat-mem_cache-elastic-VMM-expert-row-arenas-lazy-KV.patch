@@ -1,0 +1,2987 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: root <root@docker01.fra.askei.net>
+Date: Wed, 16 Sep 2026 20:40:00 +0000
+Subject: [PATCH 3/5] feat(mem_cache): elastic VMM expert row arenas, lazy KV,
+ quantized QSA pools
+
+Port the placement/elastic, lazy-VMM KV and quantized QSA KV subsystems onto
+main b02e16a895.
+
+- row_arena.py / expert_elastic.py: CUDA VMM row arenas in routing-mass rank
+  order, fixed row addresses across shrink/regrow, and the elastic expert
+  cache with a live S control file (SGLANG_MOE_ELASTIC_CTL).
+- kv_vmm_backing.py: ensure_prefix / uncommit_beyond / release_beyond /
+  backed_tokens / bytes_per_token adapted to main's BumpArenaStub and
+  VmmReservation; imports moved to sglang.srt.utils.cuda_vmm_utils.
+- allocator/paged.py + allocator/token.py + kv_cache_configurator.py: lazy
+  commit hooks, idle release, virtual capacity SGLANG_KV_LAZY_TOKENS and the
+  min(requested, SAFETY x profiled) admission cap.
+- memory_pool.py: lazy_ensure / lazy_release with the driver-free watermark
+  and expert-cache shrink-first behaviour, plus tiered ring and scale/smooth
+  accessors on HybridLinearKVPool.
+- int8_g64 / int4_g32 / int8ring_int4 pools and their dequant-on-gather read
+  and quantize-on-write kernels in sparse_attn.py / qwen_sparse_attn_backend.py;
+  kv_cache_dtype mapping and the arg_groups KV choices.
+
+Dropped the measurement-only kv_stats / kv_fakeq hooks. The
+SGLANG_QSA_PREFILL_HOST_LENS experiment stays off.
+
+Known reconciliation item for the kernel-correctness gate: main's trtllm
+paged decode path passes zero_fill_cols=stride (padded-row zero fill); the
+quantized gather branches currently pack compact rows and do not yet zero the
+padded tails.
+---
+ python/sglang/srt/arg_groups/fields/model.py  |    3 +
+ .../srt/layers/attention/qsa/metadata.py      |   13 +-
+ .../srt/layers/attention/qsa/sparse_attn.py   | 1090 +++++++++++++++++
+ .../attention/qwen_sparse_attn_backend.py     |  135 +-
+ .../sglang/srt/layers/moe/expert_elastic.py   |  378 ++++++
+ python/sglang/srt/layers/moe/row_arena.py     |  215 ++++
+ .../sglang/srt/mem_cache/allocator/paged.py   |   32 +
+ .../sglang/srt/mem_cache/allocator/token.py   |   15 +
+ python/sglang/srt/mem_cache/int4_kv_pool.py   |  171 +++
+ python/sglang/srt/mem_cache/int8_kv_pool.py   |  157 +++
+ .../srt/mem_cache/kv_cache_configurator.py    |   23 +-
+ python/sglang/srt/mem_cache/kv_cache_dtype.py |    8 +
+ python/sglang/srt/mem_cache/kv_vmm_backing.py |   43 +
+ python/sglang/srt/mem_cache/memory_pool.py    |  112 +-
+ python/sglang/srt/mem_cache/tiered_kv_pool.py |  167 +++
+ .../srt/model_executor/pool_configurator.py   |   11 +
+ 16 files changed, 2547 insertions(+), 26 deletions(-)
+ create mode 100644 python/sglang/srt/layers/moe/expert_elastic.py
+ create mode 100644 python/sglang/srt/layers/moe/row_arena.py
+ create mode 100644 python/sglang/srt/mem_cache/int4_kv_pool.py
+ create mode 100644 python/sglang/srt/mem_cache/int8_kv_pool.py
+ create mode 100644 python/sglang/srt/mem_cache/tiered_kv_pool.py
+
+diff --git a/python/sglang/srt/arg_groups/fields/model.py b/python/sglang/srt/arg_groups/fields/model.py
+index 606279c01a..201e4a166d 100644
+--- a/python/sglang/srt/arg_groups/fields/model.py
++++ b/python/sglang/srt/arg_groups/fields/model.py
+@@ -215,6 +215,9 @@ class Model(msgspec.Struct):
+                 "nvfp4",
+                 "fp4_mx_block16",
+                 "fp4_e2m1",
++                "int8_g64",
++                "int4_g32",
++                "int8ring_int4",
+             ],
+             resolvable=True,
+         ),
+diff --git a/python/sglang/srt/layers/attention/qsa/metadata.py b/python/sglang/srt/layers/attention/qsa/metadata.py
+index a9e3270f4e..24066156df 100644
+--- a/python/sglang/srt/layers/attention/qsa/metadata.py
++++ b/python/sglang/srt/layers/attention/qsa/metadata.py
+@@ -13,6 +13,10 @@ import torch
+ 
+ from sglang.srt.layers.attention.qsa.kernel import qsa_fast_topk
+ 
++import os as _os
++
++_HOST_LENS = _os.environ.get("SGLANG_QSA_PREFILL_HOST_LENS", "0") == "1"
++
+ 
+ def build_qsa_row_ranges(
+     sequence_lengths: torch.Tensor,
+@@ -87,6 +91,9 @@ class QSAIndexerMetadata(msgspec.Struct, frozen=True):
+     compress_group_ring_locs: Optional[torch.Tensor] = None
+     extend_rope_matrix: Optional[torch.Tensor] = None
+     graph_ring_group_locs: Optional[torch.Tensor] = None
++    # Host copy of the per-sequence lengths when available; avoids a
++    # cudaStreamSynchronize in get_prefill_mqa_inputs.
++    seq_lens_host: Optional[torch.Tensor] = None
+ 
+     def get_seqlens_int32(self) -> torch.Tensor:
+         return self.sequence_lengths.to(torch.int32)
+@@ -130,7 +137,11 @@ class QSAIndexerMetadata(msgspec.Struct, frozen=True):
+         compressed_buffer = pool.get_qsa_compressed_k_buffer(layer_id)
+         parts = []
+         sequence_lengths = self.sequence_lengths.to(torch.int32)
+-        sequence_lengths_list = sequence_lengths.tolist()
++        host_lengths = self.seq_lens_host if _HOST_LENS else None
++        if host_lengths is not None and host_lengths.numel() == sequence_lengths.numel():
++            sequence_lengths_list = host_lengths.tolist()
++        else:
++            sequence_lengths_list = sequence_lengths.tolist()
+         for sequence_id in range(len(sequence_lengths_list)):
+             complete_blocks = int(sequence_lengths_list[sequence_id]) // ratio
+             if complete_blocks == 0:
+diff --git a/python/sglang/srt/layers/attention/qsa/sparse_attn.py b/python/sglang/srt/layers/attention/qsa/sparse_attn.py
+index 601945f053..682d138434 100644
+--- a/python/sglang/srt/layers/attention/qsa/sparse_attn.py
++++ b/python/sglang/srt/layers/attention/qsa/sparse_attn.py
+@@ -5,6 +5,9 @@ from typing import Optional
+ import torch
+ import triton
+ import triton.language as tl
++from triton.language.extra import libdevice
++
++KV_INT8_GROUP = 64          # channels per fp16 scale (group 0 = the 64 rotary dims, 1-3 = pass-through)
+ 
+ _H20_CONFIGS = [
+     (32, (32, 8, 2)),
+@@ -442,6 +445,963 @@ def _compact_kv(
+     )
+ 
+ 
++@triton.jit
++def _compact_kv_fp8(
++    k,
++    v,
++    req_to_token,
++    req_indices,
++    indices,
++    seq_lens,
++    cu_k,
++    out_k,
++    out_v,
++    topk: tl.constexpr,
++    heads: tl.constexpr,
++    dim: tl.constexpr,
++    req_stride: tl.constexpr,
++    idx_stride: tl.constexpr,
++    BLOCK_TOPK: tl.constexpr,
++    BLOCK_D: tl.constexpr,
++):
++    """_compact_kv for an fp8_e4m3 pool viewed as uint8: dequantize into the bf16 scratch."""
++    batch, head, block = tl.program_id(0), tl.program_id(1), tl.program_id(2)
++    cols = block * BLOCK_TOPK + tl.arange(0, BLOCK_TOPK)
++    dims = tl.arange(0, BLOCK_D)
++    length = tl.load(seq_lens + batch)
++    req = tl.load(req_indices + batch)
++    pack_start = tl.load(cu_k + batch)
++    valid_count = tl.load(cu_k + batch + 1) - pack_start
++    positions = tl.load(indices + batch * idx_stride + cols, mask=cols < topk, other=-1)
++    valid = (cols < valid_count) & (positions >= 0) & (positions < length)
++    slots = tl.load(
++        req_to_token + req * req_stride + tl.where(valid, positions, 0),
++        mask=valid,
++        other=0,
++    )
++    src = slots[:, None] * heads * dim + head * dim + dims[None, :]
++    dst = (pack_start + cols)[:, None] * heads * dim + head * dim + dims[None, :]
++    mask = valid[:, None] & (dims[None, :] < dim)
++    kk = tl.load(k + src, mask=mask, other=0).to(tl.float8e4nv, bitcast=True).to(tl.bfloat16)
++    vv = tl.load(v + src, mask=mask, other=0).to(tl.float8e4nv, bitcast=True).to(tl.bfloat16)
++    tl.store(out_k + dst, kk, mask=mask)
++    tl.store(out_v + dst, vv, mask=mask)
++
++
++@triton.jit
++def _quant_store_kv_int8(
++    k,
++    v,
++    loc,
++    k_buf,
++    v_buf,
++    k_scale,
++    v_scale,
++    sm_k_inv,
++    sm_v_inv,
++    sk_n,
++    sk_h,
++    sv_n,
++    sv_h,
++    H: tl.constexpr,
++    D: tl.constexpr,
++    GROUP: tl.constexpr,
++):
++    """Program (token, head): quantize one K row and one V row (per-GROUP absmax/127, fp16 scale)
++    and scatter payload + scales into slot loc[token].  Grid (N, H) is static -> capture-safe."""
++    NG: tl.constexpr = D // GROUP
++    t, h = tl.program_id(0), tl.program_id(1)
++    slot = tl.load(loc + t).to(tl.int64)
++    offs = tl.arange(0, D)
++    goffs = tl.arange(0, NG)
++    row = (slot * H + h) * D
++    srow = (slot * H + h) * NG
++
++    x = tl.load(k + t * sk_n + h * sk_h + offs).to(tl.float32)
++    x = x * tl.load(sm_k_inv + h * D + offs).to(tl.float32)
++    xg = tl.reshape(x, [NG, GROUP])
++    a = tl.max(tl.abs(xg), axis=1)
++    s = tl.minimum(tl.where(a > 0, a / 127.0, 1.0), 65504.0).to(tl.float16)   # fp16 max: no inf/NaN on extreme groups            # the stored scale (fp16) is the one used
++    q = libdevice.rint(xg / s.to(tl.float32)[:, None])
++    q = tl.clamp(q, -127.0, 127.0).to(tl.int8)
++    tl.store(k_buf + row + offs, tl.reshape(q, [D]))
++    tl.store(k_scale + srow + goffs, s)
++
++    x = tl.load(v + t * sv_n + h * sv_h + offs).to(tl.float32)
++    x = x * tl.load(sm_v_inv + h * D + offs).to(tl.float32)
++    xg = tl.reshape(x, [NG, GROUP])
++    a = tl.max(tl.abs(xg), axis=1)
++    s = tl.minimum(tl.where(a > 0, a / 127.0, 1.0), 65504.0).to(tl.float16)   # fp16 max: no inf/NaN on extreme groups
++    q = libdevice.rint(xg / s.to(tl.float32)[:, None])
++    q = tl.clamp(q, -127.0, 127.0).to(tl.int8)
++    tl.store(v_buf + row + offs, tl.reshape(q, [D]))
++    tl.store(v_scale + srow + goffs, s)
++
++
++def quant_store_kv_int8(k, v, loc, k_buf, v_buf, k_scale, v_scale, sm_k_inv, sm_v_inv):
++    """k, v: [N, H, D] (any float dtype, unit last stride); loc: [N] int32/int64 slots;
++    k_buf/v_buf: int8 [rows, H, D]; k_scale/v_scale: fp16 [rows, H, D // GROUP]; sm_*_inv: fp16 [H, D]."""
++    N, H, D = k.shape
++    assert v.shape == (N, H, D) and k.stride(2) == 1 and v.stride(2) == 1
++    assert k_buf.dtype == torch.int8 and v_buf.dtype == torch.int8
++    assert k_scale.dtype == torch.float16 and v_scale.dtype == torch.float16
++    assert k_buf.is_contiguous() and v_buf.is_contiguous() and k_scale.is_contiguous() and v_scale.is_contiguous()
++    assert k_buf.shape[1:] == (H, D) and k_scale.shape[1:] == (H, D // KV_INT8_GROUP)
++    assert sm_k_inv.shape == (H, D) and sm_v_inv.shape == (H, D)
++    assert loc.numel() == N
++    if N == 0:
++        return
++    _quant_store_kv_int8[(N, H)](
++        k,
++        v,
++        loc,
++        k_buf,
++        v_buf,
++        k_scale,
++        v_scale,
++        sm_k_inv,
++        sm_v_inv,
++        k.stride(0),
++        k.stride(1),
++        v.stride(0),
++        v.stride(1),
++        H=H,
++        D=D,
++        GROUP=KV_INT8_GROUP,
++        num_warps=4,
++    )
++
++
++@triton.jit
++def _compact_kv_int8(
++    k,
++    v,
++    k_scale,
++    v_scale,
++    sm_k,
++    sm_v,
++    req_to_token,
++    req_indices,
++    indices,
++    seq_lens,
++    cu_k,
++    out_k,
++    out_v,
++    topk: tl.constexpr,
++    heads: tl.constexpr,
++    dim: tl.constexpr,
++    req_stride: tl.constexpr,
++    idx_stride: tl.constexpr,
++    GROUP: tl.constexpr,
++    BLOCK_TOPK: tl.constexpr,
++    BLOCK_D: tl.constexpr,
++):
++    """_compact_kv for an int8 pool: gather + dequantize (q * s * sm, fp32) into the bf16 scratch.
++    Same store mask as _compact_kv / _compact_kv_fp8: only valid (in-region, 0 <= pos < seq_len)
++    columns are written; invalid columns are neither read nor written (on the trtllm strided tables
++    cu_k spans the whole page-aligned stride, so zero-filling them would write every unused column)."""
++    NG: tl.constexpr = dim // GROUP
++    batch, head, block = tl.program_id(0), tl.program_id(1), tl.program_id(2)
++    cols = block * BLOCK_TOPK + tl.arange(0, BLOCK_TOPK)
++    dims = tl.arange(0, BLOCK_D)
++    length = tl.load(seq_lens + batch)
++    req = tl.load(req_indices + batch)
++    pack_start = tl.load(cu_k + batch)
++    valid_count = tl.load(cu_k + batch + 1) - pack_start
++    positions = tl.load(indices + batch * idx_stride + cols, mask=cols < topk, other=-1)
++    valid = (cols < valid_count) & (positions >= 0) & (positions < length)
++    slots = tl.load(
++        req_to_token + req * req_stride + tl.where(valid, positions, 0),
++        mask=valid,
++        other=0,
++    ).to(tl.int64)
++    dmask = dims < dim
++    src = (slots[:, None] * heads + head) * dim + dims[None, :]
++    ssrc = (slots[:, None] * heads + head) * NG + dims[None, :] // GROUP
++    dst = ((pack_start + cols)[:, None] * heads + head) * dim + dims[None, :]
++    mask = valid[:, None] & dmask[None, :]
++    smr_k = tl.load(sm_k + head * dim + dims, mask=dmask, other=0).to(tl.float32)
++    smr_v = tl.load(sm_v + head * dim + dims, mask=dmask, other=0).to(tl.float32)
++    sc = tl.load(k_scale + ssrc, mask=mask, other=0).to(tl.float32)
++    kk = tl.load(k + src, mask=mask, other=0).to(tl.float32) * sc * smr_k[None, :]
++    tl.store(out_k + dst, kk.to(tl.bfloat16), mask=mask)
++    sc = tl.load(v_scale + ssrc, mask=mask, other=0).to(tl.float32)
++    vv = tl.load(v + src, mask=mask, other=0).to(tl.float32) * sc * smr_v[None, :]
++    tl.store(out_v + dst, vv.to(tl.bfloat16), mask=mask)
++
++
++@triton.jit
++def _gather_dequant_rows_int8(
++    k,
++    v,
++    k_scale,
++    v_scale,
++    sm_k,
++    sm_v,
++    req_to_token,
++    req_indices,
++    seq_lens,
++    cu_k,
++    out_k,
++    out_v,
++    heads: tl.constexpr,
++    dim: tl.constexpr,
++    req_stride: tl.constexpr,
++    GROUP: tl.constexpr,
++    BLOCK_T: tl.constexpr,
++):
++    """Program (batch, row block, head): rows t < seq_lens[batch] of request req_indices[batch]
++    (slots from req_to_token) -> dequantized bf16 rows cu_k[batch] + t of out_k/out_v.  The row-block
++    count is a grid dimension (runtime max_len), so chunk sizes never recompile the kernel."""
++    NG: tl.constexpr = dim // GROUP
++    batch, block, head = tl.program_id(0), tl.program_id(1), tl.program_id(2)
++    length = tl.load(seq_lens + batch)
++    req = tl.load(req_indices + batch)
++    pack_start = tl.load(cu_k + batch)
++    t = block * BLOCK_T + tl.arange(0, BLOCK_T)
++    valid = t < length
++    slots = tl.load(req_to_token + req * req_stride + t, mask=valid, other=0).to(tl.int64)
++    dims = tl.arange(0, dim)
++    src = (slots[:, None] * heads + head) * dim + dims[None, :]
++    ssrc = (slots[:, None] * heads + head) * NG + dims[None, :] // GROUP
++    dst = ((pack_start + t)[:, None] * heads + head) * dim + dims[None, :]
++    mask = valid[:, None] & (dims[None, :] < dim)
++    smr_k = tl.load(sm_k + head * dim + dims).to(tl.float32)
++    smr_v = tl.load(sm_v + head * dim + dims).to(tl.float32)
++    sc = tl.load(k_scale + ssrc, mask=mask, other=0).to(tl.float32)
++    kk = tl.load(k + src, mask=mask, other=0).to(tl.float32) * sc * smr_k[None, :]
++    tl.store(out_k + dst, kk.to(tl.bfloat16), mask=mask)
++    sc = tl.load(v_scale + ssrc, mask=mask, other=0).to(tl.float32)
++    vv = tl.load(v + src, mask=mask, other=0).to(tl.float32) * sc * smr_v[None, :]
++    tl.store(out_v + dst, vv.to(tl.bfloat16), mask=mask)
++
++
++def qwen_sparse_prefix_gather_dequant_int8(
++    k, v, k_scale, v_scale, sm_k, sm_v, req_to_token, req_indices, seq_lens, cu_k, out_k, out_v, batch, max_len
++):
++    """Whole-prefix gather-dequant of an int8 pool: rows [0, seq_lens[b]) of every request packed at
++    cu_k[b] into the bf16 out_k/out_v.  Rows at or beyond seq_lens[b] are not written."""
++    _, heads, dim = k.shape
++    assert k.dtype == torch.int8 and v.dtype == torch.int8
++    assert out_k.dtype == torch.bfloat16 and out_v.dtype == torch.bfloat16, "int8 KV gather needs a bf16 scratch"
++    assert dim % KV_INT8_GROUP == 0 and dim == triton.next_power_of_2(dim)
++    assert k_scale.shape[1:] == (heads, dim // KV_INT8_GROUP) and k_scale.is_contiguous()
++    assert v_scale.shape[1:] == (heads, dim // KV_INT8_GROUP) and v_scale.is_contiguous()
++    assert sm_k.shape == (heads, dim) and sm_v.shape == (heads, dim)
++    assert out_k.is_contiguous() and out_v.is_contiguous()
++    block_t = 16
++    if batch == 0 or max_len == 0:
++        return
++    _gather_dequant_rows_int8[(batch, triton.cdiv(int(max_len), block_t), heads)](
++        k,
++        v,
++        k_scale,
++        v_scale,
++        sm_k,
++        sm_v,
++        req_to_token,
++        req_indices,
++        seq_lens,
++        cu_k,
++        out_k,
++        out_v,
++        heads,
++        dim,
++        req_to_token.stride(0),
++        GROUP=KV_INT8_GROUP,
++        BLOCK_T=block_t,
++        num_warps=8,
++    )
++
++
++KV_INT4_GROUP = 32          # channels per fp16 scale for the int4 pool (groups 0-1 = the 64 rotary dims)
++
++
++@triton.jit
++def _quant_store_kv_int4(
++    k,
++    v,
++    loc,
++    k_buf,
++    v_buf,
++    k_scale,
++    v_scale,
++    sm_k_inv,
++    sm_v_inv,
++    sk_n,
++    sk_h,
++    sv_n,
++    sv_h,
++    H: tl.constexpr,
++    D: tl.constexpr,
++    GROUP: tl.constexpr,
++):
++    """Program (token, head): quantize one K row and one V row (per-GROUP absmax/7, fp16 scale,
++    q = rint(x / s) with an IEEE-exact division, clamped to [-7, 7]; s clamped to fp16 max so it is never inf) and pack channel pairs into bytes (low nibble = even channel,
++    high nibble = odd channel, offset-binary q + 8), then scatter D // 2 bytes + D // GROUP scales
++    into slot loc[token].  Grid (N, H) is static -> capture-safe."""
++    DH: tl.constexpr = D // 2
++    NG: tl.constexpr = D // GROUP
++    GH: tl.constexpr = GROUP // 2
++    t, h = tl.program_id(0), tl.program_id(1)
++    slot = tl.load(loc + t).to(tl.int64)
++    pairs = tl.arange(0, DH)
++    even = 2 * pairs
++    odd = even + 1
++    goffs = tl.arange(0, NG)
++    row = (slot * H + h) * DH
++    srow = (slot * H + h) * NG
++
++    base = k + t * sk_n + h * sk_h
++    xe = tl.load(base + even).to(tl.float32) * tl.load(sm_k_inv + h * D + even).to(tl.float32)
++    xo = tl.load(base + odd).to(tl.float32) * tl.load(sm_k_inv + h * D + odd).to(tl.float32)
++    ge = tl.reshape(xe, [NG, GH])                                  # (g, j) = channel 32 g + 2 j
++    go = tl.reshape(xo, [NG, GH])                                  # (g, j) = channel 32 g + 2 j + 1
++    a = tl.maximum(tl.max(tl.abs(ge), axis=1), tl.max(tl.abs(go), axis=1))
++    # The stored scale (fp16) is the one used.  Clamp to fp16 max BEFORE the cast: a bf16 group absmax
++    # above 7 * 65504 would otherwise give s = +inf -> nibble 8 -> (8 - 8) * inf = NaN on dequant;
++    # clamped, such channels saturate to +/- 7 * 65504 (finite) instead.
++    s = tl.minimum(tl.where(a > 0, a / 7.0, 1.0), 65504.0).to(tl.float16)
++    # IEEE-exact division: Triton's `/` is the approximate div.full (2 ulp), which breaks exact .5 ties
++    # (x/s = 6.5 -> 6.5000001 -> 7) that int4's coarse grid hits constantly; torch rounds them to even.
++    sf = tl.broadcast_to(s.to(tl.float32)[:, None], [NG, GH])
++    qe = tl.clamp(libdevice.rint(tl.div_rn(ge, sf)), -7.0, 7.0).to(tl.int32) + 8
++    qo = tl.clamp(libdevice.rint(tl.div_rn(go, sf)), -7.0, 7.0).to(tl.int32) + 8
++    packed = (qe | (qo << 4)).to(tl.uint8)
++    tl.store(k_buf + row + pairs, tl.reshape(packed, [DH]))
++    tl.store(k_scale + srow + goffs, s)
++
++    base = v + t * sv_n + h * sv_h
++    xe = tl.load(base + even).to(tl.float32) * tl.load(sm_v_inv + h * D + even).to(tl.float32)
++    xo = tl.load(base + odd).to(tl.float32) * tl.load(sm_v_inv + h * D + odd).to(tl.float32)
++    ge = tl.reshape(xe, [NG, GH])
++    go = tl.reshape(xo, [NG, GH])
++    a = tl.maximum(tl.max(tl.abs(ge), axis=1), tl.max(tl.abs(go), axis=1))
++    s = tl.minimum(tl.where(a > 0, a / 7.0, 1.0), 65504.0).to(tl.float16)   # fp16-max clamp, see K half
++    # IEEE-exact division: Triton's `/` is the approximate div.full (2 ulp), which breaks exact .5 ties
++    # (x/s = 6.5 -> 6.5000001 -> 7) that int4's coarse grid hits constantly; torch rounds them to even.
++    sf = tl.broadcast_to(s.to(tl.float32)[:, None], [NG, GH])
++    qe = tl.clamp(libdevice.rint(tl.div_rn(ge, sf)), -7.0, 7.0).to(tl.int32) + 8
++    qo = tl.clamp(libdevice.rint(tl.div_rn(go, sf)), -7.0, 7.0).to(tl.int32) + 8
++    packed = (qe | (qo << 4)).to(tl.uint8)
++    tl.store(v_buf + row + pairs, tl.reshape(packed, [DH]))
++    tl.store(v_scale + srow + goffs, s)
++
++
++def quant_store_kv_int4(k, v, loc, k_buf, v_buf, k_scale, v_scale, sm_k_inv, sm_v_inv):
++    """k, v: [N, H, D] (any float dtype, unit last stride); loc: [N] int32/int64 slots;
++    k_buf/v_buf: uint8 [rows, H, D // 2]; k_scale/v_scale: fp16 [rows, H, D // GROUP]; sm_*_inv: fp16 [H, D]."""
++    N, H, D = k.shape
++    assert v.shape == (N, H, D) and k.stride(2) == 1 and v.stride(2) == 1
++    assert D % KV_INT4_GROUP == 0 and D == triton.next_power_of_2(D)
++    assert k_buf.dtype == torch.uint8 and v_buf.dtype == torch.uint8
++    assert k_scale.dtype == torch.float16 and v_scale.dtype == torch.float16
++    assert k_buf.is_contiguous() and v_buf.is_contiguous() and k_scale.is_contiguous() and v_scale.is_contiguous()
++    assert k_buf.shape[1:] == (H, D // 2) and v_buf.shape[1:] == (H, D // 2)
++    assert k_scale.shape[1:] == (H, D // KV_INT4_GROUP) and v_scale.shape[1:] == (H, D // KV_INT4_GROUP)
++    assert sm_k_inv.shape == (H, D) and sm_v_inv.shape == (H, D)
++    assert loc.numel() == N
++    if N == 0:
++        return
++    _quant_store_kv_int4[(N, H)](
++        k,
++        v,
++        loc,
++        k_buf,
++        v_buf,
++        k_scale,
++        v_scale,
++        sm_k_inv,
++        sm_v_inv,
++        k.stride(0),
++        k.stride(1),
++        v.stride(0),
++        v.stride(1),
++        H=H,
++        D=D,
++        GROUP=KV_INT4_GROUP,
++        num_warps=4,
++    )
++
++
++@triton.jit
++def _compact_kv_int4(
++    k,
++    v,
++    k_scale,
++    v_scale,
++    sm_k,
++    sm_v,
++    req_to_token,
++    req_indices,
++    indices,
++    seq_lens,
++    cu_k,
++    out_k,
++    out_v,
++    topk: tl.constexpr,
++    heads: tl.constexpr,
++    dim: tl.constexpr,
++    req_stride: tl.constexpr,
++    idx_stride: tl.constexpr,
++    GROUP: tl.constexpr,
++    BLOCK_TOPK: tl.constexpr,
++):
++    """_compact_kv for the int4 pool: gather dim // 2 packed bytes per (slot, head), unpack the two
++    nibbles ((b & 15) - 8 = even channel, (b >> 4) - 8 = odd channel), dequantize (* s * sm, fp32) and
++    interleave into the bf16 scratch.  `dim` is the logical head_dim.  Same store mask as
++    _compact_kv / _compact_kv_int8: only valid (in-region, 0 <= pos < seq_len) columns are written;
++    invalid columns are neither read nor written."""
++    DH: tl.constexpr = dim // 2
++    NG: tl.constexpr = dim // GROUP
++    GH: tl.constexpr = GROUP // 2
++    batch, head, block = tl.program_id(0), tl.program_id(1), tl.program_id(2)
++    cols = block * BLOCK_TOPK + tl.arange(0, BLOCK_TOPK)
++    pairs = tl.arange(0, DH)
++    dims = tl.arange(0, dim)
++    length = tl.load(seq_lens + batch)
++    req = tl.load(req_indices + batch)
++    pack_start = tl.load(cu_k + batch)
++    valid_count = tl.load(cu_k + batch + 1) - pack_start
++    positions = tl.load(indices + batch * idx_stride + cols, mask=cols < topk, other=-1)
++    valid = (cols < valid_count) & (positions >= 0) & (positions < length)
++    slots = tl.load(
++        req_to_token + req * req_stride + tl.where(valid, positions, 0),
++        mask=valid,
++        other=0,
++    ).to(tl.int64)
++    src = (slots[:, None] * heads + head) * DH + pairs[None, :]
++    ssrc = (slots[:, None] * heads + head) * NG + pairs[None, :] // GH
++    dst = ((pack_start + cols)[:, None] * heads + head) * dim + dims[None, :]
++    pmask = valid[:, None] & (pairs[None, :] < DH)
++    mask = valid[:, None] & (dims[None, :] < dim)
++    sm_e = tl.load(sm_k + head * dim + 2 * pairs).to(tl.float32)
++    sm_o = tl.load(sm_k + head * dim + 2 * pairs + 1).to(tl.float32)
++    b = tl.load(k + src, mask=pmask, other=0).to(tl.int32)
++    sc = tl.load(k_scale + ssrc, mask=pmask, other=0).to(tl.float32)
++    lo = ((b & 15) - 8).to(tl.float32) * sc * sm_e[None, :]
++    hi = ((b >> 4) - 8).to(tl.float32) * sc * sm_o[None, :]
++    tl.store(out_k + dst, tl.interleave(lo, hi).to(tl.bfloat16), mask=mask)
++    sm_e = tl.load(sm_v + head * dim + 2 * pairs).to(tl.float32)
++    sm_o = tl.load(sm_v + head * dim + 2 * pairs + 1).to(tl.float32)
++    b = tl.load(v + src, mask=pmask, other=0).to(tl.int32)
++    sc = tl.load(v_scale + ssrc, mask=pmask, other=0).to(tl.float32)
++    lo = ((b & 15) - 8).to(tl.float32) * sc * sm_e[None, :]
++    hi = ((b >> 4) - 8).to(tl.float32) * sc * sm_o[None, :]
++    tl.store(out_v + dst, tl.interleave(lo, hi).to(tl.bfloat16), mask=mask)
++
++
++@triton.jit
++def _gather_dequant_rows_int4(
++    k,
++    v,
++    k_scale,
++    v_scale,
++    sm_k,
++    sm_v,
++    req_to_token,
++    req_indices,
++    seq_lens,
++    cu_k,
++    out_k,
++    out_v,
++    heads: tl.constexpr,
++    dim: tl.constexpr,
++    req_stride: tl.constexpr,
++    GROUP: tl.constexpr,
++    BLOCK_T: tl.constexpr,
++):
++    """Program (batch, row block, head): rows t < seq_lens[batch] of request req_indices[batch]
++    (slots from req_to_token) -> unpacked + dequantized bf16 rows cu_k[batch] + t of out_k/out_v.
++    The row-block count is a grid dimension (runtime max_len), so chunk sizes never recompile."""
++    DH: tl.constexpr = dim // 2
++    NG: tl.constexpr = dim // GROUP
++    GH: tl.constexpr = GROUP // 2
++    batch, block, head = tl.program_id(0), tl.program_id(1), tl.program_id(2)
++    length = tl.load(seq_lens + batch)
++    req = tl.load(req_indices + batch)
++    pack_start = tl.load(cu_k + batch)
++    t = block * BLOCK_T + tl.arange(0, BLOCK_T)
++    valid = t < length
++    slots = tl.load(req_to_token + req * req_stride + t, mask=valid, other=0).to(tl.int64)
++    pairs = tl.arange(0, DH)
++    dims = tl.arange(0, dim)
++    src = (slots[:, None] * heads + head) * DH + pairs[None, :]
++    ssrc = (slots[:, None] * heads + head) * NG + pairs[None, :] // GH
++    dst = ((pack_start + t)[:, None] * heads + head) * dim + dims[None, :]
++    pmask = valid[:, None] & (pairs[None, :] < DH)
++    mask = valid[:, None] & (dims[None, :] < dim)
++    sm_e = tl.load(sm_k + head * dim + 2 * pairs).to(tl.float32)
++    sm_o = tl.load(sm_k + head * dim + 2 * pairs + 1).to(tl.float32)
++    b = tl.load(k + src, mask=pmask, other=0).to(tl.int32)
++    sc = tl.load(k_scale + ssrc, mask=pmask, other=0).to(tl.float32)
++    lo = ((b & 15) - 8).to(tl.float32) * sc * sm_e[None, :]
++    hi = ((b >> 4) - 8).to(tl.float32) * sc * sm_o[None, :]
++    tl.store(out_k + dst, tl.interleave(lo, hi).to(tl.bfloat16), mask=mask)
++    sm_e = tl.load(sm_v + head * dim + 2 * pairs).to(tl.float32)
++    sm_o = tl.load(sm_v + head * dim + 2 * pairs + 1).to(tl.float32)
++    b = tl.load(v + src, mask=pmask, other=0).to(tl.int32)
++    sc = tl.load(v_scale + ssrc, mask=pmask, other=0).to(tl.float32)
++    lo = ((b & 15) - 8).to(tl.float32) * sc * sm_e[None, :]
++    hi = ((b >> 4) - 8).to(tl.float32) * sc * sm_o[None, :]
++    tl.store(out_v + dst, tl.interleave(lo, hi).to(tl.bfloat16), mask=mask)
++
++
++def qwen_sparse_prefix_gather_dequant_int4(
++    k, v, k_scale, v_scale, sm_k, sm_v, req_to_token, req_indices, seq_lens, cu_k, out_k, out_v, batch, max_len
++):
++    """Whole-prefix gather-dequant of the int4 pool (k/v uint8 [rows, H, D // 2]): rows [0, seq_lens[b])
++    of every request packed at cu_k[b] into the bf16 out_k/out_v [.., H, D].  Rows at or beyond
++    seq_lens[b] are not written."""
++    _, heads, dh = k.shape
++    dim = 2 * dh
++    assert k.dtype == torch.uint8 and v.dtype == torch.uint8
++    assert out_k.dtype == torch.bfloat16 and out_v.dtype == torch.bfloat16, "int4 KV gather needs a bf16 scratch"
++    assert out_k.shape[1:] == (heads, dim) and out_v.shape[1:] == (heads, dim)
++    assert dim % KV_INT4_GROUP == 0 and dim == triton.next_power_of_2(dim)
++    assert k_scale.shape[1:] == (heads, dim // KV_INT4_GROUP) and k_scale.is_contiguous()
++    assert v_scale.shape[1:] == (heads, dim // KV_INT4_GROUP) and v_scale.is_contiguous()
++    assert sm_k.shape == (heads, dim) and sm_v.shape == (heads, dim)
++    assert out_k.is_contiguous() and out_v.is_contiguous()
++    block_t = 16
++    if batch == 0 or max_len == 0:
++        return
++    _gather_dequant_rows_int4[(batch, triton.cdiv(int(max_len), block_t), heads)](
++        k,
++        v,
++        k_scale,
++        v_scale,
++        sm_k,
++        sm_v,
++        req_to_token,
++        req_indices,
++        seq_lens,
++        cu_k,
++        out_k,
++        out_v,
++        heads,
++        dim,
++        req_to_token.stride(0),
++        GROUP=KV_INT4_GROUP,
++        BLOCK_T=block_t,
++        num_warps=8,
++    )
++
++
++@triton.jit
++def _stamp_ring_owner(loc, owner, N, RING_MASK: tl.constexpr, BLOCK: tl.constexpr):
++    """owner[slot & RING_MASK] = slot for every slot of loc[0:N].  Tokens of one write whose slots share a
++    ring row race on the same int32 word; one of them wins (definite once the launch is complete) and only
++    the winner writes the ring row in the dual-write launch that follows.  Static grid -> capture-safe."""
++    offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
++    m = offs < N
++    slot = tl.load(loc + offs, mask=m, other=0).to(tl.int64)
++    tl.store(owner + (slot & RING_MASK), slot.to(tl.int32), mask=m)
++
++
++@triton.jit
++def _quant_store_kv_tiered(
++    k,
++    v,
++    loc,
++    k_buf,
++    v_buf,
++    k_scale,
++    v_scale,
++    rk,
++    rv,
++    rks,
++    rvs,
++    owner,
++    sm_k_inv,
++    sm_v_inv,
++    sk_n,
++    sk_h,
++    sv_n,
++    sv_h,
++    H: tl.constexpr,
++    D: tl.constexpr,
++    GROUP4: tl.constexpr,
++    GROUP8: tl.constexpr,
++    RING_MASK: tl.constexpr,
++):
++    """Program (token, head): dual-write of one K row and one V row.  (1) int8-g64 (absmax/127, fp16 scale
++    clamped to fp16 max, q = rint(x / s) clamped to [-127, 127]) into ring row r = slot & RING_MASK of
++    rk/rv/rks/rvs -- the body of _quant_store_kv_int8 plus the clamp -- stored ONLY if owner[r] == slot
++    (stamped by _stamp_ring_owner in the preceding launch: a token that lost a same-write ring-row collision
++    stores nothing into the ring and is cold); (2) int4-g32 nibble-packed into the full-context row `slot`
++    of k_buf/v_buf/k_scale/v_scale for every token -- the body of _quant_store_kv_int4, verbatim.
++    Grid (N, H) is static -> capture-safe."""
++    DH: tl.constexpr = D // 2
++    NG4: tl.constexpr = D // GROUP4
++    GH: tl.constexpr = GROUP4 // 2
++    NG8: tl.constexpr = D // GROUP8
++    t, h = tl.program_id(0), tl.program_id(1)
++    slot = tl.load(loc + t).to(tl.int64)
++    r = slot & RING_MASK
++    hot = tl.load(owner + r).to(tl.int64) == slot          # this token owns its ring row (stamp launch done)
++
++    # ---- (1) int8 ring row (owner only) ------------------------------------------------------
++    offs = tl.arange(0, D)
++    hmask = (offs < D) & hot
++    hsmask = (tl.arange(0, NG8) < NG8) & hot
++    goffs8 = tl.arange(0, NG8)
++    row8 = (r * H + h) * D
++    srow8 = (r * H + h) * NG8
++    x = tl.load(k + t * sk_n + h * sk_h + offs).to(tl.float32)
++    x = x * tl.load(sm_k_inv + h * D + offs).to(tl.float32)
++    xg = tl.reshape(x, [NG8, GROUP8])
++    a = tl.max(tl.abs(xg), axis=1)
++    # fp16-max clamp (the int8 kernel lacks it): a bf16 group absmax above 127 * 65504 would give s = inf
++    s = tl.minimum(tl.where(a > 0, a / 127.0, 1.0), 65504.0).to(tl.float16)
++    q = libdevice.rint(xg / s.to(tl.float32)[:, None])
++    q = tl.clamp(q, -127.0, 127.0).to(tl.int8)
++    tl.store(rk + row8 + offs, tl.reshape(q, [D]), mask=hmask)
++    tl.store(rks + srow8 + goffs8, s, mask=hsmask)
++
++    x = tl.load(v + t * sv_n + h * sv_h + offs).to(tl.float32)
++    x = x * tl.load(sm_v_inv + h * D + offs).to(tl.float32)
++    xg = tl.reshape(x, [NG8, GROUP8])
++    a = tl.max(tl.abs(xg), axis=1)
++    s = tl.minimum(tl.where(a > 0, a / 127.0, 1.0), 65504.0).to(tl.float16)   # fp16-max clamp, see K half
++    q = libdevice.rint(xg / s.to(tl.float32)[:, None])
++    q = tl.clamp(q, -127.0, 127.0).to(tl.int8)
++    tl.store(rv + row8 + offs, tl.reshape(q, [D]), mask=hmask)
++    tl.store(rvs + srow8 + goffs8, s, mask=hsmask)
++
++    # ---- (2) int4 full-context row (= _quant_store_kv_int4) ----------------------------------
++    pairs = tl.arange(0, DH)
++    even = 2 * pairs
++    odd = even + 1
++    goffs = tl.arange(0, NG4)
++    row = (slot * H + h) * DH
++    srow = (slot * H + h) * NG4
++
++    base = k + t * sk_n + h * sk_h
++    xe = tl.load(base + even).to(tl.float32) * tl.load(sm_k_inv + h * D + even).to(tl.float32)
++    xo = tl.load(base + odd).to(tl.float32) * tl.load(sm_k_inv + h * D + odd).to(tl.float32)
++    ge = tl.reshape(xe, [NG4, GH])                                 # (g, j) = channel 32 g + 2 j
++    go = tl.reshape(xo, [NG4, GH])                                 # (g, j) = channel 32 g + 2 j + 1
++    a = tl.maximum(tl.max(tl.abs(ge), axis=1), tl.max(tl.abs(go), axis=1))
++    s = tl.minimum(tl.where(a > 0, a / 7.0, 1.0), 65504.0).to(tl.float16)
++    sf = tl.broadcast_to(s.to(tl.float32)[:, None], [NG4, GH])
++    qe = tl.clamp(libdevice.rint(tl.div_rn(ge, sf)), -7.0, 7.0).to(tl.int32) + 8
++    qo = tl.clamp(libdevice.rint(tl.div_rn(go, sf)), -7.0, 7.0).to(tl.int32) + 8
++    packed = (qe | (qo << 4)).to(tl.uint8)
++    tl.store(k_buf + row + pairs, tl.reshape(packed, [DH]))
++    tl.store(k_scale + srow + goffs, s)
++
++    base = v + t * sv_n + h * sv_h
++    xe = tl.load(base + even).to(tl.float32) * tl.load(sm_v_inv + h * D + even).to(tl.float32)
++    xo = tl.load(base + odd).to(tl.float32) * tl.load(sm_v_inv + h * D + odd).to(tl.float32)
++    ge = tl.reshape(xe, [NG4, GH])
++    go = tl.reshape(xo, [NG4, GH])
++    a = tl.maximum(tl.max(tl.abs(ge), axis=1), tl.max(tl.abs(go), axis=1))
++    s = tl.minimum(tl.where(a > 0, a / 7.0, 1.0), 65504.0).to(tl.float16)
++    sf = tl.broadcast_to(s.to(tl.float32)[:, None], [NG4, GH])
++    qe = tl.clamp(libdevice.rint(tl.div_rn(ge, sf)), -7.0, 7.0).to(tl.int32) + 8
++    qo = tl.clamp(libdevice.rint(tl.div_rn(go, sf)), -7.0, 7.0).to(tl.int32) + 8
++    packed = (qe | (qo << 4)).to(tl.uint8)
++    tl.store(v_buf + row + pairs, tl.reshape(packed, [DH]))
++    tl.store(v_scale + srow + goffs, s)
++
++
++def quant_store_kv_tiered(k, v, loc, k_buf, v_buf, k_scale, v_scale, rk, rv, rks, rvs, owner, sm_k_inv, sm_v_inv, ring_mask):
++    """k, v: [N, H, D] (any float dtype, unit last stride); loc: [N] int32/int64 slots (N <= R; slots that
++    share a ring row within one write are safe: the stamp launch picks one owner per row, only it writes the
++    ring row, the others are cold); k_buf/v_buf: uint8 [rows, H, D // 2]; k_scale/v_scale:
++    fp16 [rows, H, D // 32]; rk/rv: int8 [R, H, D]; rks/rvs: fp16 [R, H, D // 64]; owner: int32 [R];
++    sm_*_inv: fp16 [H, D]; ring_mask = R - 1 (R a power of two)."""
++    N, H, D = k.shape
++    R = int(ring_mask) + 1
++    assert R > 0 and R & (R - 1) == 0, f"ring_mask + 1 = {R} is not a power of two"
++    assert v.shape == (N, H, D) and k.stride(2) == 1 and v.stride(2) == 1
++    assert D % KV_INT4_GROUP == 0 and D % KV_INT8_GROUP == 0 and D == triton.next_power_of_2(D)
++    assert k_buf.dtype == torch.uint8 and v_buf.dtype == torch.uint8
++    assert k_scale.dtype == torch.float16 and v_scale.dtype == torch.float16
++    assert k_buf.is_contiguous() and v_buf.is_contiguous() and k_scale.is_contiguous() and v_scale.is_contiguous()
++    assert k_buf.shape[1:] == (H, D // 2) and v_buf.shape[1:] == (H, D // 2)
++    assert k_scale.shape[1:] == (H, D // KV_INT4_GROUP) and v_scale.shape[1:] == (H, D // KV_INT4_GROUP)
++    assert rk.dtype == torch.int8 and rv.dtype == torch.int8 and rk.shape == (R, H, D) and rv.shape == (R, H, D)
++    assert rks.dtype == torch.float16 and rvs.dtype == torch.float16
++    assert rks.shape == (R, H, D // KV_INT8_GROUP) and rvs.shape == (R, H, D // KV_INT8_GROUP)
++    assert rk.is_contiguous() and rv.is_contiguous() and rks.is_contiguous() and rvs.is_contiguous()
++    assert owner.dtype == torch.int32 and owner.shape == (R,) and owner.is_contiguous()
++    assert sm_k_inv.shape == (H, D) and sm_v_inv.shape == (H, D)
++    assert loc.numel() == N
++    assert N <= R, f"{N} tokens in one tiered write exceed the ring of {R} slots"
++    if N == 0:
++        return
++    STAMP_BLOCK = 128
++    _stamp_ring_owner[(triton.cdiv(N, STAMP_BLOCK),)](loc, owner, N, RING_MASK=R - 1, BLOCK=STAMP_BLOCK, num_warps=4)
++    _quant_store_kv_tiered[(N, H)](
++        k,
++        v,
++        loc,
++        k_buf,
++        v_buf,
++        k_scale,
++        v_scale,
++        rk,
++        rv,
++        rks,
++        rvs,
++        owner,
++        sm_k_inv,
++        sm_v_inv,
++        k.stride(0),
++        k.stride(1),
++        v.stride(0),
++        v.stride(1),
++        H=H,
++        D=D,
++        GROUP4=KV_INT4_GROUP,
++        GROUP8=KV_INT8_GROUP,
++        RING_MASK=R - 1,
++        num_warps=4,
++    )
++
++
++@triton.jit
++def _compact_kv_tiered(
++    k,
++    v,
++    k_scale,
++    v_scale,
++    rk,
++    rv,
++    rks,
++    rvs,
++    owner,
++    sm_k,
++    sm_v,
++    req_to_token,
++    req_indices,
++    indices,
++    seq_lens,
++    cu_k,
++    out_k,
++    out_v,
++    topk: tl.constexpr,
++    heads: tl.constexpr,
++    dim: tl.constexpr,
++    req_stride: tl.constexpr,
++    idx_stride: tl.constexpr,
++    GROUP4: tl.constexpr,
++    GROUP8: tl.constexpr,
++    RING_MASK: tl.constexpr,
++    BLOCK_TOPK: tl.constexpr,
++):
++    """_compact_kv for the tiered pool.  Per selected slot the tier is decided on the device:
++    hot = valid & (owner[slot & RING_MASK] == slot) -> int8 ring row (dequant q * s * sm as _compact_kv_int8),
++    cold = valid & ~hot -> int4 full-context row (unpack + dequant as _compact_kv_int4); masked-off lanes of
++    the other tier issue no loads; tl.where selects.  Store mask unchanged: only valid columns are written
++    (trtllm strided tables rely on unused columns never being touched)."""
++    DH: tl.constexpr = dim // 2
++    NG4: tl.constexpr = dim // GROUP4
++    GH: tl.constexpr = GROUP4 // 2
++    NG8: tl.constexpr = dim // GROUP8
++    batch, head, block = tl.program_id(0), tl.program_id(1), tl.program_id(2)
++    cols = block * BLOCK_TOPK + tl.arange(0, BLOCK_TOPK)
++    pairs = tl.arange(0, DH)
++    dims = tl.arange(0, dim)
++    length = tl.load(seq_lens + batch)
++    req = tl.load(req_indices + batch)
++    pack_start = tl.load(cu_k + batch)
++    valid_count = tl.load(cu_k + batch + 1) - pack_start
++    positions = tl.load(indices + batch * idx_stride + cols, mask=cols < topk, other=-1)
++    valid = (cols < valid_count) & (positions >= 0) & (positions < length)
++    slots = tl.load(
++        req_to_token + req * req_stride + tl.where(valid, positions, 0),
++        mask=valid,
++        other=0,
++    ).to(tl.int64)
++    # device-side tier test
++    r = slots & RING_MASK
++    o = tl.load(owner + r, mask=valid, other=-1).to(tl.int64)
++    hot = valid & (o == slots)
++    cold = valid & (o != slots)
++    dst = ((pack_start + cols)[:, None] * heads + head) * dim + dims[None, :]
++    mask = valid[:, None] & (dims[None, :] < dim)
++    # cold: int4 rows
++    src4 = (slots[:, None] * heads + head) * DH + pairs[None, :]
++    ssrc4 = (slots[:, None] * heads + head) * NG4 + pairs[None, :] // GH
++    pmask = cold[:, None] & (pairs[None, :] < DH)
++    # hot: int8 ring rows
++    src8 = (r[:, None] * heads + head) * dim + dims[None, :]
++    ssrc8 = (r[:, None] * heads + head) * NG8 + dims[None, :] // GROUP8
++    mask8 = hot[:, None] & (dims[None, :] < dim)
++
++    sm_e = tl.load(sm_k + head * dim + 2 * pairs).to(tl.float32)
++    sm_o = tl.load(sm_k + head * dim + 2 * pairs + 1).to(tl.float32)
++    smr = tl.load(sm_k + head * dim + dims).to(tl.float32)
++    b = tl.load(k + src4, mask=pmask, other=0).to(tl.int32)
++    sc = tl.load(k_scale + ssrc4, mask=pmask, other=0).to(tl.float32)
++    lo = ((b & 15) - 8).to(tl.float32) * sc * sm_e[None, :]
++    hi = ((b >> 4) - 8).to(tl.float32) * sc * sm_o[None, :]
++    k4 = tl.interleave(lo, hi)
++    sc8 = tl.load(rks + ssrc8, mask=mask8, other=0).to(tl.float32)
++    k8 = tl.load(rk + src8, mask=mask8, other=0).to(tl.float32) * sc8 * smr[None, :]
++    tl.store(out_k + dst, tl.where(hot[:, None], k8, k4).to(tl.bfloat16), mask=mask)
++
++    sm_e = tl.load(sm_v + head * dim + 2 * pairs).to(tl.float32)
++    sm_o = tl.load(sm_v + head * dim + 2 * pairs + 1).to(tl.float32)
++    smr = tl.load(sm_v + head * dim + dims).to(tl.float32)
++    b = tl.load(v + src4, mask=pmask, other=0).to(tl.int32)
++    sc = tl.load(v_scale + ssrc4, mask=pmask, other=0).to(tl.float32)
++    lo = ((b & 15) - 8).to(tl.float32) * sc * sm_e[None, :]
++    hi = ((b >> 4) - 8).to(tl.float32) * sc * sm_o[None, :]
++    v4 = tl.interleave(lo, hi)
++    sc8 = tl.load(rvs + ssrc8, mask=mask8, other=0).to(tl.float32)
++    v8 = tl.load(rv + src8, mask=mask8, other=0).to(tl.float32) * sc8 * smr[None, :]
++    tl.store(out_v + dst, tl.where(hot[:, None], v8, v4).to(tl.bfloat16), mask=mask)
++
++
++@triton.jit
++def _gather_dequant_rows_tiered(
++    k,
++    v,
++    k_scale,
++    v_scale,
++    rk,
++    rv,
++    rks,
++    rvs,
++    owner,
++    sm_k,
++    sm_v,
++    req_to_token,
++    req_indices,
++    seq_lens,
++    cu_k,
++    out_k,
++    out_v,
++    heads: tl.constexpr,
++    dim: tl.constexpr,
++    req_stride: tl.constexpr,
++    GROUP4: tl.constexpr,
++    GROUP8: tl.constexpr,
++    RING_MASK: tl.constexpr,
++    BLOCK_T: tl.constexpr,
++):
++    """Program (batch, row block, head): rows t < seq_lens[batch] of request req_indices[batch] (slots from
++    req_to_token) -> bf16 rows cu_k[batch] + t of out_k/out_v, each row from its tier (owner test as in
++    _compact_kv_tiered).  The row-block count is a grid dimension (runtime max_len): no per-chunk recompile."""
++    DH: tl.constexpr = dim // 2
++    NG4: tl.constexpr = dim // GROUP4
++    GH: tl.constexpr = GROUP4 // 2
++    NG8: tl.constexpr = dim // GROUP8
++    batch, block, head = tl.program_id(0), tl.program_id(1), tl.program_id(2)
++    length = tl.load(seq_lens + batch)
++    req = tl.load(req_indices + batch)
++    pack_start = tl.load(cu_k + batch)
++    t = block * BLOCK_T + tl.arange(0, BLOCK_T)
++    valid = t < length
++    slots = tl.load(req_to_token + req * req_stride + t, mask=valid, other=0).to(tl.int64)
++    pairs = tl.arange(0, DH)
++    dims = tl.arange(0, dim)
++    r = slots & RING_MASK
++    o = tl.load(owner + r, mask=valid, other=-1).to(tl.int64)
++    hot = valid & (o == slots)
++    cold = valid & (o != slots)
++    dst = ((pack_start + t)[:, None] * heads + head) * dim + dims[None, :]
++    mask = valid[:, None] & (dims[None, :] < dim)
++    src4 = (slots[:, None] * heads + head) * DH + pairs[None, :]
++    ssrc4 = (slots[:, None] * heads + head) * NG4 + pairs[None, :] // GH
++    pmask = cold[:, None] & (pairs[None, :] < DH)
++    src8 = (r[:, None] * heads + head) * dim + dims[None, :]
++    ssrc8 = (r[:, None] * heads + head) * NG8 + dims[None, :] // GROUP8
++    mask8 = hot[:, None] & (dims[None, :] < dim)
++
++    sm_e = tl.load(sm_k + head * dim + 2 * pairs).to(tl.float32)
++    sm_o = tl.load(sm_k + head * dim + 2 * pairs + 1).to(tl.float32)
++    smr = tl.load(sm_k + head * dim + dims).to(tl.float32)
++    b = tl.load(k + src4, mask=pmask, other=0).to(tl.int32)
++    sc = tl.load(k_scale + ssrc4, mask=pmask, other=0).to(tl.float32)
++    lo = ((b & 15) - 8).to(tl.float32) * sc * sm_e[None, :]
++    hi = ((b >> 4) - 8).to(tl.float32) * sc * sm_o[None, :]
++    k4 = tl.interleave(lo, hi)
++    sc8 = tl.load(rks + ssrc8, mask=mask8, other=0).to(tl.float32)
++    k8 = tl.load(rk + src8, mask=mask8, other=0).to(tl.float32) * sc8 * smr[None, :]
++    tl.store(out_k + dst, tl.where(hot[:, None], k8, k4).to(tl.bfloat16), mask=mask)
++
++    sm_e = tl.load(sm_v + head * dim + 2 * pairs).to(tl.float32)
++    sm_o = tl.load(sm_v + head * dim + 2 * pairs + 1).to(tl.float32)
++    smr = tl.load(sm_v + head * dim + dims).to(tl.float32)
++    b = tl.load(v + src4, mask=pmask, other=0).to(tl.int32)
++    sc = tl.load(v_scale + ssrc4, mask=pmask, other=0).to(tl.float32)
++    lo = ((b & 15) - 8).to(tl.float32) * sc * sm_e[None, :]
++    hi = ((b >> 4) - 8).to(tl.float32) * sc * sm_o[None, :]
++    v4 = tl.interleave(lo, hi)
++    sc8 = tl.load(rvs + ssrc8, mask=mask8, other=0).to(tl.float32)
++    v8 = tl.load(rv + src8, mask=mask8, other=0).to(tl.float32) * sc8 * smr[None, :]
++    tl.store(out_v + dst, tl.where(hot[:, None], v8, v4).to(tl.bfloat16), mask=mask)
++
++
++def _check_tier_args(heads, dim, k_scale, v_scale, ring_k, ring_v, ring_ks, ring_vs, owner, ring_mask):
++    assert ring_k is not None and ring_v is not None and ring_ks is not None and ring_vs is not None
++    assert owner is not None and ring_mask is not None, "tiered gather needs the owner table and ring_mask"
++    R = int(ring_mask) + 1
++    assert R > 0 and R & (R - 1) == 0, f"ring_mask + 1 = {R} is not a power of two"
++    assert dim % KV_INT4_GROUP == 0 and dim % KV_INT8_GROUP == 0 and dim == triton.next_power_of_2(dim)
++    assert k_scale.shape[1:] == (heads, dim // KV_INT4_GROUP) and k_scale.is_contiguous()
++    assert v_scale.shape[1:] == (heads, dim // KV_INT4_GROUP) and v_scale.is_contiguous()
++    assert ring_k.dtype == torch.int8 and ring_v.dtype == torch.int8
++    assert ring_k.shape == (R, heads, dim) and ring_v.shape == (R, heads, dim)
++    assert ring_ks.dtype == torch.float16 and ring_vs.dtype == torch.float16
++    assert ring_ks.shape == (R, heads, dim // KV_INT8_GROUP) and ring_vs.shape == (R, heads, dim // KV_INT8_GROUP)
++    assert ring_k.is_contiguous() and ring_v.is_contiguous() and ring_ks.is_contiguous() and ring_vs.is_contiguous()
++    assert owner.dtype == torch.int32 and owner.shape == (R,) and owner.is_contiguous()
++    return R
++
++
++def qwen_sparse_prefix_gather_dequant_tiered(
++    k, v, k_scale, v_scale, sm_k, sm_v, req_to_token, req_indices, seq_lens, cu_k, out_k, out_v, batch, max_len,
++    ring_k=None, ring_v=None, ring_ks=None, ring_vs=None, owner=None, ring_mask=None,
++):
++    """Whole-prefix gather-dequant of the tiered pool (int4 rows k/v uint8 [rows, H, D // 2] + int8 ring):
++    rows [0, seq_lens[b]) of every request packed at cu_k[b] into the bf16 out_k/out_v [.., H, D], each row
++    from its tier.  Rows at or beyond seq_lens[b] are not written."""
++    _, heads, dh = k.shape
++    dim = 2 * dh
++    assert k.dtype == torch.uint8 and v.dtype == torch.uint8
++    assert out_k.dtype == torch.bfloat16 and out_v.dtype == torch.bfloat16, "tiered KV gather needs a bf16 scratch"
++    assert out_k.shape[1:] == (heads, dim) and out_v.shape[1:] == (heads, dim)
++    assert sm_k.shape == (heads, dim) and sm_v.shape == (heads, dim)
++    assert out_k.is_contiguous() and out_v.is_contiguous()
++    R = _check_tier_args(heads, dim, k_scale, v_scale, ring_k, ring_v, ring_ks, ring_vs, owner, ring_mask)
++    block_t = 16
++    if batch == 0 or max_len == 0:
++        return
++    _gather_dequant_rows_tiered[(batch, triton.cdiv(int(max_len), block_t), heads)](
++        k,
++        v,
++        k_scale,
++        v_scale,
++        ring_k,
++        ring_v,
++        ring_ks,
++        ring_vs,
++        owner,
++        sm_k,
++        sm_v,
++        req_to_token,
++        req_indices,
++        seq_lens,
++        cu_k,
++        out_k,
++        out_v,
++        heads,
++        dim,
++        req_to_token.stride(0),
++        GROUP4=KV_INT4_GROUP,
++        GROUP8=KV_INT8_GROUP,
++        RING_MASK=R - 1,
++        BLOCK_T=block_t,
++        num_warps=8,
++    )
++
++
+ def qwen_sparse_valid_counts_triton(seq_lens, indices, counts, batch, topk):
+     """Valid-count pass alone, without the packed cu_seqlens prefix sum."""
+     _fa2_valid_counts[(batch,)](
+@@ -468,6 +1428,17 @@ def qwen_sparse_kv_extraction_compact_triton(
+     batch,
+     topk,
+     zero_fill_cols: int = 0,
++    k_scale=None,
++    v_scale=None,
++    sm_k=None,
++    sm_v=None,
++    kv_bits=None,
++    ring_k=None,
++    ring_v=None,
++    ring_ks=None,
++    ring_vs=None,
++    owner=None,
++    ring_mask=None,
+ ):
+     """Gather the selected K/V rows into ``out_k``/``out_v``.
+ 
+@@ -489,6 +1460,125 @@ def qwen_sparse_kv_extraction_compact_triton(
+     block_topk = 16
+     zero_fill = zero_fill_cols > 0
+     num_cols = zero_fill_cols if zero_fill else topk
++    if k.dtype == torch.uint8 and kv_bits == 4 and owner is not None:   # tiered pool: int8 ring over int4 rows
++        dim = 2 * dim                                        # k is [rows, H, D // 2] packed; dim = logical D
++        assert out_k.dtype == torch.bfloat16 and out_v.dtype == torch.bfloat16, "tiered KV gather needs a bf16 scratch"
++        assert out_k.shape[1:] == (heads, dim) and out_v.shape[1:] == (heads, dim)
++        assert k_scale is not None and v_scale is not None and sm_k is not None and sm_v is not None
++        R = _check_tier_args(heads, dim, k_scale, v_scale, ring_k, ring_v, ring_ks, ring_vs, owner, ring_mask)
++        _compact_kv_tiered[(batch, heads, triton.cdiv(topk, block_topk))](
++            k,
++            v,
++            k_scale,
++            v_scale,
++            ring_k,
++            ring_v,
++            ring_ks,
++            ring_vs,
++            owner,
++            sm_k,
++            sm_v,
++            req_to_token,
++            req_indices,
++            indices,
++            seq_lens,
++            cu_k,
++            out_k,
++            out_v,
++            topk,
++            heads,
++            dim,
++            req_to_token.stride(0),
++            indices.stride(0),
++            GROUP4=KV_INT4_GROUP,
++            GROUP8=KV_INT8_GROUP,
++            RING_MASK=R - 1,
++            BLOCK_TOPK=block_topk,
++            num_warps=8,
++        )
++        return
++    if k.dtype == torch.uint8 and kv_bits == 4:              # int4_g32 pool (keyed on the pool: fp8 is uint8 too)
++        dim = 2 * dim                                        # k is [rows, H, D // 2] packed; dim = logical D
++        assert out_k.dtype == torch.bfloat16 and out_v.dtype == torch.bfloat16, "int4 KV gather needs a bf16 scratch"
++        assert out_k.shape[1:] == (heads, dim) and out_v.shape[1:] == (heads, dim)
++        assert k_scale is not None and v_scale is not None and sm_k is not None and sm_v is not None
++        assert dim % KV_INT4_GROUP == 0 and dim == triton.next_power_of_2(dim)
++        assert k_scale.is_contiguous() and v_scale.is_contiguous()
++        _compact_kv_int4[(batch, heads, triton.cdiv(topk, block_topk))](
++            k,
++            v,
++            k_scale,
++            v_scale,
++            sm_k,
++            sm_v,
++            req_to_token,
++            req_indices,
++            indices,
++            seq_lens,
++            cu_k,
++            out_k,
++            out_v,
++            topk,
++            heads,
++            dim,
++            req_to_token.stride(0),
++            indices.stride(0),
++            GROUP=KV_INT4_GROUP,
++            BLOCK_TOPK=block_topk,
++            num_warps=8,
++        )
++        return
++    if k.dtype == torch.int8:                                # int8_g64 pool: dequantize into the bf16 scratch
++        assert out_k.dtype == torch.bfloat16 and out_v.dtype == torch.bfloat16, "int8 KV gather needs a bf16 scratch"
++        assert k_scale is not None and v_scale is not None and sm_k is not None and sm_v is not None
++        assert dim % KV_INT8_GROUP == 0 and k_scale.is_contiguous() and v_scale.is_contiguous()
++        _compact_kv_int8[(batch, heads, triton.cdiv(topk, block_topk))](
++            k,
++            v,
++            k_scale,
++            v_scale,
++            sm_k,
++            sm_v,
++            req_to_token,
++            req_indices,
++            indices,
++            seq_lens,
++            cu_k,
++            out_k,
++            out_v,
++            topk,
++            heads,
++            dim,
++            req_to_token.stride(0),
++            indices.stride(0),
++            GROUP=KV_INT8_GROUP,
++            BLOCK_TOPK=block_topk,
++            BLOCK_D=triton.next_power_of_2(dim),
++            num_warps=8,
++        )
++        return
++    if k.dtype == torch.float8_e4m3fn:                       # fp8 pool: dequantize into the bf16 scratch
++        assert out_k.dtype == torch.bfloat16, "fp8 KV gather needs a bf16 scratch"
++        _compact_kv_fp8[(batch, heads, triton.cdiv(topk, block_topk))](
++            k.view(torch.uint8),
++            v.view(torch.uint8),
++            req_to_token,
++            req_indices,
++            indices,
++            seq_lens,
++            cu_k,
++            out_k,
++            out_v,
++            topk,
++            heads,
++            dim,
++            req_to_token.stride(0),
++            indices.stride(0),
++            BLOCK_TOPK=block_topk,
++            BLOCK_D=triton.next_power_of_2(dim),
++            num_warps=8,
++        )
++        return
+     _compact_kv[(batch, heads, triton.cdiv(num_cols, block_topk))](
+         k,
+         v,
+diff --git a/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py b/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py
+index 9cd60707f9..486a697340 100644
+--- a/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py
++++ b/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py
+@@ -32,6 +32,9 @@ from sglang.srt.layers.attention.qsa.metadata import (
+ from sglang.srt.layers.attention.qsa.sparse_attn import (
+     qwen_sparse_fa2_cu_seqlens_triton,
+     qwen_sparse_kv_extraction_compact_triton,
++    qwen_sparse_prefix_gather_dequant_int4,
++    qwen_sparse_prefix_gather_dequant_int8,
++    qwen_sparse_prefix_gather_dequant_tiered,
+     qwen_sparse_valid_counts_triton,
+     sparse_gqa_fwd_interface_triton,
+     sparse_gqa_fwd_interface_triton_ck,
+@@ -700,6 +703,7 @@ class QwenSparseAttnBackend(AttentionBackend):
+             token_to_kv_pool=self.token_to_kv_pool,
+             compress_ratio=self.token_to_kv_pool.qsa_compress_ratio,
+             block_topk=self.token_to_kv_pool.qsa_block_topk,
++            seq_lens_host=forward_batch.seq_lens_cpu,
+             req_pool_indices=row_req_pool_indices,
+             write_locs=write_locs,
+             compress_group_positions=group_positions,
+@@ -1295,6 +1299,8 @@ class QwenSparseAttnBackend(AttentionBackend):
+             metadata = self._resolve_metadata(forward_batch)
+             slots = self._logical_to_physical(topk_indices, metadata)
+             pool = self.token_to_kv_pool
++            if pool.get_key_buffer(layer.layer_id).dtype == torch.int8 or self._kv_bits() == 4:
++                raise NotImplementedError("int8_g64 / int4_g32 KV cache has no CPU attention fallback")
+             output = qsa_sparse_attention(
+                 q,
+                 pool.get_key_buffer(layer.layer_id),
+@@ -1332,27 +1338,71 @@ class QwenSparseAttnBackend(AttentionBackend):
+         k_buffer = pool.get_key_buffer(layer.layer_id)
+         v_buffer = pool.get_value_buffer(layer.layer_id)
+         req_to_token = self.req_to_token_pool.req_to_token
+-        req_indices = forward_batch.req_pool_indices.tolist()
+-        k_parts = [
+-            k_buffer.index_select(
+-                0, req_to_token[req_indices[i], : sequence_lens[i]].long()
+-            )
+-            for i in range(len(sequence_lens))
+-        ]
+-        v_parts = [
+-            v_buffer.index_select(
+-                0, req_to_token[req_indices[i], : sequence_lens[i]].long()
+-            )
+-            for i in range(len(sequence_lens))
+-        ]
+         sequence_lens_tensor = torch.tensor(
+             sequence_lens, dtype=torch.int32, device=q.device
+         )
+         cu_seqlens_k = F.pad(sequence_lens_tensor.cumsum(0), (1, 0)).contiguous()
++        kv_bits = self._kv_bits()
++        if k_buffer.dtype == torch.int8 or kv_bits == 4:      # int8_g64 / int4_g32 pool: row gather + dequant kernel
++            assert q.dtype == torch.bfloat16, "quantized KV prefix gather needs bf16 queries"
++            k_sf, v_sf = pool.get_kv_scale_buffer(layer.layer_id)
++            sm_k, sm_v = pool.get_kv_smooth_buffer(layer.layer_id)
++            # Per-call temporaries (this path is never graph-captured): freed after the layer like the
++            # cat temporaries below, so no prefill-sized buffer outlives the request (2 KB/token bf16).
++            packed_shape = (sum(sequence_lens), k_buffer.shape[1], self._kv_head_dim(k_buffer))
++            packed_k = torch.empty(packed_shape, dtype=torch.bfloat16, device=k_buffer.device)
++            packed_v = torch.empty(packed_shape, dtype=torch.bfloat16, device=k_buffer.device)
++            tier_kwargs = self._kv_tier_kwargs(layer)
++            gather_dequant = (
++                qwen_sparse_prefix_gather_dequant_tiered
++                if tier_kwargs
++                else qwen_sparse_prefix_gather_dequant_int4
++                if kv_bits == 4
++                else qwen_sparse_prefix_gather_dequant_int8
++            )
++            gather_dequant(
++                k_buffer,
++                v_buffer,
++                k_sf,
++                v_sf,
++                sm_k,
++                sm_v,
++                req_to_token,
++                forward_batch.req_pool_indices,
++                sequence_lens_tensor,
++                cu_seqlens_k,
++                packed_k,
++                packed_v,
++                len(sequence_lens),
++                max(sequence_lens),
++                **tier_kwargs,
++            )
++        else:
++            req_indices = forward_batch.req_pool_indices.tolist()
++            _fp8 = k_buffer.dtype == torch.float8_e4m3fn
++            k_src = k_buffer.view(torch.uint8) if _fp8 else k_buffer
++            v_src = v_buffer.view(torch.uint8) if _fp8 else v_buffer
++            k_parts = [
++                k_src.index_select(
++                    0, req_to_token[req_indices[i], : sequence_lens[i]].long()
++                )
++                for i in range(len(sequence_lens))
++            ]
++            v_parts = [
++                v_src.index_select(
++                    0, req_to_token[req_indices[i], : sequence_lens[i]].long()
++                )
++                for i in range(len(sequence_lens))
++            ]
++            if _fp8:                                          # fp8 pool: dequantize the gathered prefix
++                k_parts = [p.view(torch.float8_e4m3fn).to(q.dtype) for p in k_parts]
++                v_parts = [p.view(torch.float8_e4m3fn).to(q.dtype) for p in v_parts]
++            packed_k = torch.cat(k_parts)
++            packed_v = torch.cat(v_parts)
+         output = sparse_gqa_fwd_interface_triton_ck(
+             q.contiguous(),
+-            torch.cat(k_parts),
+-            torch.cat(v_parts),
++            packed_k,
++            packed_v,
+             topk_indices,
+             cu_seqlens_q,
+             cu_seqlens_k,
+@@ -1394,6 +1444,47 @@ class QwenSparseAttnBackend(AttentionBackend):
+             self._fa2_scratch[key] = buffers
+         return buffers[0][:capacity], buffers[1][:capacity]
+ 
++
++    def _kv_bits(self):
++        """Quantized-pool bit width from the pool (8 = int8_g64, 4 = int4_g32, None otherwise).  The
++        fp8 pool stores uint8 too (viewed as float8), so dispatch is keyed on the pool, not the dtype."""
++        pool = self.token_to_kv_pool
++        return getattr(getattr(pool, "full_kv_pool", pool), "kv_bits", None)
++
++    def _kv_head_dim(self, k_buffer: torch.Tensor) -> int:
++        """Logical head_dim of the KV rows (the int4 pool packs two channels per byte)."""
++        return k_buffer.shape[2] * 2 if self._kv_bits() == 4 else k_buffer.shape[2]
++
++    def _kv_scratch_dtype(self, k_buffer: torch.Tensor) -> torch.dtype:
++        """FA2 / trtllm scratch dtype: bf16 for every quantized pool (fp8, int8_g64, int4_g32)."""
++        if k_buffer.dtype in (torch.float8_e4m3fn, torch.int8) or self._kv_bits() == 4:
++            return torch.bfloat16
++        return k_buffer.dtype
++
++    def _int8_gather_kwargs(self, k_buffer: torch.Tensor, layer) -> dict:
++        """Scale + smoothing tensors (+ kv_bits) for the int8_g64 / int4_g32 gather-dequant kernels
++        ({} for other dtypes)."""
++        kv_bits = self._kv_bits()
++        if k_buffer.dtype != torch.int8 and kv_bits != 4:
++            return {}
++        pool = self.token_to_kv_pool
++        k_sf, v_sf = pool.get_kv_scale_buffer(layer.layer_id)
++        sm_k, sm_v = pool.get_kv_smooth_buffer(layer.layer_id)
++        return dict(k_scale=k_sf, v_scale=v_sf, sm_k=sm_k, sm_v=sm_v, kv_bits=kv_bits, **self._kv_tier_kwargs(layer))
++
++    def _kv_tier_kwargs(self, layer) -> dict:
++        """Ring buffers + owner table + mask of the tiered pool (int8 ring over int4 rows; {} otherwise).
++        The tensors are fixed for the pool's lifetime (allocated before capture): capture-safe."""
++        pool = self.token_to_kv_pool
++        full_pool = getattr(pool, "full_kv_pool", pool)
++        if not getattr(full_pool, "kv_tiered", False):
++            return {}
++        ring_k, ring_v, ring_ks, ring_vs = pool.get_kv_ring_buffer(layer.layer_id)
++        return dict(
++            ring_k=ring_k, ring_v=ring_v, ring_ks=ring_ks, ring_vs=ring_vs,
++            owner=pool.get_kv_ring_owner(), ring_mask=full_pool.ring_mask,
++        )
++
+     def _get_trtllm_sparse_tables(self, batch, pages_per_row, page, device):
+         key = (batch, pages_per_row, device)
+         cached = self._trtllm_sparse_tables.get(key)
+@@ -1446,8 +1537,8 @@ class QwenSparseAttnBackend(AttentionBackend):
+         packed_k, packed_v = self._get_fa2_scratch(
+             max(capacity_rows, batch) * stride,
+             k_buffer.shape[1],
+-            k_buffer.shape[2],
+-            q.dtype,
++            self._kv_head_dim(k_buffer),
++            self._kv_scratch_dtype(k_buffer),
+             k_buffer.device,
+         )
+         qwen_sparse_kv_extraction_compact_triton(
+@@ -1467,9 +1558,10 @@ class QwenSparseAttnBackend(AttentionBackend):
+             batch,
+             topk,
+             zero_fill_cols=stride,
++            **self._int8_gather_kwargs(k_buffer, layer),
+         )
+         num_kv_heads = k_buffer.shape[1]
+-        head_dim = k_buffer.shape[2]
++        head_dim = self._kv_head_dim(k_buffer)
+         kc = (
+             packed_k[: batch * stride]
+             .view(-1, page, num_kv_heads, head_dim)
+@@ -1529,6 +1621,8 @@ class QwenSparseAttnBackend(AttentionBackend):
+         if not q.is_cuda:
+             metadata = self._resolve_metadata(forward_batch)
+             slots = self._logical_to_physical(topk_indices, metadata)
++            if k_buffer.dtype == torch.int8 or self._kv_bits() == 4:
++                raise NotImplementedError("int8_g64 / int4_g32 KV cache has no CPU attention fallback")
+             output = qsa_sparse_attention(q, k_buffer, v_buffer, slots, layer.scaling)
+             return output.reshape(q.shape[0], -1)
+ 
+@@ -1576,8 +1670,8 @@ class QwenSparseAttnBackend(AttentionBackend):
+         packed_k, packed_v = self._get_fa2_scratch(
+             scratch_capacity,
+             k_buffer.shape[1],
+-            k_buffer.shape[2],
+-            q.dtype,
++            self._kv_head_dim(k_buffer),
++            self._kv_scratch_dtype(k_buffer),
+             k_buffer.device,
+         )
+         qwen_sparse_kv_extraction_compact_triton(
+@@ -1596,6 +1690,7 @@ class QwenSparseAttnBackend(AttentionBackend):
+             packed_v,
+             batch,
+             topk,
++            **self._int8_gather_kwargs(k_buffer, layer),
+         )
+         output = flash_attn_varlen_func(
+             q=q,
+diff --git a/python/sglang/srt/layers/moe/expert_elastic.py b/python/sglang/srt/layers/moe/expert_elastic.py
+new file mode 100644
+index 0000000000..5edbfe40ef
+--- /dev/null
++++ b/python/sglang/srt/layers/moe/expert_elastic.py
+@@ -0,0 +1,378 @@
++"""Elastic expert residency: a resizable, rank-ordered GPU cache of MoE expert rows.
++
++Every (layer, tensor kind) keeps its expert rows in a RowArena on the GPU, in routing-mass
++order (rank 0 = hottest). The int64 address table addr[e] points either into the arena
++(rank(e) < S) or at the row's home slot in pinned host memory. Growing S gathers the next
++ranks from their host slots straight into the arena (table-driven gather kernel, no staging),
++rewrites their table entries and returns the host slots to a pool. Shrinking S copies the
++tail ranks back into pool slots, rewrites the table, then unmaps the arena tail so the VRAM
++really returns to the driver. Values never change, only where they live; the decode GEMV and
++the prefill gather read through the tables and never notice. CUDA graphs captured against
++the tables stay valid because arena addresses are fixed for the process lifetime.
++
++Host memory is conserved: rows off the GPU always own a host slot. Slots come from the
++offloaded layers' pinned tensors (a host layer's hot rows vacate their slots). With 31 host
++layers of 512 rows and 48 layers, the pool is empty at S = 181, so S_floor is 184 unless a
++pinned fallback budget is granted (SGLANG_MOE_ELASTIC_PIN_MB).
++
++Control (poll() is called from the MoE apply path, prefill/eager only):
++    SGLANG_MOE_ELASTIC_CTL=/path/ctl      one command per write:
++        S <n>            set every layer to S = n (clamped to [S_floor, 512])
++        fill <MB>        grow all layers, keeping <MB> of VRAM free
++        free <MB>        shrink all layers until at least <MB> of VRAM is free
++        status           write the status file only
++    <ctl>.status is rewritten after every command (per-layer S, arena bytes, free VRAM).
++"""
++import logging
++import os
++import time
++
++import torch
++
++from sglang.srt.layers.moe.row_arena import ArenaOOM, RowArena
++
++logger = logging.getLogger(__name__)
++NAMES = ("w13_qweight", "w2_qweight", "w13_scales", "w2_scales")
++
++
++def _gather(tab, ids, out_rows_u8, row_bytes):
++    """out_rows_u8[i] <- row at tab[ids[i]] (GPU or pinned host address)."""
++    from sglang.srt.layers.moe.expert_stream import _gather_rows_tab_kernel
++    import triton
++    BLOCK = 1024
++    _gather_rows_tab_kernel[(int(ids.numel()), triton.cdiv(row_bytes, BLOCK))](
++        tab, ids, out_rows_u8, row_bytes, BLOCK=BLOCK)
++
++
++class _Kind:
++    __slots__ = ("name", "arena", "tab", "home", "tail", "dtype", "rb", "keep")
++
++    def __init__(self, name, arena, tab, home, tail, dtype, rb, keep):
++        self.name, self.arena, self.tab, self.home = name, arena, tab, home
++        self.tail, self.dtype, self.rb, self.keep = tail, dtype, rb, keep
++
++
++class _Layer:
++    __slots__ = ("layer", "lid", "E", "S", "kinds")
++
++    def __init__(self, layer, lid, E, S):
++        self.layer, self.lid, self.E, self.S, self.kinds = layer, lid, E, S, {}
++
++
++class ExpertElastic:
++    inst = None
++
++    def __init__(self, mass: torch.Tensor, S0: int, device="cuda"):
++        self.mass = mass.float()                                   # [L, E] routing mass
++        self.L, self.E = mass.shape
++        self.order = torch.argsort(self.mass, dim=1, descending=True)   # [L, E] rank -> expert
++        self.rank = torch.empty_like(self.order)
++        self.rank.scatter_(1, self.order, torch.arange(self.E).expand(self.L, -1))
++        self.S0 = int(S0)
++        self.device = device
++        self.layers = {}                                           # lid -> _Layer
++        self.pool = {n: [] for n in NAMES}                         # free host slots (tensor, row)
++        self.pin_budget = int(os.environ.get("SGLANG_MOE_ELASTIC_PIN_MB", "0")) << 20
++        self.pin_used = 0
++        self._pinned_keep = []
++        self._serving = False                                             # flips after placement
++        self.reserve_rows = int(os.environ.get("SGLANG_MOE_ELASTIC_RESERVE_ROWS", "0"))
++        self.ctl = os.environ.get("SGLANG_MOE_ELASTIC_CTL")
++        self._ctl_mtime = os.stat(self.ctl).st_mtime if self.ctl and os.path.exists(self.ctl) else 0.0   # ignore stale commands
++        _af = os.environ.get("SGLANG_MOE_ELASTIC_FILL_MB")               # reserve to keep free; unset = no autofill
++        self._autofill = int(_af) if _af else None
++        self.regrow_reserve = int(_af) if _af else 768                    # after a forced shrink, grow back to this
++        self.pending_regrow = False
++        self._calls = 0
++        ExpertElastic.inst = self
++
++    # ------------------------------------------------------------------ slots
++    def _pin_rows(self, name, need, tail, dtype, why):
++        """Allocate pinned host slots. STARTUP ONLY: on a box with ~26 GB pinned and ~2 GB free a
++        runtime cudaHostAlloc stalls the kernel for tens of seconds (reclaim + compaction)."""
++        nbytes = need * int(torch.empty(0, dtype=dtype).element_size()) * int(torch.Size(tail).numel())
++        if self.pin_used + nbytes > self.pin_budget:
++            raise RuntimeError(f"elastic: pinned budget exhausted for {name} ({why}); "
++                               f"SGLANG_MOE_ELASTIC_PIN_MB={self.pin_budget >> 20}, used {self.pin_used >> 20} MB")
++        extra = torch.empty((need,) + tuple(tail), dtype=dtype, pin_memory=True)
++        self.pin_used += nbytes
++        self.pool[name].extend((extra, i) for i in range(need))
++        self._pinned_keep.append(extra)
++        logger.info("elastic: pinned %d rows of %s (%.0f MB) [%s]", need, name, nbytes / 1e6, why)
++
++    def _take_slots(self, name, n, tail, dtype):
++        pool = self.pool[name]
++        if len(pool) < n:
++            if self._serving:
++                raise RuntimeError(f"elastic: host slot pool for {name} exhausted ({len(pool)} < {n}) "
++                                   f"and runtime pinning is disabled (raise SGLANG_MOE_ELASTIC_RESERVE_ROWS)")
++            self._pin_rows(name, n - len(pool), tail, dtype, "startup shortfall")
++        return [pool.pop() for _ in range(n)]
++
++    @staticmethod
++    def _slot_addr(slot, rb):
++        t, r = slot
++        return t.data_ptr() + r * rb
++
++    # ------------------------------------------------------------------ init
++    def add_layer(self, layer):
++        """Move one FusedMoE layer into arenas + tables. Host layers donate slots, GPU layers
++        consume them: call in an interleaved order (see place_all)."""
++        lid = int(layer.layer_id)
++        E = int(layer.w13_qweight.data.shape[0])
++        S = min(self.S0, E)
++        st = _Layer(layer, lid, E, S)
++        order = self.order[lid]
++        hot = order[:S]; cold = order[S:]
++        addr, proto = {}, {}
++        for name in NAMES:
++            p = getattr(layer, name, None)
++            if p is None:
++                continue
++            t = p.data
++            tail, dtype = tuple(t.shape[1:]), t.dtype
++            rb = t[0].numel() * t.element_size()
++            arena = RowArena(rb, E, torch.device(self.device).index or 0, name=f"L{lid}.{name}")
++            arena.ensure_rows(S)
++            view = arena.view(S, tail, dtype)
++            tab = torch.empty(E, dtype=torch.int64)
++            home = [None] * E
++            keep = []
++            if t.is_cuda:
++                view.copy_(t.index_select(0, hot.to(t.device)))
++                slots = self._take_slots(name, int(cold.numel()), tail, dtype)
++                cold_cpu = t.index_select(0, cold.to(t.device)).cpu()
++                for i, e in enumerate(cold.tolist()):
++                    dst, r = slots[i]
++                    dst[r].copy_(cold_cpu[i]); home[e] = slots[i]
++                    tab[e] = self._slot_addr(slots[i], rb); keep.append(dst)
++                del cold_cpu
++            else:
++                src_tab = (t.data_ptr() + torch.arange(E, dtype=torch.int64) * rb).to(self.device)
++                _gather(src_tab, hot.to(self.device), view.view(torch.uint8).view(S, -1), rb)
++                for e in cold.tolist():
++                    home[e] = (t, e); tab[e] = t.data_ptr() + e * rb
++                self.pool[name].extend((t, e) for e in hot.tolist())
++                keep.append(t)
++            tab[hot] = arena.base + self.rank[lid][hot] * rb
++            tab = tab.to(self.device)
++            st.kinds[name] = _Kind(name, arena, tab, home, tail, dtype, rb, keep)
++            p.data = view
++            addr[name] = tab; proto[name] = view
++            del t
++        torch.cuda.synchronize(); torch.cuda.empty_cache()
++        layer._placed = {"addr": addr, "proto": proto, "E": E, "S": S, "keep": [],
++                         "home": {n: k.home for n, k in st.kinds.items()}}
++        layer._gemv_tabs = None
++        self.layers[lid] = st
++
++    def place_all(self, layers):
++        """Deferred pass over all layers. Host kinds donate slots, GPU kinds consume 512-S each;
++        a layer is placed once every pool it will draw from can serve it (the offloader may
++        split a layer: some kinds on the host, some on the GPU)."""
++        def need(l):
++            return {n: (self.E - self.S0 if getattr(l, n).data.is_cuda else 0) for n in NAMES if getattr(l, n, None) is not None}
++        donors = [l for l in layers if not any(need(l).values())]
++        takers = [l for l in layers if any(need(l).values())]
++        placed = 0
++        while donors or takers:
++            ready = next((l for l in takers if all(len(self.pool[n]) >= k for n, k in need(l).items())), None)
++            if ready is not None:
++                takers.remove(ready); self.add_layer(ready)
++            elif donors:
++                self.add_layer(donors.pop(0))
++            else:                                        # pool short: pinned fallback (or a clear error)
++                self.add_layer(takers.pop(0))
++            placed += 1
++        if self.reserve_rows:                        # one-time reserve so shrinking below S0 never pins at runtime
++            for name in NAMES:
++                k = next((k for st in self.layers.values() for k in st.kinds.values() if k.name == name), None)
++                if k is not None:
++                    self._pin_rows(name, self.reserve_rows, k.tail, k.dtype, "startup reserve")
++        self._serving = True
++        logger.info("elastic placement: %d layers at S=%d, free slots %s, VRAM free %.2f GB",
++                    placed, self.S0, {n: len(v) for n, v in self.pool.items()},
++                    torch.cuda.mem_get_info()[0] / 2**30)
++        self.write_status()
++
++    # ------------------------------------------------------------------ resize
++    def resize_layer(self, lid, S_new):
++        st = self.layers[lid]; S = st.S
++        S_new = max(0, min(int(S_new), st.E))
++        if S_new == S:
++            return
++        order = self.order[lid]
++        torch.cuda.synchronize()
++        if S_new > S:
++            ids = order[S:S_new]
++            for k in st.kinds.values():
++                try:
++                    k.arena.ensure_rows(S_new)
++                except ArenaOOM:
++                    for k2 in st.kinds.values():
++                        k2.arena.shrink_rows(S)
++                    raise
++            for k in st.kinds.values():
++                view = k.arena.view(S_new, k.tail, k.dtype)
++                dst = view.view(torch.uint8).view(S_new, -1)[S:S_new]
++                _gather(k.tab, ids.to(self.device), dst, k.rb)
++            torch.cuda.synchronize()
++            for k in st.kinds.values():
++                k.tab[ids.to(self.device)] = (k.arena.base + torch.arange(S, S_new, dtype=torch.int64) * k.rb).to(self.device)
++                for e in ids.tolist():
++                    self.pool[k.name].append(k.home[e]); k.home[e] = None
++        else:
++            ids = order[S_new:S]
++            n = int(ids.numel()); taken = {}
++            try:                                        # acquire-then-commit: nothing is touched until every kind has its slots
++                for k in st.kinds.values():
++                    taken[k.name] = self._take_slots(k.name, n, k.tail, k.dtype)
++            except Exception:
++                for name, slots in taken.items():
++                    self.pool[name].extend(slots)
++                raise
++            for k in st.kinds.values():
++                view = k.arena.view(S, k.tail, k.dtype)
++                slots = taken[k.name]
++                addrs = torch.empty(n, dtype=torch.int64)
++                for i, e in enumerate(ids.tolist()):
++                    dst, r = slots[i]
++                    dst[r].copy_(view[S_new + i], non_blocking=True)
++                    k.home[e] = slots[i]; addrs[i] = self._slot_addr(slots[i], k.rb)
++                torch.cuda.synchronize()
++                k.tab[ids.to(self.device)] = addrs.to(self.device)
++            torch.cuda.synchronize()
++            for k in st.kinds.values():
++                k.arena.shrink_rows(S_new)
++        for k in st.kinds.values():
++            view = k.arena.view(S_new, k.tail, k.dtype)
++            getattr(st.layer, k.name).data = view
++            st.layer._placed["proto"][k.name] = view
++        st.layer._placed["S"] = S_new
++        st.layer._placed.pop("_dma_src_addr", None)
++        st.S = S_new
++        torch.cuda.synchronize()
++
++    def s_floor(self):
++        """Smallest uniform S the host side can absorb: pool slots first, then the pinned
++        fallback budget (shared across kinds)."""
++        if not self.layers:
++            return 0
++        L = len(self.layers); cur = sum(st.S for st in self.layers.values())
++        avail = 0 if self._serving else self.pin_budget - self.pin_used
++        rb = {n: next(k.rb for st in self.layers.values() for k in st.kinds.values() if k.name == n)
++              for n in NAMES if any(n in st.kinds for st in self.layers.values())}
++        best = -(-cur // L)                                    # ceil(mean S): always feasible
++        for S_ in range(best, -1, -1):
++            D = cur - L * S_                                   # rows per kind that must move to the host
++            cost = sum(max(0, D - len(self.pool[n])) * rb[n] for n in rb)
++            if cost > avail:
++                break
++            best = S_
++        return best
++
++    def set_S(self, S):
++        S = max(self.s_floor(), min(int(S), self.E))
++        t0 = time.time()
++        torch.cuda.empty_cache()                    # cuMemCreate needs driver-free memory, not torch-cached
++        for lid in sorted(self.layers):
++            self.resize_layer(lid, S)
++        logger.info("elastic: S=%d for all layers in %.2fs, VRAM free %.2f GB", S, time.time() - t0,
++                    torch.cuda.mem_get_info()[0] / 2**30)
++
++    def fill(self, reserve_mb, step=8):
++        """Grow all layers uniformly while more than reserve_mb stays free."""
++        reserve = int(reserve_mb) << 20
++        torch.cuda.empty_cache()
++        while True:
++            cur = min(st.S for st in self.layers.values())
++            if cur >= self.E:
++                break
++            need = sum(k.arena.bytes_to_reach(min(self.E, st.S + step))
++                       for st in self.layers.values() for k in st.kinds.values())
++            if torch.cuda.mem_get_info()[0] - need < reserve:
++                break
++            try:
++                for lid in sorted(self.layers):
++                    self.resize_layer(lid, min(self.E, self.layers[lid].S + step))
++            except ArenaOOM:
++                break
++        logger.info("elastic fill: S=%s, VRAM free %.2f GB", sorted({st.S for st in self.layers.values()}),
++                    torch.cuda.mem_get_info()[0] / 2**30)
++
++    def free(self, want_mb, step=8):
++        """Shrink all layers uniformly until at least want_mb of VRAM is free."""
++        want = int(want_mb) << 20
++        while torch.cuda.mem_get_info()[0] < want:
++            cur = max(st.S for st in self.layers.values())
++            target = max(self.s_floor(), cur - step)
++            if target >= cur:
++                break
++            try:
++                for lid in sorted(self.layers):
++                    if self.layers[lid].S > target:
++                        self.resize_layer(lid, target)
++            except (ArenaOOM, RuntimeError) as ex:      # partial shrink is still a shrink; report and stop
++                logger.warning("elastic free stopped: %s", ex)
++                break
++        self.pending_regrow = True
++        logger.info("elastic free: S=%s, VRAM free %.2f GB", sorted({st.S for st in self.layers.values()}),
++                    torch.cuda.mem_get_info()[0] / 2**30)
++
++    def regrow(self):
++        """Grow back into free VRAM after a forced shrink (called at a safe point: KV pool idle)."""
++        self.pending_regrow = False
++        self.fill(self.regrow_reserve)
++        self.write_status()
++
++    # ------------------------------------------------------------------ control
++    def write_status(self):
++        if not self.ctl:
++            return
++        free, total = torch.cuda.mem_get_info()
++        arena = sum(k.arena.backed_bytes for st in self.layers.values() for k in st.kinds.values())
++        S = [self.layers[l].S for l in sorted(self.layers)]
++        covered = sum(float(self.mass[l][self.order[l][:self.layers[l].S]].sum()) for l in self.layers) / float(self.mass.sum())
++        with open(self.ctl + ".status", "w") as f:
++            f.write(f"time {time.strftime('%H:%M:%S')}\nS_min {min(S)} S_max {max(S)} floor {self.s_floor()}\n"
++                    f"arena_GB {arena / 2**30:.3f}\nvram_free_GB {free / 2**30:.3f}\nmass_covered {covered:.4f}\n"
++                    f"pool {[len(self.pool[n]) for n in NAMES]} pin_used_MB {self.pin_used >> 20}\nS {S}\n")
++
++    def poll(self, m: int = 0, lid: int = 0):
++        """Called from the MoE apply path. Acts only at layer 0 of a small eager forward (m <= 16
++        rows, i.e. a 1-token prefill or eager decode): a resize inside a real prefill would strip
++        that forward's working memory."""
++        self._calls += 1
++        if torch.cuda.is_current_stream_capturing() or lid != 0 or m > 16:
++            return
++        if self._autofill is not None and self._calls > 48 * 4:          # after warmup: grow into free VRAM
++            reserve, self._autofill = self._autofill, None
++            try:
++                self.fill(reserve)
++            except Exception as ex:
++                logger.exception("elastic autofill failed: %s", ex)
++            self.write_status()
++        if not self.ctl:
++            return
++        try:
++            m = os.stat(self.ctl).st_mtime
++        except FileNotFoundError:
++            return
++        if m <= self._ctl_mtime:
++            return
++        self._ctl_mtime = m
++        try:
++            cmd = open(self.ctl).read().split()
++            if not cmd:
++                return
++            t0 = time.time()
++            if cmd[0] == "S":
++                self.set_S(int(cmd[1]))
++            elif cmd[0] == "fill":
++                self.fill(int(cmd[1]) if len(cmd) > 1 else 512)
++            elif cmd[0] == "free":
++                self.free(int(cmd[1]))
++            logger.info("elastic ctl '%s' done in %.2fs", " ".join(cmd), time.time() - t0)
++        except Exception as ex:                       # never take the server down over a control command
++            logger.exception("elastic ctl failed: %s", ex)
++        self.write_status()
+diff --git a/python/sglang/srt/layers/moe/row_arena.py b/python/sglang/srt/layers/moe/row_arena.py
+new file mode 100644
+index 0000000000..3d158a66f7
+--- /dev/null
++++ b/python/sglang/srt/layers/moe/row_arena.py
+@@ -0,0 +1,215 @@
++"""RowArena: a GPU cache of fixed-size rows whose physical memory can be handed back.
++
++The arena reserves virtual address space for ``max_rows`` rows once (cuMemAddressReserve) and
++backs a PREFIX of it with physical chunks on demand (cuMemCreate + cuMemMap). Rows are kept in
++rank order (hottest first), so shrinking the cache is a tail unmap: the memory really returns to
++the driver, in chunks, while every row address stays constant for the arena's lifetime. Kernels
++that read rows through an address table, and CUDA graphs that captured such kernels, never need
++to know.
++
++    a = RowArena(row_bytes, max_rows, device_id)
++    a.ensure_rows(n)      rows [0, n) are physically backed (may raise ArenaOOM)
++    a.shrink_rows(n)      release every chunk that lies entirely beyond row n
++    a.row_addr(i)         base + i * row_bytes (valid as an address even when unbacked)
++    a.view(n, tail, dtype) non-owning torch tensor [n, *tail] over the backed prefix
++    a.backed_rows         rows guaranteed backed right now
++
++Chunk size is a multiple of the device granularity (2 MiB on current GPUs); with 4 MiB chunks
++the cache is resizable in ~20-row steps for a 205 KB expert row.
++
++  python3 row_arena.py   self-test (needs a CUDA device with ~150 MB free)
++"""
++import torch
++
++from sglang.srt.utils.cuda_vmm_utils import (  # the driver plumbing SGLang already ships
++    _get_cuda_driver, align_up, check_drv, get_device_granularity,
++    make_device_allocation_prop, make_rw_access_desc, tensor_from_pointer,
++)
++
++
++class ArenaOOM(RuntimeError):
++    """cuMemCreate failed: the device has no free physical memory for another chunk."""
++
++
++class RowArena:
++    def __init__(self, row_bytes: int, max_rows: int, device_id: int = 0,
++                 chunk_bytes: int = 4 << 20, name: str = ""):
++        drv = _get_cuda_driver()
++        self.row_bytes, self.max_rows, self.device_id, self.name = int(row_bytes), int(max_rows), int(device_id), name
++        self.gran = get_device_granularity(self.device_id)
++        self.chunk = align_up(chunk_bytes, self.gran)
++        self.prop = make_device_allocation_prop(self.device_id, handle_types=None)
++        self.access = [make_rw_access_desc(self.device_id)]
++        self.va_bytes = align_up(self.row_bytes * self.max_rows, self.chunk)
++        self.base = int(check_drv(drv.cuMemAddressReserve(self.va_bytes, 0, 0, 0), "cuMemAddressReserve"))
++        self._handles = []            # chunk i backs [i*chunk, (i+1)*chunk)
++        self._closed = False
++
++    # ---------------------------------------------------------------- geometry
++    @property
++    def backed_bytes(self) -> int:
++        return len(self._handles) * self.chunk
++
++    @property
++    def backed_rows(self) -> int:
++        return min(self.max_rows, self.backed_bytes // self.row_bytes)
++
++    def row_addr(self, i: int) -> int:
++        return self.base + i * self.row_bytes
++
++    def chunks_for_rows(self, n: int) -> int:
++        return -(-(min(int(n), self.max_rows) * self.row_bytes) // self.chunk) if n > 0 else 0
++
++    def bytes_to_reach(self, n: int) -> int:
++        """Bytes cuMemCreate would need to make rows [0, n) backed (chunk-granular)."""
++        return max(0, self.chunks_for_rows(n) - len(self._handles)) * self.chunk
++
++    def rows_for_bytes(self, nbytes: int) -> int:
++        return min(self.max_rows, int(nbytes) // self.row_bytes)
++
++    # ---------------------------------------------------------------- resize
++    def ensure_rows(self, n: int) -> int:
++        """Back rows [0, n). Returns the number of bytes newly mapped."""
++        n = max(0, min(int(n), self.max_rows))
++        want_chunks = -(-(n * self.row_bytes) // self.chunk) if n else 0
++        drv = _get_cuda_driver(); added = 0
++        with torch.cuda.device(self.device_id):
++            while len(self._handles) < want_chunks:
++                off = len(self._handles) * self.chunk
++                err, handle = drv.cuMemCreate(self.chunk, self.prop, 0)
++                if err != drv.CUresult.CUDA_SUCCESS:
++                    raise ArenaOOM(f"{self.name}: cuMemCreate({self.chunk >> 20} MiB) -> {err}")
++                try:
++                    check_drv(drv.cuMemMap(self.base + off, self.chunk, 0, handle, 0), "cuMemMap")
++                    check_drv(drv.cuMemSetAccess(self.base + off, self.chunk, self.access, 1), "cuMemSetAccess")
++                except BaseException:
++                    drv.cuMemRelease(handle); raise
++                self._handles.append(handle); added += self.chunk
++        return added
++
++    def shrink_rows(self, n: int) -> int:
++        """Keep rows [0, n) backed, release every chunk entirely beyond. Returns bytes freed.
++        The caller must make sure no kernel still reads the released rows (sync first)."""
++        n = max(0, min(int(n), self.max_rows))
++        keep_chunks = -(-(n * self.row_bytes) // self.chunk) if n else 0
++        drv = _get_cuda_driver(); freed = 0
++        while len(self._handles) > keep_chunks:
++            off = (len(self._handles) - 1) * self.chunk
++            handle = self._handles.pop()
++            check_drv(drv.cuMemUnmap(self.base + off, self.chunk), "cuMemUnmap")
++            check_drv(drv.cuMemRelease(handle), "cuMemRelease")
++            freed += self.chunk
++        return freed
++
++    # ---------------------------------------------------------------- views
++    def view(self, n_rows: int, tail=(), dtype: torch.dtype = torch.uint8) -> torch.Tensor:
++        """Non-owning tensor [n_rows, *tail] over the backed prefix. Re-create after a shrink."""
++        assert n_rows <= self.backed_rows, f"{self.name}: view of {n_rows} rows, only {self.backed_rows} backed"
++        return tensor_from_pointer(self.base, n_rows * self.row_bytes, shape=(n_rows,) + tuple(tail),
++                                   dtype=dtype, device_id=self.device_id)
++
++    def close(self):
++        if self._closed:
++            return
++        self._closed = True
++        torch.cuda.synchronize()
++        self.shrink_rows(0)
++        check_drv(_get_cuda_driver().cuMemAddressFree(self.base, self.va_bytes), "cuMemAddressFree")
++
++    def __del__(self):
++        try:
++            self.close()
++        except Exception:
++            pass
++
++
++# ---------------------------------------------------------------------- self-test
++def _selftest():
++    import triton, triton.language as tl
++
++    @triton.jit
++    def _gather(tab_ptr, idx_ptr, out_ptr, row_bytes, BLOCK: tl.constexpr):
++        r = tl.program_id(0); e = tl.load(idx_ptr + r)
++        src = tl.load(tab_ptr + e).to(tl.pointer_type(tl.uint8))
++        for off in range(0, row_bytes, BLOCK):
++            o = off + tl.arange(0, BLOCK); m = o < row_bytes
++            tl.store(out_ptr + r * row_bytes + o, tl.load(src + o, mask=m, other=0), mask=m)
++
++    row_bytes, E, S = 204800, 512, 184                      # a w13 int2 expert row
++    free0 = torch.cuda.mem_get_info()[0]
++    a = RowArena(row_bytes, E, 0, name="w13")
++    added = a.ensure_rows(S)
++    free1 = torch.cuda.mem_get_info()[0]
++    print(f"  granularity {a.gran >> 20} MiB, chunk {a.chunk >> 20} MiB, VA {a.va_bytes >> 20} MiB")
++    print(f"  ensure_rows({S}): mapped {added >> 20} MiB, backed_rows {a.backed_rows}, free -{(free0 - free1) >> 20} MiB")
++    assert a.backed_rows >= S and abs((free0 - free1) - added) < (8 << 20)
++
++    v = a.view(S, (row_bytes,))
++    for i in range(S):
++        v[i].fill_(i % 251)
++    host = torch.full((E - S, row_bytes), 7, dtype=torch.uint8).pin_memory()   # "cold" rows on the host
++    tab = torch.empty(E, dtype=torch.int64)
++    for e in range(E):
++        tab[e] = a.row_addr(e) if e < S else host.data_ptr() + (e - S) * row_bytes
++    tab = tab.cuda()
++    idx = torch.tensor([0, 5, 183, 184, 511, 63, 64], dtype=torch.int64).cuda()
++    out = torch.empty(len(idx), row_bytes, dtype=torch.uint8, device="cuda")
++
++    def run():
++        _gather[(len(idx),)](tab, idx, out, row_bytes, BLOCK=4096)
++    run(); torch.cuda.synchronize()
++    exp = [i % 251 if i < S else 7 for i in idx.tolist()]
++    got = out[:, 0].tolist() + out[:, -1].tolist()
++    assert got == exp + exp, (got, exp)
++    print("  table gather through GPU + host addresses: ok")
++
++    # CUDA graph captured against the arena addresses
++    g = torch.cuda.CUDAGraph()
++    s = torch.cuda.Stream()
++    with torch.cuda.stream(s):
++        run()
++    torch.cuda.synchronize()
++    with torch.cuda.graph(g, stream=s):
++        run()
++    torch.cuda.synchronize()
++
++    # shrink to 64 rows: memory returns, addresses stay
++    torch.cuda.synchronize()
++    free_a = torch.cuda.mem_get_info()[0]
++    freed = a.shrink_rows(64)
++    free_b = torch.cuda.mem_get_info()[0]
++    print(f"  shrink_rows(64): freed {freed >> 20} MiB, backed_rows {a.backed_rows}, free +{(free_b - free_a) >> 20} MiB")
++    assert abs((free_b - free_a) - freed) < (8 << 20)
++    # repoint evicted rows to the host, replay the graph
++    tab_cpu = tab.cpu()
++    for e in range(64, S):
++        tab_cpu[e] = host.data_ptr() + 0 * row_bytes       # any valid host row
++    tab.copy_(tab_cpu); g.replay(); torch.cuda.synchronize()
++    exp2 = [i % 251 if i < 64 else 7 for i in idx.tolist()]
++    assert out[:, 0].tolist() == exp2, (out[:, 0].tolist(), exp2)
++    print("  graph replay after shrink (evicted rows repointed to host): ok")
++
++    # grow back, refill, replay
++    a.ensure_rows(S)
++    v = a.view(S, (row_bytes,))
++    for i in range(64, S):
++        v[i].fill_(i % 251)
++    for e in range(64, S):
++        tab_cpu[e] = a.row_addr(e)
++    tab.copy_(tab_cpu); g.replay(); torch.cuda.synchronize()
++    assert out[:, 0].tolist() == exp, out[:, 0].tolist()
++    assert v[:64, 0].tolist() == [i % 251 for i in range(64)]          # survivors intact
++    print("  grow back + graph replay: ok (survivor rows intact)")
++
++    # OOM path
++    big = RowArena(64 << 20, 4096, 0, name="oom-probe")               # 256 GiB of VA
++    try:
++        big.ensure_rows(4096); print("  (no OOM raised; device had 256 GiB?)")
++    except ArenaOOM as ex:
++        print(f"  OOM path: {type(ex).__name__} raised as expected")
++    big.close(); a.close()
++    print(f"  closed: free {(torch.cuda.mem_get_info()[0] - free0) >> 20:+} MiB vs start")
++
++
++if __name__ == "__main__":
++    _selftest()
+diff --git a/python/sglang/srt/mem_cache/allocator/paged.py b/python/sglang/srt/mem_cache/allocator/paged.py
+index ffc479e8ce..afa5ecf3cf 100755
+--- a/python/sglang/srt/mem_cache/allocator/paged.py
++++ b/python/sglang/srt/mem_cache/allocator/paged.py
+@@ -157,6 +157,31 @@ class PagedTokenToKVPoolAllocator(BaseTokenToKVPoolAllocator):
+         self.staged_pages = []
+         self.num_staged_pages = 0
+ 
++    def _lazy_hook(self, pages: torch.Tensor) -> bool:
++        """Back the KV rows of the pages about to be handed out. False = no physical memory."""
++        kv = getattr(self._kvcache, "full_kv_pool", self._kvcache)
++        ensure = getattr(kv, "lazy_ensure", None)
++        if ensure is None or pages.numel() == 0:
++            return True
++        try:
++            ensure((int(pages.max().item()) + 1) * self.page_size)
++            return True
++        except Exception as ex:
++            __import__("logging").getLogger(__name__).warning(
++                "KV lazy backing: commit failed, allocation refused (%s)", ex
++            )
++            return False
++
++    def _lazy_idle_check(self) -> None:
++        if (
++            len(self.free_pages) + len(self.release_pages) >= self.num_pages
++        ):  # pool idle: slot order + give memory back
++            kv = getattr(self._kvcache, "full_kv_pool", self._kvcache)
++            release = getattr(kv, "lazy_release", None)
++            if release is not None:
++                self.clear()
++                release()
++
+     def alloc(self, need_size: int):
+         # page-aligned allocation, returning contiguous indices of pages
+         if self.debug_mode:
+@@ -171,6 +196,8 @@ class PagedTokenToKVPoolAllocator(BaseTokenToKVPoolAllocator):
+             return None
+ 
+         out_pages = self.free_pages[:num_pages]
++        if not self._lazy_hook(out_pages):
++            return None
+         self.free_pages = self.free_pages[num_pages:]
+ 
+         out_indices = (
+@@ -224,6 +251,8 @@ class PagedTokenToKVPoolAllocator(BaseTokenToKVPoolAllocator):
+             )
+         if num_new_pages > len(self.free_pages):
+             return None
++        if not self._lazy_hook(self.free_pages[:num_new_pages]):
++            return None
+ 
+         self.free_pages = self.free_pages[num_new_pages:]
+         return out_indices
+@@ -263,6 +292,8 @@ class PagedTokenToKVPoolAllocator(BaseTokenToKVPoolAllocator):
+         )
+         if num_new_pages > len(self.free_pages):
+             return None
++        if not self._lazy_hook(self.free_pages[:num_new_pages]):
++            return None
+ 
+         self.free_pages = self.free_pages[num_new_pages:]
+         return out_indices
+@@ -320,6 +351,7 @@ class PagedTokenToKVPoolAllocator(BaseTokenToKVPoolAllocator):
+             self.num_staged_pages += sum(ids.numel() for ids in page_ids)
+         else:
+             self.free_pages = torch.cat((*page_ids, self.free_pages))
++        self._lazy_idle_check()
+ 
+     def free_group_begin(self):
+         super().free_group_begin()
+diff --git a/python/sglang/srt/mem_cache/allocator/token.py b/python/sglang/srt/mem_cache/allocator/token.py
+index 4782a1de28..ecb1d82a64 100644
+--- a/python/sglang/srt/mem_cache/allocator/token.py
++++ b/python/sglang/srt/mem_cache/allocator/token.py
+@@ -60,6 +60,15 @@ class TokenToKVPoolAllocator(BaseTokenToKVPoolAllocator):
+ 
+         select_index = self.free_pages[:need_size]
+         self.free_pages = self.free_pages[need_size:]
++        kv = getattr(self._kvcache, "full_kv_pool", self._kvcache)
++        ensure = getattr(kv, "lazy_ensure", None)
++        if ensure is not None:
++            try:
++                ensure(int(select_index.max().item()) + 1)
++            except Exception as ex:                    # no physical memory: hand the slots back, report "full"
++                self.free_pages = torch.cat((select_index, self.free_pages))
++                __import__("logging").getLogger(__name__).warning("KV lazy backing: commit failed, allocation refused (%s)", ex)
++                return None
+         return select_index
+ 
+     def free(self, free_index: torch.Tensor):
+@@ -71,6 +80,12 @@ class TokenToKVPoolAllocator(BaseTokenToKVPoolAllocator):
+                 self.release_pages = torch.cat((self.release_pages, free_index))
+             else:
+                 self.free_pages = torch.cat((self.free_pages, free_index))
++            if self.available_size() >= self.size:            # pool idle: slot order + give memory back
++                kv = getattr(self._kvcache, "full_kv_pool", self._kvcache)
++                release = getattr(kv, "lazy_release", None)
++                if release is not None:
++                    self.clear()
++                    release()
+         else:
+             self.free_group.append(self._copy_for_free_group(free_index))
+ 
+diff --git a/python/sglang/srt/mem_cache/int4_kv_pool.py b/python/sglang/srt/mem_cache/int4_kv_pool.py
+new file mode 100644
+index 0000000000..219b70e510
+--- /dev/null
++++ b/python/sglang/srt/mem_cache/int4_kv_pool.py
+@@ -0,0 +1,171 @@
++"""INT4-G32 KV pool for the Qwen sparse attention layers (installed by perf/patches/kv_int4.py).
++
++Layout per local layer l (rows = size + page_size, NHD):
++  k_buffer[l], v_buffer[l]             uint8 [rows, H, D // 2]     two 4-bit channels per byte
++                                       (low nibble = even channel, high = odd, stored q + 8, q in [-7, 7])
++  k_scale_buffer[l], v_scale_buffer[l] fp16 [rows, H, D // GROUP]  absmax/7 per (token, head, group)
++The scale buffers are extra KvBufferDescs (int8 [rows, H * D // GROUP * 2]) on the lazy VMM owner and
++viewed as fp16; on the eager path they are plain zero tensors.  `kv_bits = 4` is the QSA backend's
++dispatch key (the int8 pool carries 8; the fp8 pool also stores uint8, so dtype alone is ambiguous).
++Smoothing constants (sm_k / sm_v and their inverses, fp16 [L, H, D]) are identity, as in the int8 pool.
++"""
++import os
++from typing import Optional, Tuple
++
++import torch
++
++from sglang.srt.constants import GPU_MEMORY_TYPE_KV_CACHE
++from sglang.srt.layers.attention.qsa.sparse_attn import KV_INT4_GROUP, quant_store_kv_int4
++from sglang.srt.mem_cache.memory_pool import KvBufferDesc, MHATokenToKVPool, unwrap_write_loc
++from sglang.srt.utils.async_probe import maybe_detect_oob
++
++
++def _is_unit_scale(s) -> bool:
++    return s is None or (isinstance(s, (int, float)) and s == 1)
++
++
++class MHATokenToKVPoolInt4(MHATokenToKVPool):
++    """MHA KV pool storing nibble-packed int4 K/V with fp16 per-(token, head, GROUP-channel) scales."""
++
++    GROUP = KV_INT4_GROUP
++    kv_bits = 4                 # QSA backend dispatch key (the int8_g64 pool carries 8)
++
++    def __init__(self, *args, **kwargs):
++        self.k_scale_buffer = None
++        self.v_scale_buffer = None
++        super().__init__(*args, **kwargs)
++        if self.dtype != torch.uint8 or self.store_dtype != torch.uint8:
++            raise ValueError(f"MHATokenToKVPoolInt4 needs dtype uint8, got {self.dtype}/{self.store_dtype}")
++        if self.use_hnd or self.kv_cache_layout != "nhd":
++            raise ValueError("MHATokenToKVPoolInt4 supports the NHD layout only")
++        # Static per-channel smoothing constants; identity.
++        L, H = self.layer_num, self.head_num
++        self.sm_k = torch.ones((L, H, self.head_dim), dtype=torch.float16, device=self.device)
++        self.sm_v = torch.ones((L, H, self.v_head_dim), dtype=torch.float16, device=self.device)
++        self.sm_k_inv = torch.ones_like(self.sm_k)
++        self.sm_v_inv = torch.ones_like(self.sm_v)
++
++    # -- layout ---------------------------------------------------------------------------------
++
++    @property
++    def k_groups(self) -> int:
++        if self.head_dim % self.GROUP:
++            raise ValueError(f"head_dim {self.head_dim} not a multiple of GROUP {self.GROUP}")
++        return self.head_dim // self.GROUP
++
++    @property
++    def v_groups(self) -> int:
++        if self.v_head_dim % self.GROUP:
++            raise ValueError(f"v_head_dim {self.v_head_dim} not a multiple of GROUP {self.GROUP}")
++        return self.v_head_dim // self.GROUP
++
++    def _kv_buffer_shapes(self):
++        """Payload rows hold D // 2 bytes per head (two channels per byte)."""
++        if self.use_hnd:
++            raise ValueError("MHATokenToKVPoolInt4 supports the NHD layout only")
++        if self.head_dim % 2 or self.v_head_dim % 2:
++            raise ValueError("MHATokenToKVPoolInt4 needs even head dims")
++        rows = self.size + self.page_size
++        return (
++            (rows, self.head_num, self.head_dim // 2),
++            (rows, self.head_num, self.v_head_dim // 2),
++        )
++
++    def _scale_shapes(self):
++        rows = self.size + self.page_size
++        return (rows, self.head_num, self.k_groups), (rows, self.head_num, self.v_groups)
++
++    def _create_buffers_normal(self):
++        super()._create_buffers_normal()
++        ks_shape, vs_shape = self._scale_shapes()
++        with self.memory_saver_adapter.region(GPU_MEMORY_TYPE_KV_CACHE):
++            self.k_scale_buffer = [
++                torch.zeros(ks_shape, dtype=torch.float16, device=self.device)
++                for _ in range(self.layer_num)
++            ]
++            self.v_scale_buffer = [
++                torch.zeros(vs_shape, dtype=torch.float16, device=self.device)
++                for _ in range(self.layer_num)
++            ]
++
++    def _build_kv_buffer_descs(self):
++        descs = super()._build_kv_buffer_descs()
++        if any(d.tokens_per_row != 1 for d in descs):
++            raise ValueError("MHATokenToKVPoolInt4 scale descs assume one token per row (NHD)")
++        ks_shape, vs_shape = self._scale_shapes()
++        for prefix, shape in (("ks", ks_shape), ("vs", vs_shape)):
++            row_bytes = shape[1] * shape[2] * 2                       # fp16 scales as int8 bytes
++            for layer in range(self.layer_num):
++                descs.append(
++                    KvBufferDesc(f"{prefix}{layer}", (shape[0], row_bytes), row_bytes=row_bytes, tokens_per_row=1)
++                )
++        return descs
++
++    def _assign_post_capture_tensors(self, tensors):
++        L = self.layer_num
++        ks_shape, vs_shape = self._scale_shapes()
++        self.k_buffer = tensors[:L]
++        self.v_buffer = tensors[L : 2 * L]
++        self.k_scale_buffer = [t.view(torch.float16).view(ks_shape) for t in tensors[2 * L : 3 * L]]
++        self.v_scale_buffer = [t.view(torch.float16).view(vs_shape) for t in tensors[3 * L : 4 * L]]
++        # The owner backs exactly one page at construction; zero only those rows (never touch
++        # unbacked VA).  Every other slot is written before it is read.
++        for t in self.k_scale_buffer + self.v_scale_buffer:
++            t[: self.page_size].zero_()
++
++    def _pd_registerable_tensors(self):
++        return self.k_buffer + self.v_buffer + self.k_scale_buffer + self.v_scale_buffer
++
++    # -- accessors ------------------------------------------------------------------------------
++
++    def get_kv_scale_buffer(self, layer_id: int) -> Tuple[torch.Tensor, torch.Tensor]:
++        idx = layer_id - self.start_layer
++        return self.k_scale_buffer[idx], self.v_scale_buffer[idx]
++
++    def get_kv_smooth_buffer(self, layer_id: int) -> Tuple[torch.Tensor, torch.Tensor]:
++        idx = layer_id - self.start_layer
++        return self.sm_k[idx], self.sm_v[idx]
++
++    # -- write path -----------------------------------------------------------------------------
++
++    def set_kv_buffer(
++        self,
++        layer,
++        loc_info,
++        cache_k: torch.Tensor,
++        cache_v: torch.Tensor,
++        k_scale=None,
++        v_scale=None,
++        layer_id_override: Optional[int] = None,
++        dcp_kv_mask: Optional[torch.Tensor] = None,
++    ):
++        if dcp_kv_mask is not None:
++            raise NotImplementedError("int4_g32 KV cache does not support DCP KV masks")
++        if not (_is_unit_scale(k_scale) and _is_unit_scale(v_scale)):
++            raise ValueError("int4_g32 KV cache computes its own scales; got k_scale/v_scale")
++        loc, _, _ = unwrap_write_loc(loc_info)
++        maybe_detect_oob(loc, 0, self.size + self.page_size, "set_kv_buffer (MHA-INT4)")
++        layer_id = layer_id_override if layer_id_override is not None else layer.layer_id
++        idx = layer_id - self.start_layer
++        cache_k = cache_k.view(-1, self.head_num, self.head_dim)
++        cache_v = cache_v.view(-1, self.head_num, self.v_head_dim)
++        quant_store_kv_int4(
++            cache_k,
++            cache_v,
++            loc,
++            self.k_buffer[idx],
++            self.v_buffer[idx],
++            self.k_scale_buffer[idx],
++            self.v_scale_buffer[idx],
++            self.sm_k_inv[idx],
++            self.sm_v_inv[idx],
++        )
++
++    def set_kv_buffer_prefix_valid(self, *args, **kwargs):
++        raise NotImplementedError("int4_g32 KV cache: prefix-valid commit is not supported")
++
++    def get_cpu_copy(self, indices, mamba_indices=None):
++        raise NotImplementedError("int4_g32 KV cache: CPU offload is not supported")
++
++    def load_cpu_copy(self, kv_cache_cpu, indices, mamba_indices=None):
++        raise NotImplementedError("int4_g32 KV cache: CPU offload is not supported")
+diff --git a/python/sglang/srt/mem_cache/int8_kv_pool.py b/python/sglang/srt/mem_cache/int8_kv_pool.py
+new file mode 100644
+index 0000000000..51a1acc109
+--- /dev/null
++++ b/python/sglang/srt/mem_cache/int8_kv_pool.py
+@@ -0,0 +1,157 @@
++"""INT8-G64 KV pool for the Qwen sparse attention layers (installed by perf/patches/kv_int8.py).
++
++Layout per local layer l (rows = size + page_size, NHD):
++  k_buffer[l], v_buffer[l]             int8 [rows, H, D]
++  k_scale_buffer[l], v_scale_buffer[l] fp16 [rows, H, D // GROUP]   absmax/127 per (token, head, group)
++The scale buffers are extra KvBufferDescs (int8 [rows, H * D // GROUP * 2]) on the lazy VMM owner and
++viewed as fp16; on the eager path they are plain zero tensors.  Stage B smoothing constants
++(sm_k / sm_v and their inverses, fp16 [L, H, D]) are identity here.
++"""
++import os
++from typing import Optional, Tuple
++
++import torch
++
++from sglang.srt.constants import GPU_MEMORY_TYPE_KV_CACHE
++from sglang.srt.layers.attention.qsa.sparse_attn import KV_INT8_GROUP, quant_store_kv_int8
++from sglang.srt.mem_cache.memory_pool import KvBufferDesc, MHATokenToKVPool, unwrap_write_loc
++from sglang.srt.utils.async_probe import maybe_detect_oob
++
++
++def _is_unit_scale(s) -> bool:
++    return s is None or (isinstance(s, (int, float)) and s == 1)
++
++
++class MHATokenToKVPoolInt8(MHATokenToKVPool):
++    """MHA KV pool storing int8 K/V with fp16 per-(token, head, GROUP-channel) absmax scales."""
++
++    GROUP = KV_INT8_GROUP
++    kv_bits = 8                 # QSA backend dispatch key (the int4_g32 pool carries 4)
++
++    def __init__(self, *args, **kwargs):
++        self.k_scale_buffer = None
++        self.v_scale_buffer = None
++        super().__init__(*args, **kwargs)
++        if self.dtype != torch.int8 or self.store_dtype != torch.int8:
++            raise ValueError(f"MHATokenToKVPoolInt8 needs dtype int8, got {self.dtype}/{self.store_dtype}")
++        if self.use_hnd or self.kv_cache_layout != "nhd":
++            raise ValueError("MHATokenToKVPoolInt8 supports the NHD layout only")
++        # Stage-B static per-channel smoothing constants; identity in stage A.
++        L, H = self.layer_num, self.head_num
++        self.sm_k = torch.ones((L, H, self.head_dim), dtype=torch.float16, device=self.device)
++        self.sm_v = torch.ones((L, H, self.v_head_dim), dtype=torch.float16, device=self.device)
++        self.sm_k_inv = torch.ones_like(self.sm_k)
++        self.sm_v_inv = torch.ones_like(self.sm_v)
++
++    # -- layout ---------------------------------------------------------------------------------
++
++    @property
++    def k_groups(self) -> int:
++        if self.head_dim % self.GROUP:
++            raise ValueError(f"head_dim {self.head_dim} not a multiple of GROUP {self.GROUP}")
++        return self.head_dim // self.GROUP
++
++    @property
++    def v_groups(self) -> int:
++        if self.v_head_dim % self.GROUP:
++            raise ValueError(f"v_head_dim {self.v_head_dim} not a multiple of GROUP {self.GROUP}")
++        return self.v_head_dim // self.GROUP
++
++    def _scale_shapes(self):
++        rows = self.size + self.page_size
++        return (rows, self.head_num, self.k_groups), (rows, self.head_num, self.v_groups)
++
++    def _create_buffers_normal(self):
++        super()._create_buffers_normal()
++        ks_shape, vs_shape = self._scale_shapes()
++        with self.memory_saver_adapter.region(GPU_MEMORY_TYPE_KV_CACHE):
++            self.k_scale_buffer = [
++                torch.zeros(ks_shape, dtype=torch.float16, device=self.device)
++                for _ in range(self.layer_num)
++            ]
++            self.v_scale_buffer = [
++                torch.zeros(vs_shape, dtype=torch.float16, device=self.device)
++                for _ in range(self.layer_num)
++            ]
++
++    def _build_kv_buffer_descs(self):
++        descs = super()._build_kv_buffer_descs()
++        if any(d.tokens_per_row != 1 for d in descs):
++            raise ValueError("MHATokenToKVPoolInt8 scale descs assume one token per row (NHD)")
++        ks_shape, vs_shape = self._scale_shapes()
++        for prefix, shape in (("ks", ks_shape), ("vs", vs_shape)):
++            row_bytes = shape[1] * shape[2] * 2                       # fp16 scales as int8 bytes
++            for layer in range(self.layer_num):
++                descs.append(
++                    KvBufferDesc(f"{prefix}{layer}", (shape[0], row_bytes), row_bytes=row_bytes, tokens_per_row=1)
++                )
++        return descs
++
++    def _assign_post_capture_tensors(self, tensors):
++        L = self.layer_num
++        ks_shape, vs_shape = self._scale_shapes()
++        self.k_buffer = tensors[:L]
++        self.v_buffer = tensors[L : 2 * L]
++        self.k_scale_buffer = [t.view(torch.float16).view(ks_shape) for t in tensors[2 * L : 3 * L]]
++        self.v_scale_buffer = [t.view(torch.float16).view(vs_shape) for t in tensors[3 * L : 4 * L]]
++        # The owner backs exactly one page at construction; zero only those rows (never touch
++        # unbacked VA).  Every other slot is written before it is read.
++        for t in self.k_scale_buffer + self.v_scale_buffer:
++            t[: self.page_size].zero_()
++
++    def _pd_registerable_tensors(self):
++        return self.k_buffer + self.v_buffer + self.k_scale_buffer + self.v_scale_buffer
++
++    # -- accessors ------------------------------------------------------------------------------
++
++    def get_kv_scale_buffer(self, layer_id: int) -> Tuple[torch.Tensor, torch.Tensor]:
++        idx = layer_id - self.start_layer
++        return self.k_scale_buffer[idx], self.v_scale_buffer[idx]
++
++    def get_kv_smooth_buffer(self, layer_id: int) -> Tuple[torch.Tensor, torch.Tensor]:
++        idx = layer_id - self.start_layer
++        return self.sm_k[idx], self.sm_v[idx]
++
++    # -- write path -----------------------------------------------------------------------------
++
++    def set_kv_buffer(
++        self,
++        layer,
++        loc_info,
++        cache_k: torch.Tensor,
++        cache_v: torch.Tensor,
++        k_scale=None,
++        v_scale=None,
++        layer_id_override: Optional[int] = None,
++        dcp_kv_mask: Optional[torch.Tensor] = None,
++    ):
++        if dcp_kv_mask is not None:
++            raise NotImplementedError("int8_g64 KV cache does not support DCP KV masks")
++        if not (_is_unit_scale(k_scale) and _is_unit_scale(v_scale)):
++            raise ValueError("int8_g64 KV cache computes its own scales; got k_scale/v_scale")
++        loc, _, _ = unwrap_write_loc(loc_info)
++        maybe_detect_oob(loc, 0, self.size + self.page_size, "set_kv_buffer (MHA-INT8)")
++        layer_id = layer_id_override if layer_id_override is not None else layer.layer_id
++        idx = layer_id - self.start_layer
++        cache_k = cache_k.view(-1, self.head_num, self.head_dim)
++        cache_v = cache_v.view(-1, self.head_num, self.v_head_dim)
++        quant_store_kv_int8(
++            cache_k,
++            cache_v,
++            loc,
++            self.k_buffer[idx],
++            self.v_buffer[idx],
++            self.k_scale_buffer[idx],
++            self.v_scale_buffer[idx],
++            self.sm_k_inv[idx],
++            self.sm_v_inv[idx],
++        )
++
++    def set_kv_buffer_prefix_valid(self, *args, **kwargs):
++        raise NotImplementedError("int8_g64 KV cache: prefix-valid commit is not supported")
++
++    def get_cpu_copy(self, indices, mamba_indices=None):
++        raise NotImplementedError("int8_g64 KV cache: CPU offload is not supported")
++
++    def load_cpu_copy(self, kv_cache_cpu, indices, mamba_indices=None):
++        raise NotImplementedError("int8_g64 KV cache: CPU offload is not supported")
+diff --git a/python/sglang/srt/mem_cache/kv_cache_configurator.py b/python/sglang/srt/mem_cache/kv_cache_configurator.py
+index f1d761c453..638d9c4750 100644
+--- a/python/sglang/srt/mem_cache/kv_cache_configurator.py
++++ b/python/sglang/srt/mem_cache/kv_cache_configurator.py
+@@ -73,6 +73,9 @@ from sglang.srt.mem_cache.memory_pool import (
+     PageMajorMHATokenToKVPool,
+     ReqToTokenPool,
+ )
++from sglang.srt.mem_cache.tiered_kv_pool import MHATokenToKVPoolTiered
++from sglang.srt.mem_cache.int4_kv_pool import MHATokenToKVPoolInt4
++from sglang.srt.mem_cache.int8_kv_pool import MHATokenToKVPoolInt8
+ from sglang.srt.mem_cache.swa_memory_pool import SWAKVPool
+ from sglang.srt.platforms import current_platform
+ from sglang.srt.runtime_context import (
+@@ -1906,7 +1909,13 @@ class KVCacheConfigurator:
+         # MXFP8 KV cache needs the block-scaled pool (data + UE8M0 scale
+         # buffers) for the full-attention layers, same as the SWA branch.
+         full_pool_class = (
+-            MHATokenToKVPoolMXFP8
++            MHATokenToKVPoolTiered
++            if self.kv_cache_dtype_str == "int8ring_int4"
++            else MHATokenToKVPoolInt4
++            if self.kv_cache_dtype_str == "int4_g32"
++            else MHATokenToKVPoolInt8
++            if self.kv_cache_dtype_str == "int8_g64"
++            else MHATokenToKVPoolMXFP8
+             if self.kv_cache_dtype_str == "mxfp8" and not self.use_mla_backend
+             else mha_pool_class
+         )
+@@ -2266,6 +2275,18 @@ class KVCacheConfigurator:
+         If constraints change the value, the configurator re-runs and re-aligns.
+         """
+         user_limit = get_schedule().max_total_tokens
++        _env = __import__("os").environ
++        _lazy_tokens = int(_env.get("SGLANG_KV_LAZY_TOKENS", "0")) if _env.get("SGLANG_KV_LAZY") == "1" else 0
++        if _lazy_tokens > 0:
++            # The profiled capacity is what the free VRAM at startup could back physically; with the
++            # headroom rule (1.5 GB kept free for prefill working memory) the practical limit measured
++            # 0.85 x profiled (84k of 106k tokens at bf16). Longer prompts are rejected at admission
++            # instead of crashing the scheduler mid-prefill.
++            _safety = float(_env.get("SGLANG_KV_LAZY_SAFETY", "0.85"))
++            _new = min(_lazy_tokens, int(token_capacity * _safety))
++            logging.warning(f"KV lazy backing: token capacity {token_capacity} (profiled) -> {_new} "
++                            f"(requested {_lazy_tokens}, safety {_safety})")
++            token_capacity = _new
+ 
+         # Apply user-specified upper bound
+         if user_limit is not None:
+diff --git a/python/sglang/srt/mem_cache/kv_cache_dtype.py b/python/sglang/srt/mem_cache/kv_cache_dtype.py
+index b6d9c44262..18ab012789 100644
+--- a/python/sglang/srt/mem_cache/kv_cache_dtype.py
++++ b/python/sglang/srt/mem_cache/kv_cache_dtype.py
+@@ -17,6 +17,8 @@ TORCH_DTYPE_TO_KV_CACHE_STR = {
+     torch.float8_e4m3fnuz: "fp8_e4m3",
+     torch.float8_e5m2: "fp8_e5m2",
+     torch.bfloat16: "bf16",
++    torch.int8: "int8_g64",
++    torch.uint8: "int4_g32",
+ }
+ 
+ 
+@@ -60,6 +62,12 @@ def configure_kv_cache_dtype(
+             kv_cache_dtype = torch.float8_e4m3fn
+     elif server_args_kv_cache_dtype == "mxfp8":
+         kv_cache_dtype = torch.float8_e4m3fn
++    elif server_args_kv_cache_dtype == "int8_g64":
++        kv_cache_dtype = torch.int8
++    elif server_args_kv_cache_dtype == "int4_g32":
++        kv_cache_dtype = torch.uint8
++    elif server_args_kv_cache_dtype == "int8ring_int4":       # int4_g32 rows + int8_g64 ring (tiered pool)
++        kv_cache_dtype = torch.uint8
+     elif server_args_kv_cache_dtype in ("bf16", "bfloat16"):
+         kv_cache_dtype = torch.bfloat16
+     elif server_args_kv_cache_dtype == "fp4_e2m1":
+diff --git a/python/sglang/srt/mem_cache/kv_vmm_backing.py b/python/sglang/srt/mem_cache/kv_vmm_backing.py
+index 88f626ece6..e9ca330682 100644
+--- a/python/sglang/srt/mem_cache/kv_vmm_backing.py
++++ b/python/sglang/srt/mem_cache/kv_vmm_backing.py
+@@ -101,6 +101,32 @@ class KvVmmArena:
+         """Total physically-backed bytes (sum of scattered per-buffer ranges)."""
+         return self._range_backed
+ 
++    def uncommit_beyond(self, offset: int, keep_bytes: int) -> int:
++        """Release every mapping of the buffer at ``offset`` that starts at or beyond
++        ``keep_bytes`` (mappings straddling the boundary stay). Returns bytes freed."""
++        if self._closed:
++            return 0
++        from sglang.srt.utils.cuda_vmm_utils import _get_cuda_driver, check_drv
++        drv = _get_cuda_driver()
++        start = self.base + offset
++        limit = start + self._committed_by_offset.get(offset, 0)
++        cut = start + self._align(int(keep_bytes))
++        maps = self._allocation._mappings
++        victims = sorted([m for m in maps if start <= m[0] < limit and m[0] >= cut], key=lambda m: -m[0])
++        freed = 0
++        with torch.cuda.device(self.device_id):
++            for m in victims:
++                address, size, handle = m
++                check_drv(drv.cuMemUnmap(address, size), "cuMemUnmap(uncommit)")
++                if handle is not None:
++                    check_drv(drv.cuMemRelease(handle), "cuMemRelease(uncommit)")
++                maps.remove(m)
++                freed += size
++        if freed:
++            self._committed_by_offset[offset] = self._committed_by_offset.get(offset, 0) - freed
++            self._range_backed -= freed
++        return freed
++
+     @property
+     def cursor_bytes(self) -> int:
+         return self._stub.cursor_bytes
+@@ -250,6 +276,23 @@ class KvVmmBufferOwner:
+         self._back_spans(
+             [s.desc.prefix_span_bytes(num_tokens, self.page_size) for s in self._specs]
+         )
++        self.backed_tokens = max(getattr(self, "backed_tokens", 0), int(num_tokens))
++
++    def release_beyond(self, num_tokens: int) -> int:
++        """Unmap the backing beyond the first ``num_tokens`` slots of every buffer."""
++        if self._arena is None:
++            return 0
++        torch.cuda.synchronize()
++        freed = 0
++        for s in self._specs:
++            keep = align_up(s.desc.prefix_span_bytes(num_tokens, self.page_size), self._arena.granularity)
++            freed += self._arena.uncommit_beyond(s.offset, keep)
++            s.backed_to = min(s.backed_to, self._arena._committed_by_offset.get(s.offset, 0))
++        self.backed_tokens = min(getattr(self, "backed_tokens", 0), int(num_tokens))
++        return freed
++
++    def bytes_per_token(self) -> int:
++        return sum(-(-s.desc.row_bytes // s.desc.tokens_per_row) for s in self._specs)
+ 
+     def finalize(self, final_num_tokens: int) -> None:
+         """Back each buffer's final advertised span; set the final serving capacity."""
+diff --git a/python/sglang/srt/mem_cache/memory_pool.py b/python/sglang/srt/mem_cache/memory_pool.py
+index 450b22e6f4..d60393a69d 100644
+--- a/python/sglang/srt/mem_cache/memory_pool.py
++++ b/python/sglang/srt/mem_cache/memory_pool.py
+@@ -2139,6 +2139,14 @@ class MHATokenToKVPool(KVCache):
+             self.dq_v_buffer = None
+             if self.post_capture_active:
+                 self._alloc_post_capture_buffers()
++            elif os.environ.get("SGLANG_KV_LAZY") == "1":
++                self._alloc_post_capture_buffers()
++                self._lazy_floor = min(self.size, int(os.environ.get("SGLANG_KV_LAZY_FLOOR", "4096")))
++                self._lazy_margin = int(os.environ.get("SGLANG_KV_LAZY_MARGIN", "2048"))
++                self._post_capture_owner.ensure_prefix(self._lazy_floor)
++                logger.info("KV lazy backing: %d tokens reserved as VA, %d backed (floor), margin %d, %.1f KB/token",
++                            self.size, self._lazy_floor, self._lazy_margin,
++                            self._post_capture_owner.bytes_per_token() / 1024)
+             else:
+                 self._create_buffers_normal()
+         self._kv_buffer_descs = self._build_kv_buffer_descs()
+@@ -2345,6 +2353,80 @@ class MHATokenToKVPool(KVCache):
+         self.k_buffer = tensors[: self.layer_num]
+         self.v_buffer = tensors[self.layer_num :]
+ 
++    _STRICT_HEADROOM = os.environ.get("SGLANG_KV_LAZY_STRICT_HEADROOM", "0") == "1"
++    _STRICT_MIN_FREE = int(os.environ.get("SGLANG_KV_LAZY_MIN_FREE_MB", "256")) << 20
++
++    def lazy_ensure(self, num_tokens: int) -> None:
++        """Back KV slots [0, num_tokens + margin). A failed commit first shrinks the elastic
++        expert cache, then retries once."""
++        o = getattr(self, "_post_capture_owner", None)
++        if o is None or not hasattr(self, "_lazy_floor"):
++            return
++        m = self._lazy_margin                                                           # commit in margin-sized steps
++        want = min(self.size + self.page_size, -(-(int(num_tokens) + m) // m) * m)     # slot index == size exists
++        if want <= o.backed_tokens:
++            return
++        # watermark: after the commit at least SGLANG_KV_LAZY_HEADROOM_MB must stay driver-free for
++        # the prefill's working memory; otherwise the elastic expert cache gives way first.
++        headroom = int(os.environ.get("SGLANG_KV_LAZY_HEADROOM_MB", "1536")) << 20
++        delta = (want - o.backed_tokens) * o.bytes_per_token()
++        if torch.cuda.mem_get_info()[0] - delta < headroom:
++            from sglang.srt.layers.moe.expert_elastic import ExpertElastic
++            el = ExpertElastic.inst
++            # Below the watermark for the whole tail of a long prefill, empty_cache() on every 2048-token
++            # commit forces torch to cudaMalloc its working set again each time (periodic ~1 s spikes).
++            # Only do the expensive part when the expert cache still has rows to give back, else rate-limit.
++            can_shrink = el is not None and any(st.S > el.s_floor() for st in el.layers.values())
++            now = __import__("time").time(); last = getattr(self, "_lazy_last_empty", 0.0)
++            if can_shrink or now - last > 30.0:
++                torch.cuda.empty_cache(); self._lazy_last_empty = now
++                if can_shrink and torch.cuda.mem_get_info()[0] - delta < headroom:
++                    el.free(((headroom + delta) >> 20) + 64)
++                if torch.cuda.mem_get_info()[0] - delta < headroom // 2:
++                    raise RuntimeError(f"KV lazy backing: no headroom for {want} tokens "
++                                       f"(free {torch.cuda.mem_get_info()[0] >> 20} MB, need {(delta + headroom) >> 20} MB)")
++            # R3 (kv_lazy_strict_headroom): the refusal above is skipped by the rate limit once the
++            # expert cache is at its floor; re-check unconditionally against an absolute floor so a
++            # commit never leaves less than SGLANG_KV_LAZY_MIN_FREE_MB driver-free (activation margin).
++            if (self._STRICT_HEADROOM and not getattr(self, "_strict_bypass", False)
++                    and torch.cuda.mem_get_info()[0] - delta < self._STRICT_MIN_FREE):
++                raise RuntimeError(f"KV lazy backing: strict headroom refused {want} tokens "
++                                   f"(free {torch.cuda.mem_get_info()[0] >> 20} MB, need {(delta + self._STRICT_MIN_FREE) >> 20} MB)")
++        try:
++            try:
++                o.ensure_prefix(want)
++            except Exception:
++                torch.cuda.empty_cache()                 # torch-cached blocks are not driver-free
++                o.ensure_prefix(want)
++            _free = torch.cuda.mem_get_info()[0]
++            logger.info("KV lazy commit: tokens %d -> %d (owner backed %.0f MB, torch reserved %.2f GB, driver free %.2f GB, capturing=%s)",
++                        num_tokens, want, o.backed_bytes / 2**20, torch.cuda.memory_reserved() / 2**30, _free / 2**30,
++                        torch.cuda.is_current_stream_capturing())
++        except Exception as ex:
++            from sglang.srt.layers.moe.expert_elastic import ExpertElastic
++            el = ExpertElastic.inst
++            if el is None:
++                raise
++            need_mb = ((want - o.backed_tokens) * o.bytes_per_token() >> 20) + 1024  # + prefill working memory
++            logger.warning("KV lazy commit failed (%s); shrinking expert cache to free %d MB", ex, need_mb)
++            el.free(need_mb)
++            o.ensure_prefix(want)
++
++    def lazy_release(self) -> None:
++        o = getattr(self, "_post_capture_owner", None)
++        if o is None or not hasattr(self, "_lazy_floor"):
++            return
++        freed = o.release_beyond(self._lazy_floor)
++        if freed:
++            logger.info("KV lazy backing: released %.0f MB beyond the %d-token floor", freed / 2**20, self._lazy_floor)
++        try:                                            # pool idle = no forward in flight: safe point to regrow experts
++            from sglang.srt.layers.moe.expert_elastic import ExpertElastic
++            el = ExpertElastic.inst
++            if el is not None and el.pending_regrow:
++                el.regrow()
++        except Exception as ex:
++            logger.warning("elastic regrow after KV release failed: %s", ex)
++
+     def _alloc_post_capture_buffers(self):
+         dev = torch.device(self.device)
+         device_id = dev.index if dev.index is not None else torch.cuda.current_device()
+@@ -2561,10 +2643,13 @@ class MHATokenToKVPool(KVCache):
+             return
+ 
+         if cache_k.dtype != self.dtype:
+-            if k_scale is not None:
++            if k_scale is not None and not (isinstance(k_scale, (int, float)) and k_scale == 1):
+                 cache_k.div_(k_scale)
+-            if v_scale is not None:
++            if v_scale is not None and not (isinstance(v_scale, (int, float)) and v_scale == 1):
+                 cache_v.div_(v_scale)
++            if self.dtype == torch.float8_e4m3fn:            # fp32/bf16 -> e4m3fn returns NaN beyond +-448
++                cache_k = cache_k.clamp(-448.0, 448.0)
++                cache_v = cache_v.clamp(-448.0, 448.0)
+             cache_k = cache_k.to(self.dtype)
+             cache_v = cache_v.to(self.dtype)
+ 
+@@ -2934,10 +3019,13 @@ class MHATokenToKVPool(KVCache):
+             )
+ 
+         if cache_k.dtype != self.dtype:
+-            if k_scale is not None:
++            if k_scale is not None and not (isinstance(k_scale, (int, float)) and k_scale == 1):
+                 cache_k.div_(k_scale)
+-            if v_scale is not None:
++            if v_scale is not None and not (isinstance(v_scale, (int, float)) and v_scale == 1):
+                 cache_v.div_(v_scale)
++            if self.dtype == torch.float8_e4m3fn:            # fp32/bf16 -> e4m3fn returns NaN beyond +-448
++                cache_k = cache_k.clamp(-448.0, 448.0)
++                cache_v = cache_v.clamp(-448.0, 448.0)
+             cache_k = cache_k.to(self.dtype)
+             cache_v = cache_v.to(self.dtype)
+ 
+@@ -4071,12 +4159,28 @@ class HybridLinearKVPool(KVCache):
+             layer, *args, layer_id_override=local_layer_id, **kwargs
+         )
+ 
++    def get_kv_smooth_buffer(self, layer_id: int):
++        # int8_g64 full_kv_pool exposes per-channel smoothing constants (identity in stage A).
++        self._wait_for_layer(layer_id)
++        layer_id = self._transfer_full_attention_id(layer_id)
++        return self.full_kv_pool.get_kv_smooth_buffer(layer_id)
++
+     def get_kv_scale_buffer(self, layer_id: int):
+         # MXFP8 full_kv_pool exposes per-32 UE8M0 K/V scale buffers.
+         self._wait_for_layer(layer_id)
+         layer_id = self._transfer_full_attention_id(layer_id)
+         return self.full_kv_pool.get_kv_scale_buffer(layer_id)
+ 
++    def get_kv_ring_buffer(self, layer_id: int):
++        # int8ring_int4 full_kv_pool exposes the per-layer int8 ring (K, V, K scales, V scales).
++        self._wait_for_layer(layer_id)
++        layer_id = self._transfer_full_attention_id(layer_id)
++        return self.full_kv_pool.get_kv_ring_buffer(layer_id)
++
++    def get_kv_ring_owner(self):
++        # int8ring_int4 full_kv_pool: ring-row owner table (shared by all layers).
++        return self.full_kv_pool.get_kv_ring_owner()
++
+     @contextmanager
+     def _transfer_id_context(self, layer: RadixAttention):
+         @contextmanager
+diff --git a/python/sglang/srt/mem_cache/tiered_kv_pool.py b/python/sglang/srt/mem_cache/tiered_kv_pool.py
+new file mode 100644
+index 0000000000..9ac97d9ce1
+--- /dev/null
++++ b/python/sglang/srt/mem_cache/tiered_kv_pool.py
+@@ -0,0 +1,167 @@
++"""Tiered KV pool: int8-g64 ring over the int4-g32 full-context pool (installed by perf/patches/kv_tiers.py).
++
++Layout per local layer l: the int4 pool's k/v_buffer + k/v_scale_buffer (rows = size + page_size, on the lazy
++VMM owner, untouched) PLUS a fixed ring of R = SGLANG_KV_TIERS_W slots outside the owner:
++  ring_k[l], ring_v[l]     int8 [R, H, D]                  ring row r = slot & (R - 1)
++  ring_ks[l], ring_vs[l]   fp16 [R, H, D // 64]            absmax/127 per (row, head, 64-channel group)
++  ring_owner               int32 [R]                       slot that owns ring row r (-1 = nobody)
++set_kv_buffer stamps the owner (one launch) and then writes both tiers (dual-write launch; the ring row
++only by the stamped owner, so same-write ring-row collisions degrade to cold instead of mixing bytes);
++readers test owner[slot & mask] == slot on the device and take the int8 ring row (hot) or the int4 row (cold).
++The ring is allocated once at construction (before graph capture; its pointers are baked into the decode
++graph) and never reallocated; it is NOT a KvBufferDesc, so bytes_per_token()/lazy_ensure/kv_lazy.py stay
++exact and PD registration (desc-aligned) is unchanged.  `kv_tiered = True` is the backend's dispatch key
++(kv_bits stays 4: scratch shape, prefix pack shape and the int4 cell size are inherited).
++"""
++import logging
++import os
++from typing import Tuple
++
++import torch
++
++from sglang.srt.constants import GPU_MEMORY_TYPE_KV_CACHE
++from sglang.srt.layers.attention.qsa.sparse_attn import KV_INT8_GROUP, quant_store_kv_tiered
++from sglang.srt.mem_cache.int4_kv_pool import MHATokenToKVPoolInt4, _is_unit_scale
++from sglang.srt.mem_cache.memory_pool import unwrap_write_loc
++from sglang.srt.utils.async_probe import maybe_detect_oob
++
++logger = logging.getLogger(__name__)
++
++
++def ring_slots_from_env() -> int:
++    """SGLANG_KV_TIERS_W: ring slots R (default 8192); must be a positive power of two (ring index = slot & (R - 1))."""
++    raw = os.environ.get("SGLANG_KV_TIERS_W", "8192")
++    try:
++        r = int(raw)
++    except ValueError:
++        raise ValueError(f"SGLANG_KV_TIERS_W={raw!r} is not an integer") from None
++    if r <= 0 or (r & (r - 1)):
++        raise ValueError(f"SGLANG_KV_TIERS_W must be a positive power of two, got {r}")
++    return r
++
++
++class MHATokenToKVPoolTiered(MHATokenToKVPoolInt4):
++    """int4-g32 full-context rows (inherited) + an int8-g64 ring of the last R written slots + owner table."""
++
++    RING_GROUP = KV_INT8_GROUP
++    kv_tiered = True            # QSA backend dispatch key (kv_bits == 4 is inherited)
++
++    def __init__(self, *args, **kwargs):
++        self.ring_k = None
++        self.ring_v = None
++        self.ring_ks = None
++        self.ring_vs = None
++        self.ring_owner = None
++        super().__init__(*args, **kwargs)
++        R = ring_slots_from_env()
++        if R > self.size:
++            raise ValueError(f"SGLANG_KV_TIERS_W={R} exceeds the KV pool size {self.size}")
++        if self.head_dim % self.RING_GROUP or self.v_head_dim % self.RING_GROUP:
++            raise ValueError(f"head dims {self.head_dim}/{self.v_head_dim} not multiples of RING_GROUP {self.RING_GROUP}")
++        self.ring_slots = R
++        L, H = self.layer_num, self.head_num
++        ks_shape = (R, H, self.head_dim // self.RING_GROUP)
++        vs_shape = (R, H, self.v_head_dim // self.RING_GROUP)
++        # Plain torch tensors (torch allocator, no 2 MiB granule rounding), allocated once before capture.
++        with self.memory_saver_adapter.region(GPU_MEMORY_TYPE_KV_CACHE):
++            self.ring_k = [torch.zeros((R, H, self.head_dim), dtype=torch.int8, device=self.device) for _ in range(L)]
++            self.ring_v = [torch.zeros((R, H, self.v_head_dim), dtype=torch.int8, device=self.device) for _ in range(L)]
++            self.ring_ks = [torch.zeros(ks_shape, dtype=torch.float16, device=self.device) for _ in range(L)]
++            self.ring_vs = [torch.zeros(vs_shape, dtype=torch.float16, device=self.device) for _ in range(L)]
++            self.ring_owner = torch.full((R,), -1, dtype=torch.int32, device=self.device)
++        ring_bytes = sum(t.numel() * t.element_size() for t in self.ring_k + self.ring_v + self.ring_ks + self.ring_vs)
++        logger.info(
++            "KV tiers: ring R=%d slots (int8_g%d over int4_g%d), %.0f MB, owner %d KB",
++            R, self.RING_GROUP, self.GROUP, ring_bytes / 2**20, self.ring_owner.numel() * 4 // 1024,
++        )
++
++    # -- layout ---------------------------------------------------------------------------------
++
++    @property
++    def ring_mask(self) -> int:
++        return self.ring_slots - 1
++
++    def _ring_bytes(self) -> Tuple[int, int]:
++        kb = sum(t.numel() * t.element_size() for t in self.ring_k + self.ring_ks)
++        vb = sum(t.numel() * t.element_size() for t in self.ring_v + self.ring_vs)
++        return kb + self.ring_owner.numel() * self.ring_owner.element_size(), vb
++
++    def get_kv_size_bytes(self):
++        k_size_bytes, v_size_bytes = super().get_kv_size_bytes()
++        if self.ring_k is not None:
++            rk, rv = self._ring_bytes()
++            k_size_bytes += rk
++            v_size_bytes += rv
++        return k_size_bytes, v_size_bytes
++
++    # _pd_registerable_tensors is inherited on purpose: get_contiguous_buf_infos zips it with
++    # _kv_buffer_descs, and the ring has no desc (it is not on the owner).  PD transfer of a tiered pool
++    # would move the int4 tier only; PD is unsupported here anyway (CPU offload raises in the int4 pool).
++
++    def _clear_buffers(self):
++        super()._clear_buffers()
++        self.ring_k = self.ring_v = self.ring_ks = self.ring_vs = self.ring_owner = None
++
++    # -- accessors ------------------------------------------------------------------------------
++
++    def get_kv_ring_buffer(self, layer_id: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
++        idx = layer_id - self.start_layer
++        return self.ring_k[idx], self.ring_v[idx], self.ring_ks[idx], self.ring_vs[idx]
++
++    def get_kv_ring_owner(self) -> torch.Tensor:
++        return self.ring_owner
++
++    # -- write path -----------------------------------------------------------------------------
++
++    def set_kv_buffer(
++        self,
++        layer,
++        loc_info,
++        cache_k: torch.Tensor,
++        cache_v: torch.Tensor,
++        k_scale=None,
++        v_scale=None,
++        layer_id_override=None,
++        dcp_kv_mask=None,
++    ):
++        if dcp_kv_mask is not None:
++            raise NotImplementedError("int8ring_int4 KV cache does not support DCP KV masks")
++        if not (_is_unit_scale(k_scale) and _is_unit_scale(v_scale)):
++            raise ValueError("int8ring_int4 KV cache computes its own scales; got k_scale/v_scale")
++        loc, _, _ = unwrap_write_loc(loc_info)
++        maybe_detect_oob(loc, 0, self.size + self.page_size, "set_kv_buffer (MHA-TIERED)")
++        if loc.numel() > self.ring_slots:
++            # more tokens than ring rows would make every write collide (chunked prefill 1024 <= R); a
++            # collision is safe (the stamp launch picks one owner per ring row, the others are cold) but
++            # this can only be a misconfiguration
++            raise ValueError(f"int8ring_int4: {loc.numel()} tokens in one write exceed the ring of {self.ring_slots} slots")
++        layer_id = layer_id_override if layer_id_override is not None else layer.layer_id
++        idx = layer_id - self.start_layer
++        cache_k = cache_k.view(-1, self.head_num, self.head_dim)
++        cache_v = cache_v.view(-1, self.head_num, self.v_head_dim)
++        quant_store_kv_tiered(
++            cache_k,
++            cache_v,
++            loc,
++            self.k_buffer[idx],
++            self.v_buffer[idx],
++            self.k_scale_buffer[idx],
++            self.v_scale_buffer[idx],
++            self.ring_k[idx],
++            self.ring_v[idx],
++            self.ring_ks[idx],
++            self.ring_vs[idx],
++            self.ring_owner,
++            self.sm_k_inv[idx],
++            self.sm_v_inv[idx],
++            self.ring_mask,
++        )
++
++    # -- lazy VMM hooks -------------------------------------------------------------------------
++
++    def lazy_release(self) -> None:
++        super().lazy_release()
++        # Hygiene only: every slot is re-stamped by its own write before any read, so correctness never
++        # depends on this; it just keeps a stale owner from pointing a reader at an old ring row.
++        if self.ring_owner is not None:
++            self.ring_owner.fill_(-1)
+diff --git a/python/sglang/srt/model_executor/pool_configurator.py b/python/sglang/srt/model_executor/pool_configurator.py
+index 19c4f3e305..ce41eae204 100644
+--- a/python/sglang/srt/model_executor/pool_configurator.py
++++ b/python/sglang/srt/model_executor/pool_configurator.py
+@@ -418,6 +418,17 @@ class DefaultPoolConfigurator(MemoryPoolConfigurator):
+                 )
+                 # FP4 prefill uses one shared FP8 dequant workspace across layers.
+                 cell_size += n * k * 2 * kv_size
++            elif self.kv_cache_dtype_str in ("int4_g32", "int8ring_int4"):   # tiered: int4 rows + a fixed-size int8 ring
++                # two 4-bit channels per byte (the uint8 itemsize above counts one byte per channel)
++                # plus one fp16 absmax scale per (token, kv-head, 32-channel group) for K and V
++                cell_size = cell_size // 2 + (
++                    n * ((model_config.head_dim + model_config.v_head_dim) // 32) * 2 * num_layers
++                )
++            elif self.kv_cache_dtype_str == "int8_g64":
++                # fp16 absmax scale per (token, kv-head, 64-channel group) for K and V
++                cell_size += (
++                    n * ((model_config.head_dim + model_config.v_head_dim) // 64) * 2 * num_layers
++                )
+             elif self.kv_cache_dtype_str == "mxfp8":
+                 scale_block_size = 32
+                 cell_size += (

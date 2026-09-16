@@ -1,0 +1,26 @@
+# Independent main checkout (execution-plan step 2, part 1)
+created: 2026-09-16
+path: /root/quant/sglang-main
+origin: https://github.com/sgl-project/sglang.git
+HEAD: b02e16a895add01a0cfe24bb74922de92ab4d895
+pinned main: b02e16a895add01a0cfe24bb74922de92ab4d895 (== /root/sglang origin/main)
+method: git clone --local --no-checkout /root/sglang  (hardlinked objects, 508 MB)
+model-support commit present: commit
+
+## Main dependency pins (python/pyproject.toml)
+6:  "torch==2.13.0",
+41:  "flash-attn-4>=4.0.0b18",
+42:  "flashinfer_python[cu13]==0.6.18", # keep it aligned with jit-cache version in Dockerfile
+86:  "tokenizers==0.22.2", # 0.23.0rc0 is incompatible with transformers' CLIPTokenizer.
+89:  "torch==2.13.0",
+90:  "torch_memory_saver>=0.0.9.post1",
+91:  "torchaudio==2.11.0",
+92:  "torchcodec==0.15.0 ; sys_platform != 'linux' or (sys_platform == 'linux' and platform_machine != 'aarch64' and platform_machine != 'arm64' and platform_machine != 'armv7l')", # Not available on Linux ARM.
+93:  "torchvision",
+95:  "transformers==5.12.1",
+
+## Control vs main delta to settle before serving
+control: flashinfer-python 0.6.17   main pin: 0.6.18
+control: flash_attn 2.8.3.post1 (sm86 build) + flash-attn-4 4.0.0b19
+control: torch 2.13.0+cu130, triton 3.7.1, transformers 5.12.1, numpy 2.3.5, tilelang 0.1.11
+separate venv still to build: /root/quant/venv-sglang-main; separate SGLANG_CACHE_DIR

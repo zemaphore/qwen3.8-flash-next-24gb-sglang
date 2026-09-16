@@ -1,0 +1,41 @@
+file                                                                           base blob ok main   main lines +/-
+python/sglang/kernels/ops/moe/fused_moe_triton_kernels.py                      yes          ok     +131/-57
+python/sglang/srt/configs/qwen4_exp.py                                         yes          ok     +16/-10
+python/sglang/srt/layers/attention/linear/gdn_backend.py                       yes          ok     +512/-48
+python/sglang/srt/layers/attention/qsa/metadata.py                             yes          ok     +18/-38
+python/sglang/srt/layers/attention/qsa/qsa_indexer.py                          yes          ok     +31/-54
+python/sglang/srt/layers/attention/qsa/sparse_attn.py                          yes          ok     +78/-13
+python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py                 yes          ok     +152/-310
+python/sglang/srt/layers/layernorm.py                                          yes          ok     +119/-42
+python/sglang/srt/layers/moe/moe_runner/triton.py                              yes          ok     +0/-3
+python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe.py              yes          ok     +77/-50
+python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe_triton_config.py yes          ok     +0/-0
+python/sglang/srt/layers/quantization/moe_wna16.py                             yes          ok     +3/-4
+python/sglang/srt/layers/radix_linear_attention.py                             yes          ok     +118/-36
+python/sglang/srt/managers/scheduler.py                                        yes          ok     +1227/-382
+python/sglang/srt/mem_cache/allocation.py                                      yes          ok     +114/-28
+python/sglang/srt/mem_cache/allocator/paged.py                                 yes          ok     +130/-114
+python/sglang/srt/mem_cache/allocator/token.py                                 yes          ok     +20/-8
+python/sglang/srt/mem_cache/kv_cache_configurator.py                           yes          ok     +605/-222
+python/sglang/srt/mem_cache/kv_cache_dtype.py                                  yes          ok     +3/-0
+python/sglang/srt/mem_cache/kv_vmm_backing.py                                  yes          ok     +12/-98
+python/sglang/srt/mem_cache/memory_pool.py                                     yes          ok     +987/-438
+python/sglang/srt/model_executor/pool_configurator.py                          yes          ok     +464/-156
+python/sglang/srt/model_executor/runner_backend/breakable_cuda_graph_backend.py yes          ok     +18/-8
+python/sglang/srt/models/qwen2_moe.py                                          yes          ok     +195/-43
+python/sglang/srt/models/qwen3_5.py                                            yes          ok     +387/-52
+python/sglang/srt/models/qwen4_exp.py                                          yes          ok     +102/-53
+python/sglang/srt/server_args.py                                               yes          ok     +502/-9565
+python/sglang/srt/speculative/ngram_worker.py                                  yes          ok     +86/-61
+python/sglang/srt/speculative/spec_utils.py                                    yes          ok     +115/-43
+python/sglang/srt/utils/offloader.py                                           yes          ok     +39/-37
+test/manual/test_triton_moe_wna16.py                                           yes          ok     +0/-0
+
+## Seven added modules: path collision on main?
+python/sglang/srt/layers/moe/expert_stream.py                          new file
+python/sglang/srt/layers/moe/expert_gemv.py                            new file
+python/sglang/srt/layers/moe/row_arena.py                              new file
+python/sglang/srt/layers/moe/expert_elastic.py                         new file
+python/sglang/srt/mem_cache/int8_kv_pool.py                            new file
+python/sglang/srt/mem_cache/int4_kv_pool.py                            new file
+python/sglang/srt/mem_cache/tiered_kv_pool.py                          new file

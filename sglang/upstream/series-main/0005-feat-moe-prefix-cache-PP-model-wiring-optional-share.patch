@@ -1,0 +1,84 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: root <root@docker01.fra.askei.net>
+Date: Wed, 16 Sep 2026 20:41:22 +0000
+Subject: [PATCH 5/5] feat(moe): prefix-cache PP model wiring, optional
+ shared-expert overlap
+
+Port the model-side pieces of the accepted PP stack onto main b02e16a895.
+
+- qwen4_exp.py: call expert_stream.prefetch_first_layer at the top of the
+  layer loop so the PP7 staging / PP11 batched-DMA / PP14 cross-layer
+  prefetch helpers in expert_stream.py are driven from the model. Full-table
+  gather and first-layer prefetch stay behind their default-off env switches.
+- qwen2_moe.py: honour SGLANG_MOE_EAGER_SHARED_OVERLAP_MAX_TOKENS for the
+  shared-expert alternate stream (default 0 = disabled, as in the promoted
+  launcher).
+---
+ python/sglang/srt/models/qwen2_moe.py | 17 ++++++++++++++++-
+ python/sglang/srt/models/qwen4_exp.py |  3 +++
+ 2 files changed, 19 insertions(+), 1 deletion(-)
+
+diff --git a/python/sglang/srt/models/qwen2_moe.py b/python/sglang/srt/models/qwen2_moe.py
+index 83aad13ebb..056f71853f 100644
+--- a/python/sglang/srt/models/qwen2_moe.py
++++ b/python/sglang/srt/models/qwen2_moe.py
+@@ -19,6 +19,7 @@
+ """Inference-only Qwen2MoE model compatible with HuggingFace weights."""
+ 
+ import logging
++import os
+ from contextlib import nullcontext
+ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+ 
+@@ -119,6 +120,11 @@ from sglang.srt.environ import envs
+ from sglang.srt.utils.hf_transformers_utils import get_rope_config
+ 
+ _SGLANG_EXPERIMENTAL_LORA_OPTI = envs.SGLANG_EXPERIMENTAL_LORA_OPTI.get()
++_SHARED_EXPERT_EAGER_ALT_STREAM_MAX_TOKENS = int(
++    os.environ.get("SGLANG_MOE_EAGER_SHARED_OVERLAP_MAX_TOKENS", "0")
++)
++if _SHARED_EXPERT_EAGER_ALT_STREAM_MAX_TOKENS < 0:
++    raise ValueError("SGLANG_MOE_EAGER_SHARED_OVERLAP_MAX_TOKENS must be non-negative")
+ 
+ logger = logging.getLogger(__name__)
+ 
+@@ -765,8 +771,17 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
+             final_hidden_states = self.experts(hidden_states, topk_output)
+         elif (
+             self.alt_stream is not None
+-            and get_is_capture_mode()
+             and not torch.compiler.is_compiling()
++            and (
++                get_is_capture_mode()
++                or (
++                    _SHARED_EXPERT_EAGER_ALT_STREAM_MAX_TOKENS > 0
++                    and forward_batch is not None
++                    and forward_batch.forward_mode.is_extend()
++                    and num_tokens
++                    <= _SHARED_EXPERT_EAGER_ALT_STREAM_MAX_TOKENS
++                )
++            )
+         ):
+             final_hidden_states, shared_output = self.forward_normal_dual_stream(
+                 hidden_states,
+diff --git a/python/sglang/srt/models/qwen4_exp.py b/python/sglang/srt/models/qwen4_exp.py
+index 011b31497d..72f72d4d60 100644
+--- a/python/sglang/srt/models/qwen4_exp.py
++++ b/python/sglang/srt/models/qwen4_exp.py
+@@ -44,6 +44,7 @@ from sglang.srt.layers.hyperconnection import (
+ from sglang.srt.layers.linear import ReplicatedLinear
+ from sglang.srt.layers.logits_processor import LogitsProcessorOutput
+ from sglang.srt.layers.moe import get_moe_a2a_backend, should_use_dp_reduce_scatterv
++from sglang.srt.layers.moe import expert_stream
+ from sglang.srt.layers.moe.fused_moe_triton.layer import FusedMoE
+ from sglang.srt.layers.quantization.base_config import QuantizationConfig
+ from sglang.srt.layers.quantization.modelopt_quant import (
+@@ -1909,6 +1910,8 @@ class Qwen4ExpModel(Qwen3_5ForCausalLM):
+         )
+         residual = None
+         aux_hidden_states = []
++        if expert_stream.enabled():
++            expert_stream.prefetch_first_layer(int(hidden_states.shape[0]))
+         for i in range(self.start_layer, self.end_layer):
+             layer = self.layers[i]
+             if i + 1 < self.end_layer:

@@ -1,0 +1,25 @@
+# Effective resolved configuration of the frozen control (boot 2026-09-16 19:56)
+# Extracted from server-promoted-flags-boot1.log (not inferred from CLI spelling)
+
+Breakable CUDA graph is incompatible with multimodal model; disabling prefill CUDA graph.
+Capture target decode CUDA graph end. elapsed=1.26 s, mem usage=0.08 GB, avail mem=4.54 GB.
+Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+KV Cache is allocated. dtype: torch.uint8, #tokens: 235520, K size: 0.76 GB, V size: 0.76 GB
+KV lazy backing: 235520 tokens reserved as VA, 4096 backed (floor), margin 2048, 6.8 KB/token
+KV lazy backing: token capacity 423488 (profiled) -> 235520 (requested 235520, safety 0.77)
+KV tiers: ring R=8192 slots (int8_g64 over int4_g32), 99 MB, owner 32 KB
+Load weight end. elapsed=170.48 s, type=Qwen4ExpForConditionalGeneration, quant=auto-round, bits=2, avail mem=4.73 GB, mem usage=18.41 GB.
+Mamba Cache is allocated. max_mamba_cache_size: 4, conv_state size: 0.01GB, ssm_state size: 0.53GB 
+Setting page size to 64 for compressed QSA (full//ratio compressed addressing).
+Tree cache initialized: source=default impl=UnifiedRadixCache hybrid_swa=False hybrid_ssm=True hicache_attached=False streaming_wrapped=False
+Using QSA for sparse full-attention layers.
+elastic placement: 48 layers at S=184, free slots {'w13_qweight': 128, 'w2_qweight': 0, 'w13_scales': 0, 'w2_scales': 0}, VRAM free 5.31 GB
+max_total_num_tokens=235520, chunked_prefill_size=4608, max_prefill_tokens=32768, max_running_requests=1, context_len=235520, available_gpu_mem=4.54 GB
+
+## Checkpoint metadata (config.json summary)
+architectures: Qwen4ExpForConditionalGeneration
+model_type: qwen4_exp; dtype: bfloat16; tie_word_embeddings: False
+quant_method: auto-round; bits: 2; group_size: 128; sym: True; packing_format: auto_round:auto_gptq
+autoround_version: 0.14.2; extra_config entries: 2342
+index total_size: 38755352600 B (38.76 GB); weight_map entries: 222856
+PLE: rows 320001536 x dim 160 F8_E4M3, 128 shards, file ple/ple.f8_e4m3.bin (51,200,245,760 B)

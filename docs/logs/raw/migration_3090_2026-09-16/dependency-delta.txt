@@ -1,0 +1,26 @@
+# Dependency delta: control venv-sglang -> main venv-sglang-main (2026-09-16)
+# sglang itself: control 73a255206f (editable /root/sglang) -> main b02e16a8 (editable /root/quant/sglang-main)
+# toolchain pins matched to control: nvcc 13.3.73, cuda-runtime 13.3.29, cuda-crt 13.3.73, nvvm 13.3.73, nvdisasm 13.3.73
+
+## Version differences (packages in both)
+anthropic: 1.5.0 -> 1.6.0
+flashinfer-python: 0.6.17 -> 0.6.18
+humming-kernels: 0.1.10 -> 0.1.12
+kernels-data: 0.16.1 -> 0.16.2
+modelscope: 1.40.0 -> 1.40.1
+modelscope-hub: 0.4.2 -> 0.4.3
+propcache: 0.5.2 -> 0.5.4
+pyproject_hooks: 1.2.0 -> 1.3.3
+sgl-deep-ep: 0.1.0 -> 0.1.2
+sgl-deep-gemm: 0.1.5.post3 -> 0.2.0
+sglang-kernel: 0.4.6.post1 -> 0.4.7
+tilelang: 0.1.11 -> 0.1.12
+urllib3: 2.7.0 -> 2.8.0
+yarl: 1.24.5 -> 1.25.1
+
+## Only in control
+pyelftools==0.33
+
+## Only in main
+Cython==3.3.0
+nvshmem4py-cu13==0.3.1

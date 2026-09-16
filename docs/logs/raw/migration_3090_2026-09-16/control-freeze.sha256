@@ -1,0 +1,53 @@
+# Control-freeze hashes, migration_3090_2026-09-16 (frozen 2026-09-16)
+
+## Serving source
+serving base commit: 73a255206f916366c8d26d4022f82ddfb0ab558d
+serving HEAD:        73a255206f916366c8d26d4022f82ddfb0ab558d
+docs repo baseline:  ab619907271d68f85e777a90c4f2e72466ecd474 (branch pp-perf-3090)
+
+## Tracked serving diff (authoritative: identical to RB v4 reference)
+47ef80c2b8513319ea33033c6022890d99707c6d428158626d01fda10efd325a  /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/migration_3090_2026-09-16/serving-tracked.diff
+47ef80c2b8513319ea33033c6022890d99707c6d428158626d01fda10efd325a  /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/rb_3090_2026-09-16/serving-tree-with-R123-v4.diff
+
+## Seven added serving modules (untracked in /root/sglang)
+45fad94baea708d6daae3b318addae6bde943dae7aa8b131d78e07df80130eb5  python/sglang/srt/layers/moe/expert_stream.py
+f0850a1a68bed84d07e3458ad5e7296f5277586e632486d95c970d27635cc694  python/sglang/srt/layers/moe/expert_gemv.py
+8cdc740392d3d208d97e3f83edecbb268169b95b04ddbd371a1be4ed661ca52b  python/sglang/srt/layers/moe/row_arena.py
+29c00e3952a0a612d721b19ff8ec5e1f318a37130b89c876b5dceda5a563a798  python/sglang/srt/layers/moe/expert_elastic.py
+83649aa071b1e9a125151bf406deea11676a3ce228e66bf1aaca4630ed1e93a4  python/sglang/srt/mem_cache/int8_kv_pool.py
+adec73d971050853c81ef49cb0676f57f02693742258f2afc2c35ec5e1b09c57  python/sglang/srt/mem_cache/int4_kv_pool.py
+cf0c96eddb3ef635764596d84369b61f190618673b3022cd6202003a9cd7a6d9  python/sglang/srt/mem_cache/tiered_kv_pool.py
+
+## Launchers
+d0866e7ca18ac6eac29290b429c147ac6fc7863d3d6571a8c4a4a80539f57447  /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/promotion_3090_2026-09-16/serve-3090-flags.sh
+d0866e7ca18ac6eac29290b429c147ac6fc7863d3d6571a8c4a4a80539f57447  /root/quant/serve-3090.sh
+e09c4561b3458d44305e2f6517c6f88a163f2346613e549d4a8aa30fefc4cb04  /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/promotion_3090_2026-09-16/serve-3090-radix-noflags.sh
+11013fb6bd3959164b17aa769579deb25c5cd82f2f810bda88f2f44ef02c99cd  /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/promotion_3090_2026-09-16/serve-3090-nocache-256K.sh
+
+## Placement and kernel assets
+73d8f0df1875f6b61124b4835173dccf56d57792fa91bee8d270fc65b42ddfd8  /root/qwen3.8-flash-next-24gb-sglang/assets/expert_presence_code.pt
+96697b3c5e4f847f42c4321b440b44a26da552e97a58fe9672549bb3ef5052cf  /root/qwen3.8-flash-next-24gb-sglang/assets/expert_freq.pt
+d2fe7d0ad7574f92ebf9e00386b8fd551420b772639ba087a165927370e2dbeb  E=10,N=160,device_name=NVIDIA_RTX_PRO_4000_Blackwell,dtype=int2_w2a16.json
+d2fe7d0ad7574f92ebf9e00386b8fd551420b772639ba087a165927370e2dbeb  E=10,N=160,device_name=NVIDIA_RTX_PRO_4000_Blackwell,dtype=int2_w2a16_down.json
+768baffb0774785d354fbdd60622d63eb99322f550ae26062cc041f6ab400657  E=128,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16.json
+7b039191c90d710b06a0cd520bd9805c4e36a56e2d2c793229bf2bf461280ba6  E=128,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json
+a3195c8234c4852c10e5704ea9937e2f3933061284adef551b5021e9fa752e8b  E=192,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16.json
+eed2dbca9a62fa06e1164843122dd4b016e7063dfb32a0d2f1b846979b2e0777  E=192,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json
+b822941b43d820c9aa7775aa9113e2cc37b4abfeae6b1f9152ea8d2308de4c7e  E=288,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16.json
+03ec9baf506af80c6c549c844cc694255649dea99026f114e57d1030edb3a576  E=288,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json
+a7ee8d04484a43cb4c8edb845bcb89f1ca2d56269f254a3b2dd9da068990b295  E=352,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16.json
+0b3f4caf9c6df7157033c0aed1e82778f8c0e3a74388fb5e6a1dd732802d7908  E=352,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json
+20ccd3c880fac65a26a330dc5f316780ddebfee2295f2c5c85820d6506896b7a  E=384,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16.json
+de4a435049e6a153e02aa93bee629094b7756c0d769479c3f161df1526c6b36b  E=384,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json
+a68795d2686aae380109e0be156c0b185cff582b480d0f3df90ec25bad23f8f4  E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16.json
+ce0a1b3689aba627f327f118cb262ec6e5bff4031d51a5fbf5a120c9edf24ea0  E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json
+d2fe7d0ad7574f92ebf9e00386b8fd551420b772639ba087a165927370e2dbeb  E=512,N=160,device_name=NVIDIA_RTX_PRO_4000_Blackwell,dtype=int2_w2a16.json
+d2fe7d0ad7574f92ebf9e00386b8fd551420b772639ba087a165927370e2dbeb  E=512,N=160,device_name=NVIDIA_RTX_PRO_4000_Blackwell,dtype=int2_w2a16_down.json
+
+## Checkpoint metadata files (weights not hashed; 38,755,352,600 B total on /mnt/ai_models)
+c9becafe194c4a0a26c45c1cae49aa0edf3fd1525f2070bb5f1121d2212f79ea  /mnt/ai_models/Qwen3.8-Flash-Next-int2-mixed-AutoRound-24GB-SGLang/config.json
+a8276e73edd97e3ee0b91b419d330ed6f7a7cb6bbfb20cbd259d29c56d153847  /mnt/ai_models/Qwen3.8-Flash-Next-int2-mixed-AutoRound-24GB-SGLang/model.safetensors.index.json
+a38679b4e2684094a224758f6953ec2cb9d816ec27eb41d595feaf1d38a6fff5  /mnt/ai_models/Qwen3.8-Flash-Next-int2-mixed-AutoRound-24GB-SGLang/generation_config.json
+3599461f7ef0793b4be43d6d93b61ed3af5f0c833928837506dae73ae46f8166  /mnt/ai_models/Qwen3.8-Flash-Next-int2-mixed-AutoRound-24GB-SGLang/ple/ple.json
+06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523  /mnt/ai_models/Qwen3.8-Flash-Next-int2-mixed-AutoRound-24GB-SGLang/tokenizer.json
+c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041  /mnt/ai_models/Qwen3.8-Flash-Next-int2-mixed-AutoRound-24GB-SGLang/chat_template.jinja

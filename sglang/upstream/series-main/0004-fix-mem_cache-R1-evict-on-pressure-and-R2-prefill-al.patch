@@ -1,0 +1,149 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: root <root@docker01.fra.askei.net>
+Date: Wed, 16 Sep 2026 20:40:35 +0000
+Subject: [PATCH 4/5] fix(mem_cache): R1 evict-on-pressure and R2 prefill-alloc
+ abort
+
+Port the RB robustness layers onto main b02e16a895 (both env-gated, default
+off; the promoted launcher enables them).
+
+- R1 (allocation.py, SGLANG_KV_EVICT_ON_PRESSURE=1): when the lazy KV backing
+  refuses to commit never-backed high-index pages, re-sort the free list and
+  retry; then evict LRU prefixes and retry; if nothing is evictable (sole
+  owner), bypass the strict floor for one retry so a single linear session
+  keeps the unpatched near-limit behaviour.
+- R2 (scheduler.py, SGLANG_PREFILL_ALLOC_ABORT=1): a RuntimeError "out of
+  memory" during prepare_for_extend aborts the affected request(s) with
+  FINISH_ABORT / HTTP 503 instead of killing the scheduler; committed KV is
+  released via release_kv_cache(is_insert=False), queued requests roll back
+  their pool indices, and the chunked request is dropped.
+
+R3 (SGLANG_KV_LAZY_STRICT_HEADROOM / _MIN_FREE_MB) is part of the lazy-KV
+module committed earlier; the launcher that enables all three lives in the
+repository's promotion directory.
+---
+ python/sglang/srt/managers/scheduler.py   | 37 +++++++++++++++++++-
+ python/sglang/srt/mem_cache/allocation.py | 41 +++++++++++++++++++++++
+ 2 files changed, 77 insertions(+), 1 deletion(-)
+
+diff --git a/python/sglang/srt/managers/scheduler.py b/python/sglang/srt/managers/scheduler.py
+index 87d0703923..e4c871653b 100644
+--- a/python/sglang/srt/managers/scheduler.py
++++ b/python/sglang/srt/managers/scheduler.py
+@@ -26,6 +26,7 @@ from collections import deque
+ from contextlib import contextmanager, nullcontext
+ from functools import partial
+ from http import HTTPStatus
++_PREFILL_ALLOC_ABORT = __import__("os").environ.get("SGLANG_PREFILL_ALLOC_ABORT", "0") == "1"
+ from typing import TYPE_CHECKING, Any, Deque, Dict, List, Optional, Set, Tuple, Union
+ 
+ from sglang.srt.runtime_context import (
+@@ -4055,7 +4056,41 @@ class Scheduler(
+                 self.tree_cache.ready_to_load_host_cache()
+             )
+ 
+-        new_batch.prepare_for_extend()
++        try:
++            new_batch.prepare_for_extend()
++        except RuntimeError as _alloc_ex:
++            # R2 (prefill_alloc_abort): fail the request(s), not the server.
++            if not _PREFILL_ALLOC_ABORT or "out of memory" not in str(_alloc_ex):
++                raise
++            logger.error("prefill allocation failed; aborting %d request(s) instead of exiting: %s",
++                         len(can_run_list), str(_alloc_ex).splitlines()[0])
++            for _req in can_run_list:
++                try:
++                    if _req.kv is not None:
++                        # continuing chunked prefill with committed KV: release through the
++                        # same path used to abort a queued request that already holds KV
++                        release_kv_cache(_req, self.tree_cache, is_insert=False)
++                    else:
++                        if _req.mamba_pool_idx is not None and _req.req_pool_idx is not None:
++                            self.req_to_token_pool.free_mamba_cache(_req)
++                        if _req.req_pool_idx is not None:
++                            self.req_to_token_pool.free(_req)
++                        if getattr(_req, "last_node", None) is not None:
++                            self.tree_cache.dec_lock_ref(_req.last_node)
++                except Exception as _rb:
++                    logger.error("rollback failed for %s: %s", _req.rid, _rb)
++                _reason = FINISH_ABORT(
++                    "Prefill out of memory under KV pressure; request aborted.",
++                    HTTPStatus.SERVICE_UNAVAILABLE,
++                )
++                _req.to_finish = _reason
++                self.ipc_channels.send_to_tokenizer.send_output(
++                    AbortReq(finished_reason=_reason.to_json(), rid=_req.rid), _req
++                )
++            if self.chunked_req is not None and self.chunked_req in can_run_list:
++                self.chunked_req.inflight_middle_chunks = max(0, self.chunked_req.inflight_middle_chunks - 1)
++                self.chunked_req = None
++            return None, running_batch
+ 
+         if self.tp_worker.model_runner.prefill_aware_swa:
+             for req in can_run_list:
+diff --git a/python/sglang/srt/mem_cache/allocation.py b/python/sglang/srt/mem_cache/allocation.py
+index 0032a8ccc0..13cff7646c 100644
+--- a/python/sglang/srt/mem_cache/allocation.py
++++ b/python/sglang/srt/mem_cache/allocation.py
+@@ -1,6 +1,7 @@
+ from __future__ import annotations
+ 
+ import logging
++import os
+ from collections import defaultdict
+ from typing import TYPE_CHECKING, Optional
+ 
+@@ -50,6 +51,7 @@ if TYPE_CHECKING:
+     from sglang.srt.managers.schedule_batch import Req, ScheduleBatch
+ 
+ logger = logging.getLogger(__name__)
++_EVICT_ON_PRESSURE = os.environ.get("SGLANG_KV_EVICT_ON_PRESSURE", "0") == "1"
+ 
+ 
+ def write_cache_indices(
+@@ -226,6 +228,45 @@ def alloc_paged_token_slots_extend(
+     else:
+         out_cache_loc = out
+ 
++    # R1 (kv_evict_on_physical_pressure): a None here means the lazy backing
++    # refused to commit never-backed high-index pages. First re-sort the free
++    # list so already-backed low-index pages are handed out (they need no
++    # commit); if that is not enough, evict LRU prefixes (their pages are
++    # backed too), re-sort, and retry once more.
++    if out_cache_loc is None and not is_dsv4 and _EVICT_ON_PRESSURE and tree_cache is not None:
++        allocator.merge_and_sort_free()
++        out_cache_loc = allocator.alloc_extend(
++            prefix_lens, prefix_lens_cpu, seq_lens, seq_lens_cpu, last_loc, extend_num_tokens, **extra_alloc_kwargs,
++        )
++        logger.warning("KV physical pressure: re-sorted free pages and retried allocation of %d tokens -> %s",
++                       extend_num_tokens, "ok" if out_cache_loc is not None else "still refused")
++        if out_cache_loc is None:
++            evictable = 0 if tree_cache.is_chunk_cache() else tree_cache.evictable_size()
++            if evictable > 0:
++                evict_n = min(evictable, max(num_tokens, 4 * num_tokens))
++                tree_cache.evict(EvictParams(num_tokens=evict_n))
++                allocator.merge_and_sort_free()
++                out_cache_loc = allocator.alloc_extend(
++                    prefix_lens, prefix_lens_cpu, seq_lens, seq_lens_cpu, last_loc, extend_num_tokens, **extra_alloc_kwargs,
++                )
++                logger.warning("KV physical pressure: evicted up to %d retained tokens and retried allocation of %d tokens -> %s",
++                               evict_n, extend_num_tokens, "ok" if out_cache_loc is not None else "still refused")
++            else:
++                # Sole owner of the pool: nothing to evict, so the strict floor (R3) would only
++                # fail this request. Bypass it for one retry = the unpatched profile's behaviour.
++                _kv = getattr(allocator, "_kvcache", None)
++                _kv = getattr(_kv, "full_kv_pool", _kv)
++                if _kv is not None and hasattr(_kv, "lazy_ensure"):
++                    _kv._strict_bypass = True
++                    try:
++                        out_cache_loc = allocator.alloc_extend(
++                            prefix_lens, prefix_lens_cpu, seq_lens, seq_lens_cpu, last_loc, extend_num_tokens, **extra_alloc_kwargs,
++                        )
++                    finally:
++                        _kv._strict_bypass = False
++                    logger.warning("KV physical pressure: nothing evictable, strict floor bypassed for %d tokens -> %s",
++                                   extend_num_tokens, "ok" if out_cache_loc is not None else "still refused")
++
+     if out_cache_loc is None:
+         error_msg = (
+             f"Prefill out of memory. Try to lower your batch size.\n"

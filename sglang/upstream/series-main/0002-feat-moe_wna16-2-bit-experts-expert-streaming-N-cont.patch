@@ -1,0 +1,2006 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: root <root@docker01.fra.askei.net>
+Date: Wed, 16 Sep 2026 20:36:46 +0000
+Subject: [PATCH 2/5] feat(moe_wna16): 2-bit experts, expert streaming,
+ N-contiguous GEMV
+
+Port the accepted INT2/streaming changes onto main b02e16a895.
+
+- kernel: 2-bit unpack in fused_moe_kernel_gptq_awq and the word-load int2
+  branch (fused_moe_kernel_gptq_awq_word) for the tiled prefill kernel, with
+  int2_w2a16 config-dtype naming so an int4 config is never picked up.
+- runner: use_int2_w2a16 plumbing and N-contiguous [E, K/16, N] int32 grid
+  handling; the fused-swiglu interleaved guard now also rejects int2.
+- loader: 2-bit moe_wna16 loader (asymmetric qzeros raise), N-contiguous
+  re-layout in process_weights_after_loading, expert placement collection and
+  the batch-1 GEMV dispatch (M <= 16) through int64 address tables.
+- expert_stream.py: MoE-aware ExpertStreamer that moves only the routed
+  experts across PCIe; also carries the accepted PP prefetch/ gather-DMA
+  helpers (their model-side wiring follows with the PP commit).
+- expert_gemv.py: in-place int2 GEMV and to_word_ncontig.
+
+The measurement-only prefill route dump hook is not ported. Placement and
+elastic residency modules, lazy KV, quantized QSA, PP and RC/RB follow.
+---
+ .../ops/moe/fused_moe_triton_kernels.py       | 362 ++++++++++-
+ python/sglang/srt/layers/moe/expert_gemv.py   | 109 ++++
+ python/sglang/srt/layers/moe/expert_stream.py | 570 ++++++++++++++++++
+ .../srt/layers/moe/moe_runner/triton.py       |   4 +
+ .../moe/moe_runner/triton_utils/fused_moe.py  |  58 +-
+ .../triton_utils/fused_moe_triton_config.py   |  54 ++
+ .../srt/layers/quantization/moe_wna16.py      | 288 ++++++++-
+ test/manual/test_triton_moe_wna16.py          |  40 +-
+ 8 files changed, 1448 insertions(+), 37 deletions(-)
+ create mode 100644 python/sglang/srt/layers/moe/expert_gemv.py
+ create mode 100644 python/sglang/srt/layers/moe/expert_stream.py
+
+diff --git a/python/sglang/kernels/ops/moe/fused_moe_triton_kernels.py b/python/sglang/kernels/ops/moe/fused_moe_triton_kernels.py
+index c232a4a60c..87f61133d7 100644
+--- a/python/sglang/kernels/ops/moe/fused_moe_triton_kernels.py
++++ b/python/sglang/kernels/ops/moe/fused_moe_triton_kernels.py
+@@ -89,6 +89,294 @@ def write_zeros_to_output(
+     tl.store(c_ptrs, accumulator, mask=c_mask)
+ 
+ 
++# [ncontig] word-load int2 branch
++@triton.jit
++def fused_moe_kernel_gptq_awq_word(
++    # Pointers to matrices
++    a_ptr,
++    b_ptr,
++    c_ptr,
++    b_scale_ptr,
++    b_zp_ptr,
++    topk_weights_ptr,
++    sorted_token_ids_ptr,
++    expert_ids_ptr,
++    num_tokens_post_padded_ptr,
++    # Matrix dimensions
++    N: tl.constexpr,
++    K: tl.constexpr,
++    EM,
++    num_valid_tokens,
++    # The stride variables represent how much to increase the ptr by when
++    # moving by 1 element in a particular dimension. E.g. `stride_am` is
++    # how much to increase `a_ptr` by to get the element one row down
++    # (A has M rows).
++    stride_am,
++    stride_ak,
++    stride_be,
++    stride_bk,
++    stride_bn,
++    stride_cm,
++    stride_cn,
++    stride_bse,
++    stride_bsk,
++    stride_bsn,
++    stride_bze,
++    stride_bzk,
++    stride_bzn,
++    group_size: tl.constexpr,
++    # Meta-parameters
++    BLOCK_SIZE_M: tl.constexpr,
++    BLOCK_SIZE_N: tl.constexpr,
++    BLOCK_SIZE_K: tl.constexpr,
++    GROUP_SIZE_M: tl.constexpr,
++    MUL_ROUTED_WEIGHT: tl.constexpr,
++    top_k: tl.constexpr,
++    compute_type: tl.constexpr,
++    has_zp: tl.constexpr,
++    use_int4_w4a16: tl.constexpr,
++    use_int8_w8a16: tl.constexpr,
++    use_int2_w2a16: tl.constexpr,
++    even_Ks: tl.constexpr,
++    filter_expert: tl.constexpr,
++):
++    """
++    Implements the fused computation for a Mixture of Experts (MOE) using
++    token and expert matrices.
++    Key Parameters:
++    - A: The input tensor representing tokens with shape (*, K), where '*' can
++        be any shape representing batches and K is the feature dimension of
++        each token.
++    - B: The stacked MOE weight tensor with shape (E, N, K), where E is
++        the number of experts, K is the input feature dimension, and N is
++        the output feature dimension.
++    - C: The output cache tensor with shape (M, topk, N), where M is the
++        total number of tokens post padding, topk is the number of times
++        each token is repeated, and N is the output feature dimension.
++    - sorted_token_ids: A tensor containing the sorted indices of tokens,
++        repeated topk times and arranged by the expert index they are
++        assigned to.
++    - expert_ids: A tensor containing the indices of the expert for each
++        block. It determines which expert matrix from B should be used for
++        each block in A.
++    This kernel performs the multiplication of a token by its corresponding
++    expert matrix as determined by `expert_ids`. The sorting of
++    `sorted_token_ids` by expert index and padding ensures divisibility by
++    BLOCK_SIZE_M, which is necessary to maintain consistency in block matrix
++    multiplication across different blocks processed by the same expert.
++    """
++    # -----------------------------------------------------------
++    # Map program ids `pid` to the block of C it should compute.
++    # This is done in a grouped ordering to promote L2 data reuse.
++    pid = tl.program_id(axis=0)
++    num_pid_m = tl.cdiv(EM, BLOCK_SIZE_M)
++    num_pid_n = tl.cdiv(N, BLOCK_SIZE_N)
++    num_pid_in_group = GROUP_SIZE_M * num_pid_n
++    group_id = pid // num_pid_in_group
++    first_pid_m = group_id * GROUP_SIZE_M
++    group_size_m = min(num_pid_m - first_pid_m, GROUP_SIZE_M)
++    pid_m = first_pid_m + ((pid % num_pid_in_group) % group_size_m)
++    pid_n = (pid % num_pid_in_group) // group_size_m
++
++    # ----------------------------------------------------------
++    # Create pointers for the first blocks of A and B.
++    # We will advance this pointer as we move in the K direction
++    # and accumulate
++    # `a_ptrs` is a block of [BLOCK_SIZE_M, BLOCK_SIZE_K] pointers
++    # `b_ptrs` is a block of [BLOCK_SIZE_K, BLOCK_SIZE_N] pointers
++    num_tokens_post_padded = tl.load(num_tokens_post_padded_ptr)
++    if pid_m * BLOCK_SIZE_M >= num_tokens_post_padded:
++        return
++    offs_token_id = pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M).to(tl.int64)
++    offs_token = tl.load(sorted_token_ids_ptr + offs_token_id)
++    token_mask = offs_token < num_valid_tokens
++
++    off_experts = tl.load(expert_ids_ptr + pid_m).to(tl.int64)
++    if filter_expert and off_experts == -1:
++        # -----------------------------------------------------------
++        # Write back zeros to the output when the expert is not
++        # in the current expert parallel rank.
++        write_zeros_to_output(
++            c_ptr,
++            stride_cm,
++            stride_cn,
++            pid_n,
++            N,
++            offs_token,
++            token_mask,
++            BLOCK_SIZE_M,
++            BLOCK_SIZE_N,
++            compute_type,
++        )
++        return
++
++    offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N).to(tl.int64)) % N
++    offs_k = tl.arange(0, BLOCK_SIZE_K)
++    a_ptrs = a_ptr + (
++        offs_token[:, None] // top_k * stride_am + offs_k[None, :] * stride_ak
++    )
++
++    if use_int2_w2a16:
++        # STAGE-1.5: b_ptr is the int32 view of the uint8 tensor ([E, N, K//16] words,
++        # strides in words). One word = 16 consecutive K values, value k at bits 2*(k%16).
++        tl.static_assert(even_Ks, "int2 word path needs K % BLOCK_SIZE_K == 0")
++        tl.static_assert(BLOCK_SIZE_K % 16 == 0, "BLOCK_SIZE_K must be a multiple of 16")
++        offs_kw = tl.arange(0, BLOCK_SIZE_K // 16)
++        b_ptrs = (
++            b_ptr
++            + off_experts * stride_be
++            + offs_kw[:, None] * stride_bk
++            + offs_bn[None, :] * stride_bn
++        )
++        b_shifter = (tl.arange(0, 16) * 2)[None, :, None]
++    elif use_int4_w4a16:
++        b_ptrs = (
++            b_ptr
++            + off_experts * stride_be
++            + (offs_k[:, None] // 2) * stride_bk
++            + offs_bn[None, :] * stride_bn
++        )
++        b_shifter = (offs_k[:, None] % 2) * 4
++    elif use_int8_w8a16:
++        b_ptrs = (
++            b_ptr
++            + off_experts * stride_be
++            + offs_k[:, None] * stride_bk
++            + offs_bn[None, :] * stride_bn
++        )
++
++    if not has_zp and use_int2_w2a16:
++        b_zp_num = 2
++    if not has_zp and use_int4_w4a16:
++        b_zp_num = 8
++    if not has_zp and use_int8_w8a16:
++        b_zp_num = 128
++    elif has_zp and use_int2_w2a16:
++        b_zp_shifter = (offs_bn[None, :] % 4) * 2
++    elif has_zp and use_int4_w4a16:
++        b_zp_shifter = (offs_bn[None, :] % 2) * 4
++
++    # -----------------------------------------------------------
++    # Iterate to compute a block of the C matrix.
++    # We accumulate into a `[BLOCK_SIZE_M, BLOCK_SIZE_N]` block
++    # of fp32 values for higher accuracy.
++    # `accumulator` will be converted back to fp16 after the loop.
++    accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
++    for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
++        # Load the next block of A and B, generate a mask by checking the
++        # K dimension.
++
++        if not even_Ks:
++            k_mask = offs_k[:, None] < K - k * BLOCK_SIZE_K
++            k_other = 0.0
++        else:
++            k_mask = None
++            k_other = None
++
++        a = tl.load(
++            a_ptrs,
++            mask=token_mask[:, None] & (offs_k[None, :] < K - k * BLOCK_SIZE_K),
++            other=0.0,
++        )
++        b = tl.load(b_ptrs)
++        if use_int2_w2a16:
++            # [BK//16, BN] int32 -> [BK//16, 16, BN] -> [BK, BN]; row index 16*word + i == k
++            b = (b[:, None, :] >> b_shifter) & 0x3
++            b = tl.reshape(b, [BLOCK_SIZE_K, BLOCK_SIZE_N])
++        elif use_int4_w4a16:
++            b = (b >> b_shifter) & 0xF
++
++        if use_int2_w2a16:
++            if BLOCK_SIZE_K <= group_size:
++                tl.static_assert(group_size % BLOCK_SIZE_K == 0, "group_size must be a multiple of BLOCK_SIZE_K")
++                # one scale per column for the whole K tile
++                b_scale = tl.load(
++                    b_scale_ptr + off_experts * stride_bse + offs_bn * stride_bsn
++                    + ((BLOCK_SIZE_K * k) // group_size) * stride_bsk
++                ).to(tl.float32)[None, :]
++            else:
++                tl.static_assert(BLOCK_SIZE_K % group_size == 0, "BLOCK_SIZE_K must be a multiple of group_size")
++                offs_g = tl.arange(0, BLOCK_SIZE_K // group_size)
++                b_scale = tl.load(
++                    b_scale_ptr + off_experts * stride_bse + offs_bn[None, :] * stride_bsn
++                    + ((BLOCK_SIZE_K * k) // group_size + offs_g[:, None]) * stride_bsk
++                ).to(tl.float32)
++                b_scale = tl.reshape(
++                    tl.broadcast_to(b_scale[:, None, :], [BLOCK_SIZE_K // group_size, group_size, BLOCK_SIZE_N]),
++                    [BLOCK_SIZE_K, BLOCK_SIZE_N],
++                )
++        else:
++            b_scale_ptrs = (
++                b_scale_ptr
++                + off_experts * stride_bse
++                + offs_bn[None, :] * stride_bsn
++                + ((offs_k[:, None] + BLOCK_SIZE_K * k) // group_size) * stride_bsk
++            )
++            b_scale = tl.load(b_scale_ptrs, mask=k_mask, other=k_other)
++            b_scale = b_scale.to(tl.float32)
++
++        if has_zp and use_int2_w2a16:
++            offs_k_true = (offs_k[:, None] + BLOCK_SIZE_K * k) // group_size
++            b_zp_ptrs = (
++                b_zp_ptr
++                + off_experts * stride_bze
++                + (offs_bn[None, :] // 4) * stride_bzn
++                + offs_k_true * stride_bzk
++            )
++            b_zp = tl.load(b_zp_ptrs, mask=k_mask, other=k_other)
++            b_zp = (b_zp >> b_zp_shifter) & 0x3
++            b_zp = b_zp.to(tl.float32)
++        elif has_zp and use_int4_w4a16:
++            offs_k_true = (offs_k[:, None] + BLOCK_SIZE_K * k) // group_size
++            b_zp_ptrs = (
++                b_zp_ptr
++                + off_experts * stride_bze
++                + (offs_bn[None, :] // 2) * stride_bzn
++                + offs_k_true * stride_bzk
++            )
++            b_zp = tl.load(b_zp_ptrs, mask=k_mask, other=k_other)
++            b_zp = (b_zp >> b_zp_shifter) & 0xF
++            b_zp = b_zp.to(tl.float32)
++        elif has_zp and use_int8_w8a16:
++            offs_k_true = (offs_k[:, None] + BLOCK_SIZE_K * k) // group_size
++            b_zp_ptrs = (
++                b_zp_ptr
++                + off_experts * stride_bze
++                + offs_bn[None, :] * stride_bzn
++                + offs_k_true * stride_bzk
++            )
++            b_zp = tl.load(b_zp_ptrs, mask=k_mask, other=k_other)
++            b_zp = b_zp.to(tl.float32)
++
++        # We accumulate along the K dimension.
++        if has_zp:
++            b = ((b.to(tl.float32) - b_zp) * b_scale).to(compute_type)
++        else:
++            b = ((b.to(tl.float32) - b_zp_num) * b_scale).to(compute_type)
++        accumulator = tl.dot(a, b, acc=accumulator)
++
++        # Advance the ptrs to the next K block.
++        a_ptrs += BLOCK_SIZE_K * stride_ak
++        if use_int2_w2a16:
++            b_ptrs += (BLOCK_SIZE_K // 16) * stride_bk
++        elif use_int4_w4a16:
++            b_ptrs += (BLOCK_SIZE_K // 2) * stride_bk
++        else:
++            b_ptrs += BLOCK_SIZE_K * stride_bk
++
++    if MUL_ROUTED_WEIGHT:
++        moe_weight = tl.load(topk_weights_ptr + offs_token, mask=token_mask, other=0)
++        accumulator = accumulator * moe_weight[:, None]
++
++    accumulator = accumulator.to(compute_type)
++    # -----------------------------------------------------------
++    # Write back the block of the output
++    offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
++    c_ptrs = c_ptr + stride_cm * offs_token[:, None] + stride_cn * offs_cn[None, :]
++    c_mask = token_mask[:, None] & (offs_cn[None, :] < N)
++    tl.store(c_ptrs, accumulator, mask=c_mask)
++
++
+ @triton.jit
+ def fused_moe_kernel_gptq_awq(
+     # Pointers to matrices
+@@ -135,6 +423,7 @@ def fused_moe_kernel_gptq_awq(
+     has_zp: tl.constexpr,
+     use_int4_w4a16: tl.constexpr,
+     use_int8_w8a16: tl.constexpr,
++    use_int2_w2a16: tl.constexpr,
+     even_Ks: tl.constexpr,
+     filter_expert: tl.constexpr,
+ ):
+@@ -214,7 +503,19 @@ def fused_moe_kernel_gptq_awq(
+         offs_token[:, None] // top_k * stride_am + offs_k[None, :] * stride_ak
+     )
+ 
+-    if use_int4_w4a16:
++    if use_int2_w2a16:
++        # 2-bit: 16 values per int32, so after .T.contiguous().view(uint8)
++        # that is 4 values per byte. Byte index = offs_k // 4, shift =
++        # (offs_k % 4) * 2. Verified against real AutoRound tensors: values
++        # 0..3, mean 1.95 (symmetric zero point 2 = 2^(bits-1)).
++        b_ptrs = (
++            b_ptr
++            + off_experts * stride_be
++            + (offs_k[:, None] // 4) * stride_bk
++            + offs_bn[None, :] * stride_bn
++        )
++        b_shifter = (offs_k[:, None] % 4) * 2
++    elif use_int4_w4a16:
+         b_ptrs = (
+             b_ptr
+             + off_experts * stride_be
+@@ -230,10 +531,14 @@ def fused_moe_kernel_gptq_awq(
+             + offs_bn[None, :] * stride_bn
+         )
+ 
++    if not has_zp and use_int2_w2a16:
++        b_zp_num = 2
+     if not has_zp and use_int4_w4a16:
+         b_zp_num = 8
+     if not has_zp and use_int8_w8a16:
+         b_zp_num = 128
++    elif has_zp and use_int2_w2a16:
++        b_zp_shifter = (offs_bn[None, :] % 4) * 2
+     elif has_zp and use_int4_w4a16:
+         b_zp_shifter = (offs_bn[None, :] % 2) * 4
+ 
+@@ -260,7 +565,9 @@ def fused_moe_kernel_gptq_awq(
+             other=0.0,
+         )
+         b = tl.load(b_ptrs)
+-        if use_int4_w4a16:
++        if use_int2_w2a16:
++            b = (b >> b_shifter) & 0x3
++        elif use_int4_w4a16:
+             b = (b >> b_shifter) & 0xF
+ 
+         b_scale_ptrs = (
+@@ -272,7 +579,18 @@ def fused_moe_kernel_gptq_awq(
+         b_scale = tl.load(b_scale_ptrs, mask=k_mask, other=k_other)
+         b_scale = b_scale.to(tl.float32)
+ 
+-        if has_zp and use_int4_w4a16:
++        if has_zp and use_int2_w2a16:
++            offs_k_true = (offs_k[:, None] + BLOCK_SIZE_K * k) // group_size
++            b_zp_ptrs = (
++                b_zp_ptr
++                + off_experts * stride_bze
++                + (offs_bn[None, :] // 4) * stride_bzn
++                + offs_k_true * stride_bzk
++            )
++            b_zp = tl.load(b_zp_ptrs, mask=k_mask, other=k_other)
++            b_zp = (b_zp >> b_zp_shifter) & 0x3
++            b_zp = b_zp.to(tl.float32)
++        elif has_zp and use_int4_w4a16:
+             offs_k_true = (offs_k[:, None] + BLOCK_SIZE_K * k) // group_size
+             b_zp_ptrs = (
+                 b_zp_ptr
+@@ -303,7 +621,9 @@ def fused_moe_kernel_gptq_awq(
+ 
+         # Advance the ptrs to the next K block.
+         a_ptrs += BLOCK_SIZE_K * stride_ak
+-        if use_int4_w4a16:
++        if use_int2_w2a16:
++            b_ptrs += (BLOCK_SIZE_K // 4) * stride_bk
++        elif use_int4_w4a16:
+             b_ptrs += (BLOCK_SIZE_K // 2) * stride_bk
+         else:
+             b_ptrs += BLOCK_SIZE_K * stride_bk
+@@ -805,6 +1125,7 @@ def invoke_fused_moe_kernel(
+     use_int8_w8a8: bool,
+     use_int8_w8a16: bool,
+     use_int4_w4a16: bool,
++    use_int2_w2a16: bool,
+     per_channel_quant: bool,
+     block_shape: Optional[List[int]] = None,
+     no_combine: bool = False,
+@@ -828,7 +1149,13 @@ def invoke_fused_moe_kernel(
+         # plain half-width output; every other output flavor is out of scope.
+         # In particular the LoRA output paths (fuse_add_to_output / mask_output)
+         # address C at full width N and would corrupt the half-width buffer.
+-        assert not (use_fp8_w8a8 or use_int8_w8a8 or use_int8_w8a16 or use_int4_w4a16)
++        assert not (
++            use_fp8_w8a8
++            or use_int8_w8a8
++            or use_int8_w8a16
++            or use_int4_w4a16
++            or use_int2_w2a16
++        )
+         assert bias is None
+         assert not mul_routed_weight
+         assert not (fuse_add_to_output or mask_output or fuse_sum_all_reduce)
+@@ -886,19 +1213,23 @@ def invoke_fused_moe_kernel(
+             assert triton.cdiv(A.shape[-1], block_k) == A_scale.shape[-1]
+             assert triton.cdiv(B.shape[-2], block_n) == B_scale.shape[-2]
+             assert triton.cdiv(B.shape[-1], block_k) == B_scale.shape[-1]
+-    elif use_int8_w8a16 or use_int4_w4a16:
++    elif use_int8_w8a16 or use_int4_w4a16 or use_int2_w2a16:
+         assert B_scale is not None
+         assert block_shape is None or block_shape[0] == 0
+     else:
+         assert A_scale is None
+         assert B_scale is None
+ 
++    # int2 in the N-contiguous int32-word layout ([E, K/16, N]): N is dim 2 and the
++    # K used for the even_Ks check is the activation width, not the packed dim
++    _ncontig = use_int2_w2a16 and B.dtype == torch.int32
++    _n_dim = B.shape[2] if _ncontig else B.shape[1]
+     grid = lambda META: (
+         triton.cdiv(sorted_token_ids.shape[0], META["BLOCK_SIZE_M"])
+-        * triton.cdiv(B.shape[1], META["BLOCK_SIZE_N"]),
++        * triton.cdiv(_n_dim, META["BLOCK_SIZE_N"]),
+     )
+ 
+-    K = B.shape[2] - padded_size
++    K = A.shape[1] if _ncontig else (B.shape[2] - padded_size)
+     if K % config["BLOCK_SIZE_K"] == 0:
+         even_Ks = True
+     else:
+@@ -927,7 +1258,7 @@ def invoke_fused_moe_kernel(
+     # ===== END TO BE REFACTORED ====
+ 
+     if (
+-        (use_int8_w8a16 or use_int4_w4a16)
++        (use_int8_w8a16 or use_int4_w4a16 or use_int2_w2a16)
+         and block_shape is not None
+         and block_shape[1] > 0
+     ):
+@@ -937,7 +1268,7 @@ def invoke_fused_moe_kernel(
+         assert B_scale is not None and B_scale.ndim == 3
+         assert B_zp is None or B_zp.ndim == 3
+         assert bias is None
+-        fused_moe_kernel_gptq_awq[grid](
++        (fused_moe_kernel_gptq_awq_word if _ncontig else fused_moe_kernel_gptq_awq)[grid](
+             A,
+             B,
+             C,
+@@ -947,20 +1278,20 @@ def invoke_fused_moe_kernel(
+             sorted_token_ids,
+             expert_ids,
+             num_tokens_post_padded,
+-            B.shape[1],
++            B.shape[2] if _ncontig else B.shape[1],
+             A.shape[1],
+             sorted_token_ids.shape[0],
+             topk_ids.numel(),
+             A.stride(0),
+             A.stride(1),
+             B.stride(0),
+-            B.stride(2),
+-            B.stride(1),
++            B.stride(1) if _ncontig else B.stride(2),
++            B.stride(2) if _ncontig else B.stride(1),
+             C.stride(-2),
+             C.stride(-1),
+             B_scale.stride(0),
+-            B_scale.stride(2),
+-            B_scale.stride(1),
++            B_scale.stride(1) if _ncontig else B_scale.stride(2),
++            B_scale.stride(2) if _ncontig else B_scale.stride(1),
+             B_zp.stride(0) if B_zp is not None else 0,
+             B_zp.stride(2) if B_zp is not None else 0,
+             B_zp.stride(1) if B_zp is not None else 0,
+@@ -971,6 +1302,7 @@ def invoke_fused_moe_kernel(
+             has_zp=B_zp is not None,
+             use_int4_w4a16=use_int4_w4a16,
+             use_int8_w8a16=use_int8_w8a16,
++            use_int2_w2a16=use_int2_w2a16,
+             even_Ks=even_Ks,
+             filter_expert=filter_expert,
+             **config,
+diff --git a/python/sglang/srt/layers/moe/expert_gemv.py b/python/sglang/srt/layers/moe/expert_gemv.py
+new file mode 100644
+index 0000000000..0a17491b4a
+--- /dev/null
++++ b/python/sglang/srt/layers/moe/expert_gemv.py
+@@ -0,0 +1,109 @@
++"""Batch-1 int2 MoE GEMV on the N-contiguous int32-word layout, through a pointer table.
++
++Layout per expert (shared with the tiled prefill kernel's word-load int2 branch):
++    qweight  int32 [K/16, N]    word kw holds values 16kw..16kw+15 at bits 2*(k%16), N contiguous
++    scales   f16|bf16 [K/128, N]  symmetric, zero point 2  ->  w = (q - 2) * s
++
++Lanes run along N, so every warp-load is one contiguous 128-B line of int32 words. That is the
++property measured at 320 GB/s from device memory and 51 GB/s (PCIe line rate) from pinned host
++memory (perf/gemv/test_gemv_ncontig.py); the byte-row variant of the same idea reached only
++157 / 14 GB/s and was rejected.
++
++Pointer tables: int64 [E] of per-expert base addresses for qweight and scales, on the device.
++An entry may point into device memory or into pinned host memory; the kernel does not care.
++The kernel indexes with the ORIGINAL expert ids. No gather, no staging, no renumbering.
++
++Derived from perf/int2_gemv/moe_gemv_int2_ncontig_v4.py (word-load, CPU-interpreter verified).
++"""
++import torch
++import triton
++import triton.language as tl
++
++
++@triton.jit
++def _moe_gemv_int2_tab(
++    a_ptr, stride_am,                 # activations bf16 [M, K]; row r uses a[r // TOP_K]
++    wtab_ptr, stab_ptr,               # int64 [E]: base address of qweight / scales per expert
++    topk_ids_ptr, topk_w_ptr,         # [R] original ids, [R] routed weights (fp32)
++    c_ptr, stride_cm,                 # out bf16 [R, N]
++    N, K, stride_ww, stride_sg,       # row strides: qweight words per K/16 row, scales per group row
++    TOP_K: tl.constexpr, GROUP: tl.constexpr,
++    BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
++    MUL_ROUTED_WEIGHT: tl.constexpr,
++    SCALE_BF16: tl.constexpr,
++):
++    tl.static_assert(BLOCK_K % GROUP == 0)
++    tl.static_assert(BLOCK_K % 16 == 0)
++    pid_n = tl.program_id(0)
++    r = tl.program_id(1)
++    e = tl.load(topk_ids_ptr + r).to(tl.int64)
++    wbase = tl.load(wtab_ptr + e).to(tl.pointer_type(tl.int32))
++    if SCALE_BF16:
++        sbase = tl.load(stab_ptr + e).to(tl.pointer_type(tl.bfloat16))
++    else:
++        sbase = tl.load(stab_ptr + e).to(tl.pointer_type(tl.float16))
++
++    offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
++    n_mask = offs_n < N
++    NW: tl.constexpr = BLOCK_K // 16
++    NG: tl.constexpr = BLOCK_K // GROUP
++    offs_w = tl.arange(0, NW)
++    a_base = a_ptr + (r // TOP_K) * stride_am
++
++    acc = tl.zeros([BLOCK_N], dtype=tl.float32)
++    for k0 in range(0, K, BLOCK_K):
++        w = tl.load(wbase + (k0 // 16 + offs_w[:, None]) * stride_ww + offs_n[None, :],
++                    mask=n_mask[None, :], other=0)                              # [NW, BN] int32
++        part = tl.zeros([NW, BLOCK_N], dtype=tl.float32)
++        for i in tl.static_range(16):
++            x_i = tl.load(a_base + k0 + offs_w * 16 + i).to(tl.float32)      # [NW], warp-uniform
++            part += ((w >> (2 * i)) & 3).to(tl.float32) * x_i[:, None]
++        xs = tl.sum(tl.load(a_base + k0 + tl.arange(0, BLOCK_K)).to(tl.float32)
++                    .reshape([NG, GROUP]), axis=1)                             # [NG] zero-point term
++        part_g = tl.sum(tl.reshape(part, [NG, GROUP // 16, BLOCK_N]), axis=1)  # [NG, BN]
++        s = tl.load(sbase + (k0 // GROUP + tl.arange(0, NG)[:, None]) * stride_sg + offs_n[None, :],
++                    mask=n_mask[None, :], other=0.0).to(tl.float32)
++        acc += tl.sum((part_g - 2.0 * xs[:, None]) * s, axis=0)
++    if MUL_ROUTED_WEIGHT:
++        acc = acc * tl.load(topk_w_ptr + r)
++    tl.store(c_ptr + r * stride_cm + offs_n, acc.to(tl.bfloat16), mask=n_mask)
++
++
++def moe_gemv_int2_tab(a, wtab, stab, topk_ids, topk_w, N, K, stride_ww, stride_sg,
++                      top_k, mul_routed_weight, block_n=64, block_k=128, num_warps=4,
++                      scale_bf16=True):
++    """a [M, K] bf16; topk_ids/topk_w flat [R]; returns bf16 [R, N].
++    scale_bf16: True on the server (params_dtype), False for raw checkpoint f16 scales."""
++    assert K % block_k == 0 and block_k % 128 == 0, (K, block_k)   # BK=256 breaks K=640
++    R = topk_ids.numel()
++    c = torch.empty((R, N), dtype=torch.bfloat16, device=a.device)
++    _moe_gemv_int2_tab[(triton.cdiv(N, block_n), R)](
++        a, a.stride(0), wtab, stab, topk_ids, topk_w, c, c.stride(0),
++        N, K, stride_ww, stride_sg,
++        TOP_K=top_k, GROUP=128, BLOCK_N=block_n, BLOCK_K=block_k,
++        MUL_ROUTED_WEIGHT=mul_routed_weight, SCALE_BF16=scale_bf16, num_warps=num_warps)
++    return c
++
++
++def make_tables(qweight, scales):
++    """qweight int32 [E, K/16, N], scales f16/bf16 [E, K/128, N] (device or pinned host, contiguous)
++    -> int64 [E] address tables on the CUDA device, plus the row strides in elements."""
++    assert qweight.dtype == torch.int32 and scales.dtype in (torch.float16, torch.bfloat16), \
++        (qweight.dtype, scales.dtype)
++    assert qweight.is_contiguous() and scales.is_contiguous()
++    E = qweight.shape[0]
++    wt = torch.arange(E, dtype=torch.int64) * (qweight.stride(0) * 4) + qweight.data_ptr()
++    st = torch.arange(E, dtype=torch.int64) * (scales.stride(0) * 2) + scales.data_ptr()
++    return wt.cuda(), st.cuda(), qweight.stride(1), scales.stride(1)
++
++
++def to_word_ncontig(qweight_u8_nk):
++    """Loader layout uint8 [E, N, K/4] (what MoeWNA16 holds today) -> int32 [E, K/16, N].
++
++    Byte kb = k//4 of row n becomes byte (kb % 4) of word kb // 4 at column n, little-endian:
++    value k lands at bits 8*((k//4)%4) + 2*(k%4) = 2*(k%16). Bit-exact re-arrangement."""
++    E, N, KB = qweight_u8_nk.shape
++    t = qweight_u8_nk.transpose(1, 2)                       # [E, K/4, N]
++    t = t.reshape(E, KB // 4, 4, N).permute(0, 1, 3, 2)     # [E, K/16, N, 4]
++    # view(int32) folds the trailing 4 bytes into one word: [E, K/16, N, 1] -> drop the 1
++    return t.contiguous().view(torch.int32).view(E, KB // 4, N)
+diff --git a/python/sglang/srt/layers/moe/expert_stream.py b/python/sglang/srt/layers/moe/expert_stream.py
+new file mode 100644
+index 0000000000..94c7020353
+--- /dev/null
++++ b/python/sglang/srt/layers/moe/expert_stream.py
+@@ -0,0 +1,570 @@
++"""MoE-aware weight offloading for expert layers.
++
++Why this exists
++---------------
++SGLang's ``--cpu-offload-gb`` copies a module's entire ``state_dict`` to the
++device on every forward pass. That is correct for a dense model; for an MoE
++with 512 experts and top-10 routing it is roughly 40x more traffic than needed.
++
++Measured on Qwen3.8-Flash-Next, RTX PRO 4000, PCIe Gen5 x16:
++    rxpci 55-61 GB/s sustained, ~26 GB per token, 2.3 tok/s.
++    What is actually needed: 10 x 48 x 1.31 MB = 0.63 GB per token.
++
++How it works
++------------
++Nothing is moved or copied. After loading, both device and host memory are
++full, so any additional allocation would trip the OOM killer. Instead the
++expert tensors are excluded from the bulk transfer in ``offloader.py`` and stay
++where the offloader already placed them (pinned host memory, or the GPU). This
++streamer gathers exactly the selected experts into one shared staging buffer
++per forward pass and renumbers the top-k ids onto it. The Triton kernel is
++unchanged - it still sees one contiguous tensor.
++
++Enabled via ``SGLANG_MOE_EXPERT_STREAM=1``.
++"""
++
++from __future__ import annotations
++
++import ctypes
++import os
++from typing import Dict, List, Tuple
++
++import torch
++import triton
++import triton.language as tl
++
++from sglang.srt.utils import logger
++
++
++@triton.jit
++def _gather_rows_kernel(src_ptr, idx_ptr, out_ptr, row_bytes,
++                        BLOCK: tl.constexpr):
++    """Copy selected rows bytewise; the source may live in host memory.
++
++    The point is that expert ids stay on the GPU. The naive route
++    (``uniq.to("cpu")`` followed by one copy per row) forces a device
++    synchronization per layer - with 48 layers per token that is the single
++    largest cost, and the GPU only waits. Pinned host memory is directly
++    addressable from a kernel under unified addressing; SGLang does the same
++    for the PLE table.
++    """
++    row = tl.load(idx_ptr + tl.program_id(0)).to(tl.int64)
++    offs = tl.program_id(1) * BLOCK + tl.arange(0, BLOCK)
++    mask = offs < row_bytes
++    vals = tl.load(src_ptr + row * row_bytes + offs, mask=mask, other=0)
++    tl.store(out_ptr + tl.program_id(0).to(tl.int64) * row_bytes + offs,
++             vals, mask=mask)
++
++
++_STAGING: Dict[Tuple, torch.Tensor] = {}
++
++
++@triton.jit
++def _gather_rows_tab_kernel(tab_ptr, idx_ptr, out_ptr, row_bytes, BLOCK: tl.constexpr):
++    """Row gather through an address table: expert id -> int64 row address (GPU or pinned host)."""
++    e = tl.load(idx_ptr + tl.program_id(0)).to(tl.int64)
++    base = tl.load(tab_ptr + e)
++    src = base.to(tl.pointer_type(tl.uint8))
++    offs = tl.program_id(1) * BLOCK + tl.arange(0, BLOCK)
++    mask = offs < row_bytes
++    vals = tl.load(src + offs, mask=mask, other=0)
++    tl.store(out_ptr + tl.program_id(0).to(tl.int64) * row_bytes + offs, vals, mask=mask)
++_TENSOR_NAMES = ("w13_qweight", "w2_qweight", "w13_scales", "w2_scales",
++                 "w13_qzeros", "w2_qzeros")
++_LOGGED = False
++# Work without deduplication up to this many ids (avoids the device sync).
++_NO_DEDUP_LIMIT = 64
++_GATHER_BLOCK = int(os.environ.get("SGLANG_MOE_GATHER_BLOCK", "1024"))
++if _GATHER_BLOCK not in (512, 1024, 2048, 4096, 8192):
++    raise ValueError(
++        "SGLANG_MOE_GATHER_BLOCK must be one of 512, 1024, 2048, 4096, 8192"
++    )
++_ARANGE_CACHE: Dict[Tuple, torch.Tensor] = {}
++_GATHER_DMA = os.environ.get("SGLANG_MOE_GATHER_DMA", "0") == "1"
++_GATHER_DMA_BATCH = os.environ.get("SGLANG_MOE_GATHER_DMA_BATCH", "0") == "1"
++_DMA_BATCH_STREAM = None
++_DMA_BATCH_FN = None
++_DMA_BATCH_USABLE = True
++_COLD_PREFETCH = os.environ.get("SGLANG_MOE_COLD_PREFETCH", "0") == "1"
++_COLD_PREFETCH_MIN_TOKENS = int(
++    os.environ.get("SGLANG_MOE_COLD_PREFETCH_MIN_TOKENS", "2048")
++)
++if _COLD_PREFETCH_MIN_TOKENS < 17:
++    raise ValueError("SGLANG_MOE_COLD_PREFETCH_MIN_TOKENS must be at least 17")
++_PREFETCH_STREAM = None
++_PREFETCH_CACHE: Dict[Tuple, torch.Tensor] = {}
++_PREFETCH_READY = None
++_PREFETCH_RELEASE = None
++_PREFETCH_LAYER = None
++_PREFETCH_STREAMERS = {}
++_PREFETCH_LOGGED = False
++_FULL_TABLE = os.environ.get("SGLANG_MOE_PREFETCH_FULL_TABLE", "0") == "1"
++
++
++class _CudaMemLocation(ctypes.Structure):
++    _fields_ = [("type", ctypes.c_int), ("id", ctypes.c_int)]
++
++
++class _CudaMemcpyAttributes(ctypes.Structure):
++    _fields_ = [
++        ("srcAccessOrder", ctypes.c_int),
++        ("srcLocHint", _CudaMemLocation),
++        ("dstLocHint", _CudaMemLocation),
++        ("flags", ctypes.c_uint),
++    ]
++
++
++def _cached_arange(n: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
++    key = (n, str(device), dtype)
++    t = _ARANGE_CACHE.get(key)
++    if t is None:
++        t = torch.arange(n, device=device, dtype=dtype)
++        _ARANGE_CACHE[key] = t
++    return t
++
++
++def enabled() -> bool:
++    return os.environ.get("SGLANG_MOE_EXPERT_STREAM") == "1"
++
++
++_FIRST_LAYER_PREFETCH = os.environ.get(
++    "SGLANG_MOE_PREFETCH_FIRST_LAYER", "0"
++) == "1"
++
++
++def prefetch_first_layer(num_tokens: int) -> None:
++    """Start the first streamer's routing-independent cold-row copy early."""
++    if not _FIRST_LAYER_PREFETCH or not _COLD_PREFETCH:
++        return
++    if num_tokens < _COLD_PREFETCH_MIN_TOKENS:
++        return
++    if not _PREFETCH_STREAMERS:
++        return
++    first = min(_PREFETCH_STREAMERS)
++    _PREFETCH_STREAMERS[first]._prefetch_all_cold()
++
++
++def _staging(name: str, k: int, max_k: int, rest: Tuple[int, ...],
++             dtype: torch.dtype, device: torch.device) -> torch.Tensor:
++    """One buffer per tensor kind, at full size, sliced to the first k rows.
++
++    Important: do NOT allocate one buffer per distinct k. The number of
++    selected experts varies from call to call (10 during decode, up to 512
++    during prefill); a buffer per size fills the VRAM within a few requests.
++    """
++    key = (name, dtype, str(device), tuple(rest))
++    buf = _STAGING.get(key)
++    if buf is None:
++        buf = torch.empty((max_k,) + rest, dtype=dtype, device=device)
++        _STAGING[key] = buf
++        logger.info("MoE staging buffer %s: %s, %.0f MB",
++                    name, tuple(buf.shape),
++                    buf.numel() * buf.element_size() / 1e6)
++    return buf[:k]
++
++
++def _dma_batch_stream(device):
++    global _DMA_BATCH_STREAM
++    if _DMA_BATCH_STREAM is None:
++        _DMA_BATCH_STREAM = torch.cuda.Stream(device=device)
++    return _DMA_BATCH_STREAM
++
++
++def _dma_batch_fn():
++    global _DMA_BATCH_FN
++    if _DMA_BATCH_FN is None:
++        fn = ctypes.CDLL(None).cudaMemcpyBatchAsync
++        fn.argtypes = [
++            ctypes.POINTER(ctypes.c_void_p),
++            ctypes.POINTER(ctypes.c_void_p),
++            ctypes.POINTER(ctypes.c_size_t),
++            ctypes.c_size_t,
++            ctypes.POINTER(_CudaMemcpyAttributes),
++            ctypes.POINTER(ctypes.c_size_t),
++            ctypes.c_size_t,
++            ctypes.c_void_p,
++        ]
++        fn.restype = ctypes.c_int
++        _DMA_BATCH_FN = fn
++    return _DMA_BATCH_FN
++
++
++def _dma_batch_submit(placed, name, hm, host, buf, dst_start, row_bytes, stream):
++    """Submit independent stable-pinned-source copies; False requests fallback."""
++    global _DMA_BATCH_USABLE
++    if not _DMA_BATCH_USABLE:
++        return False
++    cache = placed.setdefault("_dma_src_addr", {})
++    src_all = cache.get(name)
++    if src_all is None:
++        src_all = []
++        for slot in hm:
++            if slot is None:
++                src_all.append(0)
++            else:
++                tensor, row = slot
++                src_all.append(tensor.data_ptr() + row * row_bytes)
++        cache[name] = src_all
++    src_values = [src_all[e] for e in host]
++    if not all(src_values):
++        raise RuntimeError(f"DMA batch source map disagrees with residency for {name}")
++    count = len(src_values)
++    srcs = (ctypes.c_void_p * count)(*src_values)
++    base = buf.data_ptr() + dst_start * row_bytes
++    dsts = (ctypes.c_void_p * count)(
++        *(base + j * row_bytes for j in range(count))
++    )
++    sizes = (ctypes.c_size_t * count)(*[row_bytes] * count)
++    attrs = _CudaMemcpyAttributes(
++        3,                         # stable pinned rows: access may outlive API call
++        _CudaMemLocation(2, 0),    # host
++        _CudaMemLocation(1, torch.cuda.current_device()),
++        1,                         # prefer overlap with compute
++    )
++    attrs_idx = (ctypes.c_size_t * 1)(0)
++    err = _dma_batch_fn()(
++        dsts, srcs, sizes, count, ctypes.byref(attrs), attrs_idx, 1,
++        ctypes.c_void_p(stream.cuda_stream),
++    )
++    if err in (36, 801):           # newer driver required / not supported
++        ctypes.CDLL(None).cudaGetLastError()
++        _DMA_BATCH_USABLE = False
++        logger.warning("cudaMemcpyBatchAsync unavailable (cudaError=%d); using copy_ loop", err)
++        return False
++    if err:
++        raise RuntimeError(f"cudaMemcpyBatchAsync failed with cudaError={err}")
++    return True
++
++
++def _cold_prefetch_stream(device):
++    global _PREFETCH_STREAM
++    if _PREFETCH_STREAM is None:
++        _PREFETCH_STREAM = torch.cuda.Stream(device=device)
++    return _PREFETCH_STREAM
++
++
++def _cold_prefetch_cache(name, max_k, rest, dtype, device):
++    """One full-size cache per tensor kind, reused by every MoE layer."""
++    global _PREFETCH_LOGGED
++    key = (name, dtype, str(device), tuple(rest))
++    buf = _PREFETCH_CACHE.get(key)
++    if buf is None:
++        buf = torch.empty((max_k,) + tuple(rest), dtype=dtype, device=device)
++        _PREFETCH_CACHE[key] = buf
++        logger.info(
++            "MoE cold-prefetch cache %s: %s, %.0f MB",
++            name, tuple(buf.shape), buf.numel() * buf.element_size() / 1e6,
++        )
++        if not _PREFETCH_LOGGED:
++            _PREFETCH_LOGGED = True
++            logger.info(
++                "MoE cross-layer cold-row prefetch active at >=%d tokens",
++                _COLD_PREFETCH_MIN_TOKENS,
++            )
++    return buf
++
++
++class ExpertStreamer:
++    """Gathers only the selected experts on each forward pass."""
++
++    def __init__(self, layer: torch.nn.Module):
++        self.layer = layer
++        self.lid = int(getattr(layer, "layer_id", -1))
++        self.names: List[str] = []
++        self.device = torch.device("cuda")
++        self._prefetch_cold = None
++        self._prefetch_tabs = {}
++        for name in _TENSOR_NAMES:
++            t = getattr(layer, name, None)
++            if t is None:
++                continue
++            t = t.data if isinstance(t, torch.nn.Parameter) else t
++            if t.numel() == 0 or t.shape[0] == 0:
++                continue          # qzeros are empty tensors when sym=True
++            self.names.append(name)
++
++        global _LOGGED
++        if not _LOGGED and self.names:
++            _LOGGED = True
++            t = getattr(layer, self.names[0])
++            t = t.data if isinstance(t, torch.nn.Parameter) else t
++            logger.info(
++                "MoE expert streaming active: %d experts, source on %s, "
++                "tensors %s",
++                t.shape[0], t.device, ",".join(self.names),
++            )
++
++        if _COLD_PREFETCH and getattr(layer, "_placed", None) is not None:
++            _PREFETCH_STREAMERS[self.lid] = self
++
++    def gather(self, topk_ids: torch.Tensor
++               ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
++        self._last_m = int(topk_ids.shape[0])
++        if _COLD_PREFETCH and self._last_m >= _COLD_PREFETCH_MIN_TOKENS:
++            placed = getattr(self.layer, "_placed", None)
++            if placed is not None:
++                for name in self.names:
++                    proto = placed["proto"][name]
++                    _cold_prefetch_cache(
++                        name, placed["E"], tuple(proto.shape[1:]),
++                        proto.dtype, self.device,
++                    )
++        flat = topk_ids.reshape(-1)
++        if (
++            _FULL_TABLE
++            and _COLD_PREFETCH
++            and _GATHER_DMA
++            and self._prefetch_tabs
++        ):
++            _ft_placed = getattr(self.layer, "_placed", None)
++            if (
++                _ft_placed is not None
++                and _PREFETCH_LAYER == self.lid
++                and all(nm in _ft_placed.get("home", {}) for nm in self.names)
++            ):
++                return _prefetched_full_gather(self, _ft_placed, topk_ids)
++        n = flat.numel()
++        if n <= _NO_DEDUP_LIMIT:
++            # During decode this is 10 ids. torch.unique would have to
++            # synchronize here because its output size is data-dependent, and
++            # that per-layer sync is the most expensive item. Copying a
++            # duplicated expert is cheaper than the sync: the renumbering is
++            # then a plain arange.
++            uniq = flat
++            k = n
++            inverse = _cached_arange(n, flat.device, topk_ids.dtype)
++        else:
++            uniq, inverse = torch.unique(flat, return_inverse=True)
++            k = int(uniq.numel())
++
++        out: Dict[str, torch.Tensor] = {}
++        placed = getattr(self.layer, "_placed", None)
++        if placed is not None and _GATHER_DMA \
++                and all(nm in placed.get("home", {}) for nm in self.names):
++            if _COLD_PREFETCH and _PREFETCH_LAYER == self.lid:
++                return self._gather_prefetched(placed, uniq, inverse, topk_ids)
++            return self._gather_dma(placed, uniq, inverse, topk_ids)
++        for name in self.names:
++            if placed is not None:
++                proto = placed["proto"][name]          # a hot GPU tensor: shape[1:], dtype
++                buf = _staging(name, k, placed["E"], tuple(proto.shape[1:]), proto.dtype, self.device)
++                row_bytes = proto[0].numel() * proto.element_size()
++                BLOCK = _GATHER_BLOCK
++                _gather_rows_tab_kernel[(k, triton.cdiv(row_bytes, BLOCK))](
++                    placed["addr"][name], uniq, buf.view(torch.uint8), row_bytes, BLOCK=BLOCK)
++                out[name] = buf
++                continue
++            src = getattr(self.layer, name)
++            src = src.data if isinstance(src, torch.nn.Parameter) else src
++            buf = _staging(name, k, src.shape[0], tuple(src.shape[1:]),
++                           src.dtype, self.device)
++            if src.is_cuda:
++                torch.index_select(src, 0, uniq, out=buf)
++            else:
++                src_u8 = src.view(torch.uint8)
++                buf_u8 = buf.view(torch.uint8)
++                row_bytes = src_u8.numel() // src_u8.shape[0]
++                BLOCK = _GATHER_BLOCK
++                _gather_rows_kernel[(k, triton.cdiv(row_bytes, BLOCK))](
++                    src_u8, uniq, buf_u8, row_bytes, BLOCK=BLOCK,
++                )
++            out[name] = buf
++        return inverse.reshape(topk_ids.shape).to(topk_ids.dtype), out
++
++    def _ensure_prefetch_tables(self, placed, cold):
++        """Build expert-id address tables pointing cold ids into the cache."""
++        cold = tuple(cold)
++        if self._prefetch_cold == cold and len(self._prefetch_tabs) == len(self.names):
++            return
++        cold_ids = torch.tensor(cold, dtype=torch.int64, device=self.device)
++        tabs = {}
++        for name in self.names:
++            proto = placed["proto"][name]
++            cache = _cold_prefetch_cache(
++                name, placed["E"], tuple(proto.shape[1:]), proto.dtype, self.device
++            )
++            row_bytes = proto[0].numel() * proto.element_size()
++            tab = placed["addr"][name].clone()
++            if cold:
++                offsets = torch.arange(
++                    len(cold), dtype=torch.int64, device=self.device
++                ) * row_bytes
++                tab[cold_ids] = offsets + cache.data_ptr()
++            tabs[name] = tab
++        self._prefetch_cold = cold
++        self._prefetch_tabs = tabs
++
++    def _prefetch_all_cold(self):
++        """Queue this layer's fixed cold rows into the shared device cache."""
++        global _PREFETCH_LAYER, _PREFETCH_READY
++        placed = getattr(self.layer, "_placed", None)
++        if placed is None or not self.names:
++            return
++        home = placed["home"]
++        cold = [e for e, slot in enumerate(home[self.names[0]]) if slot is not None]
++        for name in self.names[1:]:
++            other = [e for e, slot in enumerate(home[name]) if slot is not None]
++            if other != cold:
++                raise RuntimeError("cold-prefetch residency differs across tensor kinds")
++        self._ensure_prefetch_tables(placed, cold)
++        stream = _cold_prefetch_stream(self.device)
++        if _PREFETCH_RELEASE is not None:
++            stream.wait_event(_PREFETCH_RELEASE)
++        with torch.cuda.stream(stream):
++            for name in self.names:
++                proto = placed["proto"][name]
++                cache = _cold_prefetch_cache(
++                    name, placed["E"], tuple(proto.shape[1:]),
++                    proto.dtype, self.device,
++                )
++                row_bytes = proto[0].numel() * proto.element_size()
++                submitted = bool(cold) and _GATHER_DMA_BATCH and _dma_batch_submit(
++                    placed, name, home[name], cold, cache, 0, row_bytes, stream
++                )
++                if cold and not submitted:
++                    for j, e in enumerate(cold):
++                        tensor, slot = home[name][e]
++                        cache[j].copy_(tensor[slot], non_blocking=True)
++            ready = torch.cuda.Event()
++            ready.record(stream)
++        _PREFETCH_READY = ready
++        _PREFETCH_LAYER = self.lid
++
++    def prefetch_next(self):
++        """Schedule layer L+1 only after layer L's fused MoE has been queued."""
++        if (
++            not _COLD_PREFETCH
++            or getattr(self, "_last_m", 0) < _COLD_PREFETCH_MIN_TOKENS
++        ):
++            return
++        nxt = _PREFETCH_STREAMERS.get(self.lid + 1)
++        if nxt is not None:
++            nxt._prefetch_all_cold()
++
++    def _gather_prefetched(self, placed, uniq, inverse, topk_ids):
++        """Compact resident and already-prefetched cold rows on the GPU."""
++        global _PREFETCH_LAYER, _PREFETCH_RELEASE
++        if _PREFETCH_READY is None or not self._prefetch_tabs:
++            return self._gather_dma(placed, uniq, inverse, topk_ids)
++        current = torch.cuda.current_stream(self.device)
++        current.wait_event(_PREFETCH_READY)
++        k = int(uniq.numel())
++        out: Dict[str, torch.Tensor] = {}
++        BLOCK = _GATHER_BLOCK
++        for name in self.names:
++            proto = placed["proto"][name]
++            buf = _staging(
++                name, k, placed["E"], tuple(proto.shape[1:]),
++                proto.dtype, self.device,
++            )
++            row_bytes = proto[0].numel() * proto.element_size()
++            _gather_rows_tab_kernel[(k, triton.cdiv(row_bytes, BLOCK))](
++                self._prefetch_tabs[name], uniq, buf.view(torch.uint8),
++                row_bytes, BLOCK=BLOCK,
++            )
++            out[name] = buf
++        release = torch.cuda.Event()
++        release.record(current)
++        _PREFETCH_RELEASE = release
++        _PREFETCH_LAYER = None
++        new_ids = inverse.reshape(topk_ids.shape).to(topk_ids.dtype)
++        return new_ids, out
++
++    def _gather_dma(self, placed, uniq, inverse, topk_ids):
++        """Resident rows via one tab-kernel launch; host rows via DMA copy_.
++
++        Staging layout: resident rows first (in uniq order), then host rows.
++        The returned ids are renumbered onto that layout through a position
++        lookup; bytes per id are identical to the pure-kernel path, so the
++        fused MoE result is bit-exact.
++        """
++        home = placed["home"]
++        h0 = home[self.names[0]]
++        u = uniq.tolist()
++        kr = 0
++        lut = torch.empty(len(u), dtype=torch.int32)
++        for i, e in enumerate(u):
++            if h0[e] is None:
++                kr += 1
++        r = h = 0
++        h = kr
++        for i, e in enumerate(u):
++            if h0[e] is None:
++                lut[i] = r
++                r += 1
++            else:
++                lut[i] = h
++                h += 1
++        dev = self.device
++        res_ids = torch.tensor([e for e in u if h0[e] is None],
++                               dtype=torch.int64, device=dev) if kr else None
++        host = [e for e in u if h0[e] is not None]
++        lut = lut.to(dev)
++        new_ids = lut.index_select(0, inverse.to(torch.int64)) \
++                     .reshape(topk_ids.shape).to(topk_ids.dtype)
++        out: Dict[str, torch.Tensor] = {}
++        BLOCK = _GATHER_BLOCK
++        use_batch = _GATHER_DMA_BATCH and bool(host)
++        current = torch.cuda.current_stream(dev) if use_batch else None
++        copy_stream = _dma_batch_stream(dev) if use_batch else None
++        if use_batch:
++            copy_stream.wait_stream(current)
++        for name in self.names:
++            proto = placed["proto"][name]
++            buf = _staging(name, len(u), placed["E"], tuple(proto.shape[1:]),
++                           proto.dtype, dev)
++            row_bytes = proto[0].numel() * proto.element_size()
++            if kr:
++                _gather_rows_tab_kernel[(kr, triton.cdiv(row_bytes, BLOCK))](
++                    placed["addr"][name], res_ids,
++                    buf.view(torch.uint8)[:kr], row_bytes, BLOCK=BLOCK)
++            hm = home[name]
++            submitted = False
++            if use_batch:
++                with torch.cuda.stream(copy_stream):
++                    submitted = _dma_batch_submit(
++                        placed, name, hm, host, buf, kr, row_bytes, copy_stream
++                    )
++            if not submitted:
++                for j, e in enumerate(host):
++                    t, slot = hm[e]
++                    buf[kr + j].copy_(t[slot], non_blocking=True)
++            out[name] = buf
++        if use_batch:
++            current.wait_stream(copy_stream)
++        return new_ids, out
++
++
++def _prefetched_full_gather(self, placed, topk_ids):
++    """Gather every expert id into a full staging table; keep the router ids.
++
++    ``self._prefetch_tabs`` already maps resident ids to the resident tensor and
++    prefetched cold ids into the reusable device cache.  Copying ``arange(E)``
++    through it produces a complete ``E``-row table indexed by expert id, so the
++    fused kernel consumes the original ``topk_ids`` directly.  No data-dependent
++    size is computed, so no device synchronization is required.
++    """
++    global _PREFETCH_LAYER, _PREFETCH_RELEASE
++    current = torch.cuda.current_stream(self.device)
++    current.wait_event(_PREFETCH_READY)
++    experts = int(placed["E"])
++    all_ids = _cached_arange(experts, self.device, torch.int64)
++    block = _GATHER_BLOCK
++    out: Dict[str, torch.Tensor] = {}
++    for name in self.names:
++        proto = placed["proto"][name]
++        buf = _staging(
++            name, experts, experts, tuple(proto.shape[1:]),
++            proto.dtype, self.device,
++        )
++        row_bytes = proto[0].numel() * proto.element_size()
++        _gather_rows_tab_kernel[(experts, triton.cdiv(row_bytes, block))](
++            self._prefetch_tabs[name], all_ids, buf.view(torch.uint8),
++            row_bytes, BLOCK=block,
++        )
++        out[name] = buf
++    release = torch.cuda.Event()
++    release.record(current)
++    _PREFETCH_RELEASE = release
++    _PREFETCH_LAYER = None
++    return topk_ids, out
+diff --git a/python/sglang/srt/layers/moe/moe_runner/triton.py b/python/sglang/srt/layers/moe/moe_runner/triton.py
+index 961b581d23..5a75425564 100644
+--- a/python/sglang/srt/layers/moe/moe_runner/triton.py
++++ b/python/sglang/srt/layers/moe/moe_runner/triton.py
+@@ -59,6 +59,7 @@ class TritonMoeQuantInfo(MoeQuantInfo):
+     use_int8_w8a8: bool = False
+     use_int8_w8a16: bool = False
+     use_int4_w4a16: bool = False
++    use_int2_w2a16: bool = False
+     per_channel_quant: bool = False
+     w13_scale: Optional[torch.Tensor] = None
+     w2_scale: Optional[torch.Tensor] = None
+@@ -145,6 +146,7 @@ class TritonRunnerCore(MoeRunnerCore):
+             use_int8_w8a8=quant_info.use_int8_w8a8,
+             use_int8_w8a16=quant_info.use_int8_w8a16,
+             use_int4_w4a16=quant_info.use_int4_w4a16,
++            use_int2_w2a16=quant_info.use_int2_w2a16,
+             per_channel_quant=quant_info.per_channel_quant,
+             w1_scale=quant_info.w13_scale,
+             w2_scale=quant_info.w2_scale,
+@@ -240,6 +242,7 @@ def fused_experts_none_to_triton(
+             use_int8_w8a8=quant_info.use_int8_w8a8,
+             use_int8_w8a16=quant_info.use_int8_w8a16,
+             use_int4_w4a16=quant_info.use_int4_w4a16,
++            use_int2_w2a16=quant_info.use_int2_w2a16,
+             per_channel_quant=quant_info.per_channel_quant,
+             w1_scale=quant_info.w13_scale,
+             w2_scale=quant_info.w2_scale,
+@@ -296,6 +299,7 @@ def pre_permute_standard_to_triton(
+         use_int8_w8a8=quant_info.use_int8_w8a8,
+         use_int8_w8a16=quant_info.use_int8_w8a16,
+         use_int4_w4a16=quant_info.use_int4_w4a16,
++        use_int2_w2a16=quant_info.use_int2_w2a16,
+         per_channel_quant=quant_info.per_channel_quant,
+         block_shape=quant_info.block_shape,
+     )
+diff --git a/python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe.py b/python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe.py
+index ce665e9364..a75fa11b20 100644
+--- a/python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe.py
++++ b/python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe.py
+@@ -141,6 +141,7 @@ def inplace_fused_experts(
+     use_int8_w8a8: bool = False,
+     use_int8_w8a16: bool = False,
+     use_int4_w4a16: bool = False,
++    use_int2_w2a16: bool = False,
+     per_channel_quant: bool = False,
+     w1_scale: Optional[torch.Tensor] = None,
+     w2_scale: Optional[torch.Tensor] = None,
+@@ -174,6 +175,7 @@ def inplace_fused_experts(
+         use_int8_w8a8,
+         use_int8_w8a16,
+         use_int4_w4a16,
++        use_int2_w2a16,
+         per_channel_quant,
+         w1_scale,
+         w2_scale,
+@@ -210,6 +212,7 @@ def outplace_fused_experts(
+     use_int8_w8a8: bool = False,
+     use_int8_w8a16: bool = False,
+     use_int4_w4a16: bool = False,
++    use_int2_w2a16: bool = False,
+     per_channel_quant: bool = False,
+     w1_scale: Optional[torch.Tensor] = None,
+     w2_scale: Optional[torch.Tensor] = None,
+@@ -244,6 +247,7 @@ def outplace_fused_experts(
+         use_int8_w8a8,
+         use_int8_w8a16,
+         use_int4_w4a16,
++        use_int2_w2a16,
+         per_channel_quant,
+         w1_scale,
+         w2_scale,
+@@ -276,6 +280,7 @@ def fused_experts(
+     use_int8_w8a8: bool = False,
+     use_int8_w8a16: bool = False,
+     use_int4_w4a16: bool = False,
++    use_int2_w2a16: bool = False,
+     per_channel_quant: bool = False,
+     w1_scale: Optional[torch.Tensor] = None,
+     w2_scale: Optional[torch.Tensor] = None,
+@@ -309,6 +314,7 @@ def fused_experts(
+             use_int8_w8a8,
+             use_int8_w8a16,
+             use_int4_w4a16,
++            use_int2_w2a16,
+             per_channel_quant,
+             w1_scale,
+             w2_scale,
+@@ -343,6 +349,7 @@ def fused_experts(
+             use_int8_w8a8,
+             use_int8_w8a16,
+             use_int4_w4a16,
++            use_int2_w2a16,
+             per_channel_quant,
+             w1_scale,
+             w2_scale,
+@@ -411,6 +418,7 @@ def _prepare_fused_moe_run(
+     use_int8_w8a8: bool,
+     use_int8_w8a16: bool,
+     use_int4_w4a16: bool,
++    use_int2_w2a16: bool,
+     per_channel_quant: bool,
+     block_shape: Optional[List[int]],
+ ):
+@@ -430,12 +438,23 @@ def _prepare_fused_moe_run(
+         use_int8_w8a8=use_int8_w8a8,
+         use_int8_w8a16=use_int8_w8a16,
+         use_int4_w4a16=use_int4_w4a16,
++        use_int2_w2a16=use_int2_w2a16,
+         dtype=hidden_states.dtype,
+     )
+ 
++    # Config lookup keys on (E, N, K/pack). In the N-contiguous int32-word layout
++    # ([E, K/16, N], see moe_wna16.process_weights_after_loading) present the shapes
++    # as (E, N, K/4) so the tuned JSON names stay the same as for the byte layout.
++    _ncontig = use_int2_w2a16 and w1.dtype == torch.int32
++    if _ncontig:
++        _w1s = (w1.shape[0], w1.shape[2], w1.shape[1] * 4)
++        _w2s = (w2.shape[0], w2.shape[2], w2.shape[1] * 4 - padded_size)
++    else:
++        _w1s = w1.shape
++        _w2s = (w2.shape[0], w2.shape[1], w2.shape[2] - padded_size)
+     config, (down_config, _) = try_get_optimal_moe_config(
+-        w1.shape,
+-        (w2.shape[0], w2.shape[1], w2.shape[2] - padded_size),
++        _w1s,
++        _w2s,
+         topk_ids.shape[1],
+         config_dtype,
+         num_tokens,
+@@ -499,6 +518,7 @@ def _fused_moe_kernel_sequence(
+     use_int8_w8a8: bool,
+     use_int8_w8a16: bool,
+     use_int4_w4a16: bool,
++    use_int2_w2a16: bool,
+     per_channel_quant: bool,
+     w1_scale: Optional[torch.Tensor],
+     w2_scale: Optional[torch.Tensor],
+@@ -535,7 +555,10 @@ def _fused_moe_kernel_sequence(
+     still used for output dtype/shape and the inplace combine.
+     """
+     num_tokens = hidden_states.shape[0]
+-    E, N, _ = w1.shape
++    _ncontig = use_int2_w2a16 and w1.dtype == torch.int32
++    E = w1.shape[0]
++    N = w1.shape[2] if _ncontig else w1.shape[1]
++    _w2_hidden = w2.shape[2] if _ncontig else w2.shape[1]
+     topk = topk_ids.shape[1]
+     compute_type = tl.bfloat16 if hidden_states.dtype == torch.bfloat16 else tl.float16
+ 
+@@ -566,7 +589,7 @@ def _fused_moe_kernel_sequence(
+     if no_combine:
+         assert not inplace
+         out_hidden_states = torch.empty(
+-            (num_tokens, topk, w2.shape[1]),
++            (num_tokens, topk, _w2_hidden),
+             device=hidden_states.device,
+             dtype=hidden_states.dtype,
+         )
+@@ -588,6 +611,7 @@ def _fused_moe_kernel_sequence(
+         and (topk > 2)
+         and (not use_int8_w8a16)
+         and (not use_int4_w4a16)
++        and (not use_int2_w2a16)
+     )
+ 
+     if fuse_swiglu_interleaved:
+@@ -599,7 +623,13 @@ def _fused_moe_kernel_sequence(
+             ),
+             has_bias=b1 is not None,
+             is_quantized=any(
+-                (use_fp8_w8a8, use_int8_w8a8, use_int8_w8a16, use_int4_w4a16)
++                (
++                    use_fp8_w8a8,
++                    use_int8_w8a8,
++                    use_int8_w8a16,
++                    use_int4_w4a16,
++                    use_int2_w2a16,
++                )
+             ),
+             apply_router_weight_on_input=apply_router_weight_on_input,
+             has_hooks=hooks is not None,
+@@ -639,6 +669,7 @@ def _fused_moe_kernel_sequence(
+         use_int8_w8a8=use_int8_w8a8,
+         use_int8_w8a16=use_int8_w8a16,
+         use_int4_w4a16=use_int4_w4a16,
++        use_int2_w2a16=use_int2_w2a16,
+         per_channel_quant=per_channel_quant,
+         block_shape=block_shape,
+         c_sorted=down_moe_use_tma,
+@@ -807,7 +838,7 @@ def _fused_moe_kernel_sequence(
+     del intermediate_cache1
+ 
+     intermediate_cache3 = torch.empty(
+-        (num_tokens, topk, w2.shape[1]),
++        (num_tokens, topk, _w2_hidden),
+         device=hidden_states.device,
+         dtype=hidden_states.dtype,
+     )
+@@ -850,6 +881,7 @@ def _fused_moe_kernel_sequence(
+         use_int8_w8a8=use_int8_w8a8,
+         use_int8_w8a16=use_int8_w8a16,
+         use_int4_w4a16=use_int4_w4a16,
++        use_int2_w2a16=use_int2_w2a16,
+         per_channel_quant=per_channel_quant,
+         block_shape=block_shape,
+         a_use_tma=down_moe_use_tma,
+@@ -971,6 +1003,7 @@ def fused_experts_impl(
+     use_int8_w8a8: bool = False,
+     use_int8_w8a16: bool = False,
+     use_int4_w4a16: bool = False,
++    use_int2_w2a16: bool = False,
+     per_channel_quant: bool = False,
+     w1_scale: Optional[torch.Tensor] = None,
+     w2_scale: Optional[torch.Tensor] = None,
+@@ -994,7 +1027,14 @@ def fused_experts_impl(
+         padded_size = 0
+ 
+     # Check constraints.
+-    if use_int4_w4a16:
++    if use_int2_w2a16:
++        # 2-bit: 4 values per byte, hence k/4 columns in the packed tensor; in the
++        # N-contiguous int32-word layout K/16 words sit in dim 1 instead
++        if w1.dtype == torch.int32:
++            assert hidden_states.shape[1] == w1.shape[1] * 16, "Hidden size mismatch"
++        else:
++            assert hidden_states.shape[1] // 4 == w1.shape[2], "Hidden size mismatch"
++    elif use_int4_w4a16:
+         assert hidden_states.shape[1] // 2 == w1.shape[2], "Hidden size mismatch"
+     else:
+         assert hidden_states.shape[1] == w1.shape[2] - padded_size, (
+@@ -1023,6 +1063,7 @@ def fused_experts_impl(
+         use_int8_w8a8=use_int8_w8a8,
+         use_int8_w8a16=use_int8_w8a16,
+         use_int4_w4a16=use_int4_w4a16,
++        use_int2_w2a16=use_int2_w2a16,
+         per_channel_quant=per_channel_quant,
+         block_shape=block_shape,
+     )
+@@ -1046,6 +1087,7 @@ def fused_experts_impl(
+         use_int8_w8a8=use_int8_w8a8,
+         use_int8_w8a16=use_int8_w8a16,
+         use_int4_w4a16=use_int4_w4a16,
++        use_int2_w2a16=use_int2_w2a16,
+         per_channel_quant=per_channel_quant,
+         w1_scale=w1_scale,
+         w2_scale=w2_scale,
+@@ -1083,6 +1125,7 @@ def fused_moe(
+     use_int8_w8a8: bool = False,
+     use_int8_w8a16: bool = False,
+     use_int4_w4a16: bool = False,
++    use_int2_w2a16: bool = False,
+     per_channel_quant: bool = False,
+     w1_scale: Optional[torch.Tensor] = None,
+     w2_scale: Optional[torch.Tensor] = None,
+@@ -1173,6 +1216,7 @@ def fused_moe(
+         use_int8_w8a8=use_int8_w8a8,
+         use_int8_w8a16=use_int8_w8a16,
+         use_int4_w4a16=use_int4_w4a16,
++        use_int2_w2a16=use_int2_w2a16,
+         per_channel_quant=per_channel_quant,
+         w1_scale=w1_scale,
+         w2_scale=w2_scale,
+diff --git a/python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe_triton_config.py b/python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe_triton_config.py
+index c4ad7d49d6..9153411dff 100644
+--- a/python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe_triton_config.py
++++ b/python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe_triton_config.py
+@@ -17,6 +17,41 @@ _is_hip = is_hip()
+ _LOW_SMEM_FP8_DEFAULT_CUTOFF_BYTES = 128 * 1024
+ 
+ 
++def _find_nearest_expert_config(
++    config_dir: str, version_dir: str, json_file_name: str
++) -> Optional[Tuple[str, int]]:
++    """Find the nearest opt-in INT2 E bucket with every other key exact."""
++    if os.environ.get("SGLANG_MOE_CONFIG_NEAREST_E") != "1":
++        return None
++    if not json_file_name.startswith("E=") or ",dtype=int2_w2a16" not in json_file_name:
++        return None
++    requested_text, separator, suffix = json_file_name.partition(",")
++    if not separator:
++        return None
++    try:
++        requested = int(requested_text.removeprefix("E="))
++    except ValueError:
++        return None
++    directory = os.path.join(config_dir, "configs", version_dir)
++    try:
++        names = os.listdir(directory)
++    except OSError:
++        return None
++    candidates = []
++    for name in names:
++        expert_text, candidate_separator, candidate_suffix = name.partition(",")
++        if candidate_separator and candidate_suffix == suffix and expert_text.startswith("E="):
++            try:
++                experts = int(expert_text.removeprefix("E="))
++            except ValueError:
++                continue
++            candidates.append((abs(experts - requested), experts, os.path.join(directory, name)))
++    if not candidates:
++        return None
++    _, experts, path = min(candidates)
++    return path, experts
++
++
+ @functools.lru_cache(maxsize=None)
+ def _get_cuda_shared_memory_per_block_optin() -> Optional[int]:
+     if _is_hip or not torch.cuda.is_available():
+@@ -111,6 +146,19 @@ def get_moe_configs(
+             # If a configuration has been found, return it
+             return {int(key): val for key, val in json.load(f).items()}
+ 
++    nearest = _find_nearest_expert_config(config_dir, version_dir, json_file_name)
++    if nearest is not None:
++        nearest_path, nearest_experts = nearest
++        with open(nearest_path) as f:
++            requested_experts = int(json_file_name.partition(",")[0].removeprefix("E="))
++            logger.info(
++                "Using nearest MoE expert-count config E=%d for requested E=%d from %s.",
++                nearest_experts,
++                requested_experts,
++                nearest_path,
++            )
++            return {int(key): val for key, val in json.load(f).items()}
++
+     # Discover available triton config dirs on disk and search newest-first.
+     configs_root = os.path.join(config_dir, "configs")
+     available_versions = sorted(
+@@ -344,6 +392,7 @@ def get_config_dtype_str(
+     dtype: torch.dtype,
+     use_int8_w8a16: Optional[bool] = False,
+     use_int4_w4a16: Optional[bool] = False,
++    use_int2_w2a16: Optional[bool] = False,
+     use_fp8_w8a8: Optional[bool] = False,
+     use_int8_w8a8: Optional[bool] = False,
+ ):
+@@ -351,6 +400,11 @@ def get_config_dtype_str(
+         return "fp8_w8a8"
+     elif use_int8_w8a8:
+         return "int8_w8a8"
++    elif use_int2_w2a16:
++        # Distinct name so a tuned int4 config is never picked up by
++        # accident. No int2 config files exist; the caller then falls back to
++        # defaults, which is the correct behaviour.
++        return "int2_w2a16"
+     elif use_int4_w4a16:
+         return "int4_w4a16"
+     elif use_int8_w8a16:
+diff --git a/python/sglang/srt/layers/quantization/moe_wna16.py b/python/sglang/srt/layers/quantization/moe_wna16.py
+index 711f361bbc..8b5b3c0630 100644
+--- a/python/sglang/srt/layers/quantization/moe_wna16.py
++++ b/python/sglang/srt/layers/quantization/moe_wna16.py
+@@ -7,6 +7,7 @@ import logging
+ from typing import TYPE_CHECKING, Any, Dict, List, Optional
+ 
+ import numpy as np
++import os
+ import torch
+ 
+ from sglang.srt.distributed.parallel_state import get_tp_group
+@@ -66,7 +67,7 @@ def get_weight_perm(num_bits: int):
+ 
+ 
+ class MoeWNA16Config(QuantizationConfig):
+-    """Config class for MOE WNA16 (W8A16/W4A16) quantization."""
++    """Config class for MOE WNA16 (W8A16/W4A16/W2A16) quantization."""
+ 
+     def __init__(
+         self,
+@@ -182,7 +183,12 @@ class MoeWNA16Config(QuantizationConfig):
+         # Avoid circular import
+         awq_min_capability = AWQConfig.get_min_capability()
+ 
+-        gptq_compatible = quant_method == "gptq" and not desc_act and num_bits in [4, 8]
++        # 2-bit added: the Triton kernel now also unpacks 4 values per byte
++        # (use_int2_w2a16). Needed because a 176B MoE only fits on 24 GB VRAM
++        # + 30 GB RAM at ~2 bpw - 4-bit would be 62 GiB.
++        gptq_compatible = (
++            quant_method == "gptq" and not desc_act and num_bits in [2, 4, 8]
++        )
+         awq_compatible = (
+             quant_method == "awq"
+             and num_bits == 4
+@@ -228,7 +234,7 @@ def is_layer_skipped_quant(prefix: str, modules_to_not_convert: List[str]):
+ 
+ 
+ class MoeWNA16Method(FusedMoEMethodBase):
+-    """Linear method for MOE WNA16 (W8A16/W4A16) quantization.
++    """Linear method for MOE WNA16 (W8A16/W4A16/W2A16) quantization.
+ 
+     Args:
+         quant_config: The MOE WNA16 (W8A16/W4A16) quantization config.
+@@ -373,6 +379,7 @@ class MoeWNA16Method(FusedMoEMethodBase):
+             w2_weight=layer.w2_qweight,
+             use_int4_w4a16=weight_bits == 4,
+             use_int8_w8a16=weight_bits == 8,
++            use_int2_w2a16=weight_bits == 2,
+             w13_scale=layer.w13_scales,
+             w2_scale=layer.w2_scales,
+             w13_zp=layer.w13_qzeros if has_zp else None,
+@@ -380,17 +387,271 @@ class MoeWNA16Method(FusedMoEMethodBase):
+             block_shape=[0, layer.group_size],
+         )
+ 
++    def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
++        """2-bit: re-lay each expert tensor as N-contiguous int32 words / [E, K/128, N] scales.
++
++        Same bytes, re-arranged once. The tiled kernel's B loads become coalesced 128-B
++        lines and the decode GEMV can read experts in place. Offloaded tensors live in
++        pinned host memory at this point; re-pin after the copy.
++        """
++        if self.quant_config.weight_bits != 2:
++            return
++        if os.environ.get("SGLANG_MOE_NCONTIG", "1") != "1":
++            return
++        # bisection aid: SGLANG_MOE_NCONTIG_LAYERS="0-16" converts only those layer ids
++        _sel = os.environ.get("SGLANG_MOE_NCONTIG_LAYERS")
++        if _sel:
++            _ok = set()
++            for part in _sel.split(","):
++                lo, _, hi = part.partition("-")
++                _ok.update(range(int(lo), int(hi or lo) + 1))
++            if int(getattr(layer, "layer_id", -1)) not in _ok:
++                return
++        from sglang.srt.layers.moe.expert_gemv import to_word_ncontig
++        for name in ("w13_qweight", "w2_qweight", "w13_scales", "w2_scales"):
++            p = getattr(layer, name, None)
++            if p is None or p.data.dim() != 3:
++                continue
++            t = p.data
++            was_pinned = (not t.is_cuda) and t.is_pinned()
++            if name.endswith("qweight"):
++                t2 = to_word_ncontig(t)                    # [E, K/16, N] int32
++            else:
++                t2 = t.transpose(1, 2).contiguous()        # [E, K/128, N]
++            if was_pinned:
++                t2 = t2.pin_memory()
++            p.data = t2
++            del t
++        layer._b_n_contig = True
++        self._collect_for_placement(layer)
++
++    _PLACE_LAYERS = []          # layers seen so far (loader order)
++    _PLACE_FREQ = None
++
++    def _collect_for_placement(self, layer):
++        path = os.environ.get("SGLANG_MOE_PLACEMENT")
++        if not path:
++            return
++        cls = type(self)
++        if cls._PLACE_FREQ is None:
++            cls._PLACE_FREQ = torch.load(path)["mass"]
++        n_layers = int(cls._PLACE_FREQ.shape[0])
++        lid = int(getattr(layer, "layer_id", -1))
++        if 0 <= lid < n_layers:
++            cls._PLACE_LAYERS.append(layer)
++        if len(cls._PLACE_LAYERS) == n_layers:
++            if os.environ.get("SGLANG_MOE_ELASTIC") == "1":
++                from sglang.srt.layers.moe.expert_elastic import ExpertElastic
++                inst = ExpertElastic(cls._PLACE_FREQ, int(os.environ.get("SGLANG_MOE_PLACEMENT_S", "184")))
++                inst.place_all(cls._PLACE_LAYERS)
++                cls._ELASTIC = inst
++            else:
++                self._run_placement()
++            cls._PLACE_LAYERS = []
++
++    def _run_placement(self):
++        """Interleaved, memory-neutral hot/cold split over all layers."""
++        cls = type(self)
++        freq = cls._PLACE_FREQ
++        S_ = int(os.environ.get("SGLANG_MOE_PLACEMENT_S", "184"))
++        names = ("w13_qweight", "w2_qweight", "w13_scales", "w2_scales")
++        layers = cls._PLACE_LAYERS
++        host = [l for l in layers if not l.w13_qweight.data.is_cuda]
++        gpu = [l for l in layers if l.w13_qweight.data.is_cuda]
++        logger.info("expert placement: %d host layers, %d GPU layers, S=%d", len(host), len(gpu), S_)
++        pools = {n: [] for n in names}        # free host slots: (tensor, row)
++        extra_keep = []
++
++        def split_ids(l):
++            order = torch.argsort(freq[int(l.layer_id)], descending=True)
++            return order[:S_].sort().values, order[S_:].sort().values
++
++        def place_host(l):
++            hot_ids, cold_ids = split_ids(l)
++            E = int(l.w13_qweight.data.shape[0]); addr, proto, keep = {}, {}, []
++            for name in names:
++                p = getattr(l, name, None)
++                if p is None: continue
++                t = p.data; rb = t[0].numel() * t.element_size()
++                tab = torch.empty(E, dtype=torch.int64)
++                if t.is_cuda:                                 # split layer: this kind is on the GPU
++                    tab, h, kp = place_gpu_kind(t, hot_ids, cold_ids, name, rb, E)
++                    keep += kp
++                else:
++                    h = t.index_select(0, hot_ids).to("cuda").contiguous()
++                    tab[hot_ids] = h.data_ptr() + torch.arange(S_) * rb
++                    tab[cold_ids] = t.data_ptr() + cold_ids * rb
++                    pools[name].extend((t, int(r)) for r in hot_ids.tolist())
++                    keep.append(t)
++                p.data = h; addr[name] = tab.cuda(); proto[name] = h
++                del t
++            l._placed = {"addr": addr, "proto": proto, "E": E, "S": S_, "keep": keep}
++            l._gemv_tabs = None
++
++        def place_gpu_kind(t, hot_ids, cold_ids, name, rb, E):
++            tab = torch.empty(E, dtype=torch.int64); keep = []
++            need = int(cold_ids.numel()); pool = pools[name]
++            if len(pool) < need:
++                extra = torch.empty((need - len(pool),) + tuple(t.shape[1:]), dtype=t.dtype).pin_memory()
++                pool.extend((extra, i) for i in range(need - len(pool)))
++                extra_keep.append(extra); keep.append(extra)
++            slots = [pool.pop() for _ in range(need)]
++            cold_cpu = t.index_select(0, cold_ids.to(t.device)).to("cpu")
++            for i, (dst, r) in enumerate(slots):
++                dst[r].copy_(cold_cpu[i])
++                tab[int(cold_ids[i])] = dst.data_ptr() + r * rb
++                keep.append(dst)
++            del cold_cpu
++            h = t.index_select(0, hot_ids.to(t.device)).contiguous()
++            tab[hot_ids] = h.data_ptr() + torch.arange(S_) * rb
++            return tab, h, keep
++
++        def place_gpu(l):
++            hot_ids, cold_ids = split_ids(l)
++            E = int(l.w13_qweight.data.shape[0]); addr, proto, keep = {}, {}, []
++            for name in names:
++                p = getattr(l, name, None)
++                if p is None: continue
++                t = p.data; rb = t[0].numel() * t.element_size()
++                tab, h, kp = place_gpu_kind(t, hot_ids, cold_ids, name, rb, E)
++                keep += kp; p.data = h; addr[name] = tab.cuda(); proto[name] = h
++                del t
++            torch.cuda.empty_cache()
++            l._placed = {"addr": addr, "proto": proto, "E": E, "S": S_, "keep": keep}
++            l._gemv_tabs = None
++
++        # interleave so donated slots exist before they are consumed: ~1.8 host layers per GPU layer
++        hi = gi = 0
++        ratio = max(1.0, (E_cold := (512 - S_)) / max(S_, 1))
++        credit = 0.0
++        while hi < len(host) or gi < len(gpu):
++            if hi < len(host) and (credit < ratio or gi >= len(gpu)):
++                place_host(host[hi]); hi += 1; credit += 1.0
++            else:
++                place_gpu(gpu[gi]); gi += 1; credit -= ratio
++        free_left = {n: len(v) for n, v in pools.items()}
++        logger.info("expert placement done: free host slots left %s, pinned fallbacks %d",
++                    free_left, len(extra_keep))
++        cls._PLACE_EXTRA = extra_keep
++
++    def _gemv_tables(self, layer):
++        tabs = getattr(layer, "_gemv_tabs", None)
++        if tabs is None:
++            from sglang.srt.layers.moe.expert_gemv import make_tables
++            placed = getattr(layer, "_placed", None)
++            if placed is None:
++                w13, s13 = layer.w13_qweight.data, layer.w13_scales.data
++                w2, s2 = layer.w2_qweight.data, layer.w2_scales.data
++                tabs = (make_tables(w13, s13), make_tables(w2, s2),
++                        w13.shape[2], w13.shape[1] * 16, w2.shape[2], w2.shape[1] * 16,
++                        s13.dtype == torch.bfloat16)
++            else:
++                a, pr = placed["addr"], placed["proto"]
++                h13, h2 = pr["w13_qweight"], pr["w2_qweight"]
++                tabs = ((a["w13_qweight"], a["w13_scales"], h13.stride(1), pr["w13_scales"].stride(1)),
++                        (a["w2_qweight"], a["w2_scales"], h2.stride(1), pr["w2_scales"].stride(1)),
++                        h13.shape[2], h13.shape[1] * 16, h2.shape[2], h2.shape[1] * 16,
++                        pr["w13_scales"].dtype == torch.bfloat16)
++            layer._gemv_tabs = tabs
++        return tabs
++
++    def _apply_gemv(self, layer, dispatch_output):
++        """Batch-1 path: T independent 2-bit GEMVs reading experts in place."""
++        from sglang.srt.layers.moe.expert_gemv import moe_gemv_int2_tab
++        from sglang.srt.layers.moe.token_dispatcher.standard import StandardCombineInput
++        x = dispatch_output.hidden_states
++        topk = dispatch_output.topk_output
++        ids = topk.topk_ids.reshape(-1)
++        w = topk.topk_weights.reshape(-1).to(torch.float32)
++        M_, top_k = topk.topk_ids.shape
++        (wt13, st13, sw13, ss13), (wt2, st2, sw2, ss2), N13, K13, N2, K2, sbf = self._gemv_tables(layer)
++        inter = N13 // 2
++        c13 = moe_gemv_int2_tab(x, wt13, st13, ids, w, N13, K13, sw13, ss13,
++                                top_k=top_k, mul_routed_weight=False, scale_bf16=sbf)
++        h = torch.nn.functional.silu(c13[:, :inter]) * c13[:, inter:]
++        c2 = moe_gemv_int2_tab(h, wt2, st2, ids, w, N2, K2, sw2, ss2,
++                               top_k=1, mul_routed_weight=True, scale_bf16=sbf)
++        out = c2.view(M_, top_k, N2).sum(dim=1)
++        rsf = self.moe_runner_config.routed_scaling_factor
++        if rsf is not None and rsf != 1.0:
++            out = out * rsf
++        return StandardCombineInput(hidden_states=out.to(x.dtype))
++
+     def apply(
+         self,
+         layer: torch.nn.Module,
+         dispatch_output: StandardDispatchOutput,
+     ) -> CombineInput:
+-        assert self.moe_runner_config.activation == "silu", (
+-            "Only SiLU activation is supported."
+-        )
++        assert (
++            self.moe_runner_config.activation == "silu"
++        ), "Only SiLU activation is supported."
++        _el = getattr(type(self), "_ELASTIC", None)
++        if _el is not None:
++            _el.poll(
++                int(dispatch_output.hidden_states.shape[0]),
++                int(getattr(layer, "layer_id", 0)),
++            )
+ 
+-        quant_info = self.get_triton_quant_info(layer)
+-        return self.runner.run(dispatch_output, quant_info)
++        if (
++            getattr(layer, "_b_n_contig", False)
++            and self.quant_config.weight_bits == 2
++            and dispatch_output.hidden_states.shape[0] <= 16
++            and os.environ.get("SGLANG_MOE_GEMV", "1") == "1"
++        ):
++            return self._apply_gemv(layer, dispatch_output)
++
++        streamer = self._maybe_expert_streamer(layer)
++        if streamer is None:
++            quant_info = self.get_triton_quant_info(layer)
++            return self.runner.run(dispatch_output, quant_info)
++
++        # MoE-aware offloading: gather only the selected experts into a
++        # compact buffer and renumber the ids onto it. The Triton kernel
++        # stays unchanged.
++        topk = dispatch_output.topk_output
++        new_ids, tensors = streamer.gather(topk.topk_ids)
++        dispatch_output = dispatch_output._replace(
++            topk_output=topk._replace(topk_ids=new_ids)
++        )
++        weight_bits = self.quant_config.weight_bits
++        has_zp = self.quant_config.has_zp
++        quant_info = TritonMoeQuantInfo(
++            w13_weight=tensors["w13_qweight"],
++            w2_weight=tensors["w2_qweight"],
++            use_int4_w4a16=weight_bits == 4,
++            use_int8_w8a16=weight_bits == 8,
++            use_int2_w2a16=weight_bits == 2,
++            w13_scale=tensors["w13_scales"],
++            w2_scale=tensors["w2_scales"],
++            w13_zp=tensors.get("w13_qzeros") if has_zp else None,
++            w2_zp=tensors.get("w2_qzeros") if has_zp else None,
++            block_shape=[0, layer.group_size],
++        )
++        result = self.runner.run(dispatch_output, quant_info)
++        streamer.prefetch_next()
++        return result
++
++    def _maybe_expert_streamer(self, layer):
++        """Create the streamer once, on demand."""
++        st = getattr(layer, "_expert_streamer", "unset")
++        if st != "unset":
++            return st
++        from sglang.srt.layers.moe.expert_stream import ExpertStreamer, enabled
++
++        if not enabled() or not hasattr(layer, "w13_qweight"):
++            layer._expert_streamer = None
++            return None
++        # All four expert tensors resident on the device: the plain path is
++        # byte-for-byte what the streamer would produce, minus the copy. The
++        # gate is per LAYER, never per tensor - one moe_align result numbers
++        # both GEMMs, so a split layer must keep the streamer.
++        _names = ("w13_qweight", "w2_qweight", "w13_scales", "w2_scales")
++        _ts = [getattr(layer, n).data for n in _names if hasattr(layer, n)]
++        if _ts and all(t.is_cuda for t in _ts) and getattr(layer, "_placed", None) is None:
++            layer._expert_streamer = None
++            return None
++        layer._expert_streamer = ExpertStreamer(layer)
++        return layer._expert_streamer
+ 
+     @staticmethod
+     def get_weight_loader(layer, weight_loader):
+@@ -468,10 +729,19 @@ class MoeWNA16Method(FusedMoEMethodBase):
+                 else:
+                     loaded_weight = loaded_weight.T
+             elif layer.quant_config.linear_quant_method == "gptq":
+-                assert layer.quant_config.weight_bits in [4, 8]
++                assert layer.quant_config.weight_bits in [2, 4, 8]
+                 if "weight" in weight_name:
++                    # Identical for 2/4/8 bits: viewing the int32 storage as
++                    # uint8 lays the values out along K (16/8/4 per int32), and
++                    # the kernel derives byte and shift from the bit width.
++                    # Verified against real AutoRound 2-bit tensors.
+                     loaded_weight = loaded_weight.T.contiguous().view(torch.uint8)
+                 elif "zeros" in weight_name:
++                    if layer.quant_config.weight_bits == 2:
++                        raise NotImplementedError(
++                            "asymmetric 2-bit GPTQ (qzeros) is not implemented "
++                            "here; only sym=True is supported"
++                        )
+                     # add 1 to gptq qzeros to align with awq
+                     loaded_weight = loaded_weight.view(torch.uint8)
+                     if layer.quant_config.weight_bits == 4:
+diff --git a/test/manual/test_triton_moe_wna16.py b/test/manual/test_triton_moe_wna16.py
+index ac198e4cbe..1925cdf07a 100644
+--- a/test/manual/test_triton_moe_wna16.py
++++ b/test/manual/test_triton_moe_wna16.py
+@@ -20,7 +20,7 @@ def quantize_weights(
+     zero_points: bool = False,
+     ref_zero_points_after_scales: bool = False,
+ ):
+-    assert quant_type in ["w4a16", "w4a16b8", "w8a16", "w8a16b128"]
++    assert quant_type in ["w2a16", "w2a16b2", "w4a16", "w4a16b8", "w8a16", "w8a16b128"]
+     assert not zero_points or group_size is not None, (
+         "to have group zero points, group_size must be provided "
+         "(-1 group_size is channelwise)"
+@@ -45,7 +45,14 @@ def quantize_weights(
+     max_val = torch.max(w, 0, keepdim=True).values
+     min_val = torch.min(w, 0, keepdim=True).values
+ 
+-    if quant_type == "w4a16":
++    if quant_type == "w2a16":
++        max_q_val = 3
++        min_q_val = 0
++    elif quant_type == "w2a16b2":
++        # symmetrisch: gespeichert wird q + 2, der Kernel zieht b_zp_num = 2 ab
++        max_q_val = 1
++        min_q_val = -2
++    elif quant_type == "w4a16":
+         max_q_val = 15
+         min_q_val = 0
+     elif quant_type == "w4a16b8":
+@@ -87,7 +94,9 @@ def quantize_weights(
+     else:
+         w_ref = (w_q - (maybe_w_zp if zero_points else 0)).to(orig_type) * w_s
+ 
+-    if quant_type == "w4a16b8":
++    if quant_type == "w2a16b2":
++        w_q += 2
++    elif quant_type == "w4a16b8":
+         w_q += 8
+     elif quant_type == "w8a16b128":
+         w_q += 128
+@@ -145,7 +154,7 @@ def torch_moe(a, w1, w2, score, topk):
+ @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+ @pytest.mark.parametrize("group_size", [64, 128])
+ @pytest.mark.parametrize("has_zp", [True, False])
+-@pytest.mark.parametrize("weight_bits", [8])  # [4, 8])
++@pytest.mark.parametrize("weight_bits", [2, 8])  # [2, 4, 8])
+ def test_fused_moe_wn16(
+     m: int,
+     n: int,
+@@ -164,7 +173,10 @@ def test_fused_moe_wn16(
+     w2 = torch.randn((e, k, n), device=get_device(), dtype=dtype) / 10
+     score = torch.randn((m, e), device=get_device(), dtype=dtype)
+ 
+-    if weight_bits == 4:
++    if weight_bits == 2:
++        pack_factor = 4
++        quant_type = "w2a16" if has_zp else "w2a16b2"
++    elif weight_bits == 4:
+         pack_factor = 2
+         quant_type = "w4a16" if has_zp else "w4a16b8"
+     elif weight_bits == 8:
+@@ -218,7 +230,22 @@ def test_fused_moe_wn16(
+         scales = scales.T
+         if has_zp:
+             qzeros = qzeros.T.contiguous().to(torch.uint8)
+-        if weight_bits == 4:
++        if weight_bits == 2:
++            # 4 Werte je Byte, aufsteigend entlang K in den unteren Bits
++            qweight = (
++                qweight[:, 3::4] * 64
++                + qweight[:, 2::4] * 16
++                + qweight[:, 1::4] * 4
++                + qweight[:, ::4]
++            )
++            if has_zp:
++                qzeros = (
++                    qzeros[3::4, :] * 64
++                    + qzeros[2::4, :] * 16
++                    + qzeros[1::4, :] * 4
++                    + qzeros[::4, :]
++                )
++        elif weight_bits == 4:
+             qweight = qweight[:, 1::2] * 16 + qweight[:, ::2]
+             if has_zp:
+                 qzeros = qzeros[1::2, :] * 16 + qzeros[::2, :]
+@@ -242,6 +269,7 @@ def test_fused_moe_wn16(
+         topk_output,
+         use_int4_w4a16=weight_bits == 4,
+         use_int8_w8a16=weight_bits == 8,
++        use_int2_w2a16=weight_bits == 2,
+         w1_scale=w1_scales,
+         w2_scale=w2_scales,
+         w1_zp=w1_qzeros if has_zp else None,

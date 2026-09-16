@@ -1,0 +1,53 @@
+# Trial 3-way apply of the frozen tracked diff onto pinned main b02e16a8
+# scratch worktree /tmp/opencode/port-trial (removed after capture; not a port)
+# command: git apply --3way serving-tracked.diff  (exit 1)
+
+## Conflict hunks per file
+python/sglang/srt/layers/attention/linear/gdn_backend.py                   1
+python/sglang/srt/layers/attention/qsa/qsa_indexer.py                      2
+python/sglang/srt/layers/attention/qsa/sparse_attn.py                      2
+python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py             4
+python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe.py          1
+python/sglang/srt/layers/quantization/moe_wna16.py                         1
+python/sglang/srt/layers/radix_linear_attention.py                         1
+python/sglang/srt/mem_cache/allocator/paged.py                             1
+python/sglang/srt/models/qwen4_exp.py                                      1
+python/sglang/srt/server_args.py                                           2
+python/sglang/srt/speculative/ngram_worker.py                              1
+python/sglang/srt/speculative/spec_utils.py                                1
+
+## Applied cleanly but still requires semantic review (main diverged)
+python/sglang/kernels/ops/moe/fused_moe_triton_kernels.py
+python/sglang/srt/configs/qwen4_exp.py
+python/sglang/srt/layers/attention/qsa/metadata.py
+python/sglang/srt/layers/layernorm.py
+python/sglang/srt/layers/moe/moe_runner/triton.py
+python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe_triton_config.py
+python/sglang/srt/managers/scheduler.py
+python/sglang/srt/mem_cache/allocation.py
+python/sglang/srt/mem_cache/allocator/token.py
+python/sglang/srt/mem_cache/kv_cache_configurator.py
+python/sglang/srt/mem_cache/kv_cache_dtype.py
+python/sglang/srt/mem_cache/kv_vmm_backing.py
+python/sglang/srt/mem_cache/memory_pool.py
+python/sglang/srt/model_executor/pool_configurator.py
+python/sglang/srt/model_executor/runner_backend/breakable_cuda_graph_backend.py
+python/sglang/srt/models/qwen2_moe.py
+python/sglang/srt/models/qwen3_5.py
+python/sglang/srt/utils/offloader.py
+test/manual/test_triton_moe_wna16.py
+
+## Seven modules copied into main tree (new files, no collision)
+added  python/sglang/srt/layers/moe/expert_stream.py
+added  python/sglang/srt/layers/moe/expert_gemv.py
+added  python/sglang/srt/layers/moe/row_arena.py
+added  python/sglang/srt/layers/moe/expert_elastic.py
+added  python/sglang/srt/mem_cache/int8_kv_pool.py
+added  python/sglang/srt/mem_cache/int4_kv_pool.py
+added  python/sglang/srt/mem_cache/tiered_kv_pool.py
+
+## Trial apply summary
+conflicted files: 12 (28 conflict hunks)
+cleanly applied: 19
+new modules: 7
+total tracked-file targets: 31; grand total 38

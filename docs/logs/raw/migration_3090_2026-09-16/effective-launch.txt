@@ -1,0 +1,70 @@
+# Effective launch of the frozen control (running server PID 486994, captured 2026-09-16)
+
+## Command line (flags), from /proc/486994/cmdline
+/root/quant/venv-sglang/bin/python3 -m sglang.launch_server
+--host 0.0.0.0
+--port 30001
+--tp-size 1
+--cpu-offload-gb 19
+--no-ple-offload-embedding
+--mem-fraction-static 0.95
+--language-model-only
+--page-size 1
+--disable-overlap-schedule
+--sleep-on-idle
+--weight-loader-drop-cache-after-load
+--chunked-prefill-size 4608
+--max-prefill-tokens 32768
+--cuda-graph-backend-decode breakable
+--served-model-name qwen38-flash-230K
+--model-path /mnt/ai_models/Qwen3.8-Flash-Next-int2-mixed-AutoRound-24GB-SGLang
+--max-total-tokens 235520
+--context-length 235520
+--kv-cache-dtype int8ring_int4
+--attention-backend triton
+--max-mamba-cache-size 4
+--reasoning-parser qwen3
+--tool-call-parser qwen3_coder
+--max-running-requests 1 
+
+## Environment read by the process, from /proc/486994/environ
+CUDA_HOME=/root/quant/venv-sglang/lib/python3.12/site-packages/nvidia/cu13
+SGLANG_KV_EVICT_ON_PRESSURE=1
+SGLANG_KV_LAZY=1
+SGLANG_KV_LAZY_MIN_FREE_MB=64
+SGLANG_KV_LAZY_SAFETY=0.77
+SGLANG_KV_LAZY_STRICT_HEADROOM=1
+SGLANG_KV_LAZY_TOKENS=235520
+SGLANG_KV_TIERS_W=8192
+SGLANG_MOE_COLD_PREFETCH=1
+SGLANG_MOE_COLD_PREFETCH_MIN_TOKENS=2048
+SGLANG_MOE_CONFIG_DIR=/root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs
+SGLANG_MOE_CONFIG_NEAREST_E=1
+SGLANG_MOE_EAGER_SHARED_OVERLAP_MAX_TOKENS=0
+SGLANG_MOE_ELASTIC=1
+SGLANG_MOE_ELASTIC_CTL=/root/quant/elastic.ctl
+SGLANG_MOE_ELASTIC_FILL_MB=99999
+SGLANG_MOE_ELASTIC_PIN_MB=512
+SGLANG_MOE_ELASTIC_RESERVE_ROWS=0
+SGLANG_MOE_EXPERT_STREAM=1
+SGLANG_MOE_GATHER_BLOCK=2048
+SGLANG_MOE_GATHER_DMA=1
+SGLANG_MOE_GATHER_DMA_BATCH=1
+SGLANG_MOE_PLACEMENT=/root/qwen3.8-flash-next-24gb-sglang/assets/expert_presence_code.pt
+SGLANG_MOE_PLACEMENT_S=184
+SGLANG_PREFILL_ALLOC_ABORT=1
+SGLANG_PREFILL_ROUTE_DUMP=
+SGLANG_QWEN4_PLE_BULK_PREAD=1
+SGLANG_QWEN4_PLE_BULK_PREAD_MIN_UNIQUE=2048
+SGLANG_QWEN4_PLE_MMAP=/mnt/ai_models/Qwen3.8-Flash-Next-int2-mixed-AutoRound-24GB-SGLang/ple
+SGLANG_QWEN4_PLE_PROFILE=0
+SGLANG_QWEN4_PLE_RECENT_CACHE_MB=128
+SGLANG_QWEN4_PLE_WORKERS=16
+SGLANG_VLM_CACHE_SIZE_MB=0
+
+## systemd scope
+MemoryCurrent=60104937472
+MemoryMax=60129542144
+
+## Installed launcher
+/root/quant/serve-3090.sh sha256 == snapshot serve-3090-flags.sh sha256 (d0866e7c...f57447)
