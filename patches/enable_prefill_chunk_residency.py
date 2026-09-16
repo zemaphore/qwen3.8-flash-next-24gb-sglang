@@ -1,5 +1,17 @@
 #!/usr/bin/env python3
-"""Set the RTX 3090 PP-oriented chunk and expert-residency defaults."""
+"""Set the RTX 3090 PP-oriented chunk and expert-residency defaults.
+
+States form a ladder over two accepted changes:
+
+  clean     : pre-PP3 (fill 2048, chunk 1024)
+  mid       : PP3 accepted (fill 99999, chunk 2048)
+  applied   : PP12 accepted (fill 99999, chunk 4608)
+
+``apply`` moves one step up (clean -> applied, or mid -> applied); ``revert``
+moves one step down (applied -> mid, or mid -> clean). Both use the launcher's
+environment fallbacks, so explicit ``SGLANG_3090_CHUNKED_PREFILL_SIZE`` /
+``SGLANG_MOE_ELASTIC_FILL_MB`` values still override at start time.
+"""
 
 from __future__ import annotations
 
@@ -12,7 +24,8 @@ LAUNCHER = os.environ.get("SGLANG_3090_LAUNCHER", "/root/quant/serve-3090.sh")
 OLD_FILL = 'SGLANG_MOE_ELASTIC_FILL_MB="${SGLANG_MOE_ELASTIC_FILL_MB:-2048}"'
 NEW_FILL = 'SGLANG_MOE_ELASTIC_FILL_MB="${SGLANG_MOE_ELASTIC_FILL_MB:-99999}"'
 OLD_CHUNK = '--chunked-prefill-size "${SGLANG_3090_CHUNKED_PREFILL_SIZE:-1024}"'
-NEW_CHUNK = '--chunked-prefill-size "${SGLANG_3090_CHUNKED_PREFILL_SIZE:-2048}"'
+MID_CHUNK = '--chunked-prefill-size "${SGLANG_3090_CHUNKED_PREFILL_SIZE:-2048}"'
+NEW_CHUNK = '--chunked-prefill-size "${SGLANG_3090_CHUNKED_PREFILL_SIZE:-4608}"'
 
 
 def read() -> str:
@@ -20,48 +33,63 @@ def read() -> str:
         return source.read()
 
 
-def state() -> tuple[bool, bool]:
+def state() -> str:
     text = read()
-    clean = OLD_FILL in text and OLD_CHUNK in text
-    applied = NEW_FILL in text and NEW_CHUNK in text
-    return clean, applied
+    if OLD_FILL in text and OLD_CHUNK in text:
+        return "clean"
+    if NEW_FILL in text and MID_CHUNK in text:
+        return "mid"
+    if NEW_FILL in text and NEW_CHUNK in text:
+        return "applied"
+    return "mismatch"
 
 
 def check() -> None:
-    clean, applied = state()
-    status = "APPLIED" if applied else ("clean" if clean else "MISMATCH")
-    print(f"  {status:<8} {LAUNCHER}: RTX 3090 PP chunk/residency defaults")
+    current = state()
+    label = {"clean": "clean", "mid": "MID", "applied": "APPLIED"}.get(
+        current, "MISMATCH"
+    )
+    print(f"  {label:<8} {LAUNCHER}: RTX 3090 PP chunk/residency defaults")
+    if current == "mismatch":
+        raise SystemExit(1)
 
 
-def replace(old_fill: str, new_fill: str, old_chunk: str, new_chunk: str) -> None:
+def write(old: str, new: str) -> None:
     text = read()
-    if text.count(old_fill) != 1 or text.count(old_chunk) != 1:
-        raise RuntimeError("expected exactly one fill and chunk launcher anchor")
-    text = text.replace(old_fill, new_fill, 1).replace(old_chunk, new_chunk, 1)
+    if text.count(old) != 1:
+        raise RuntimeError(f"expected exactly one launcher anchor {old!r}")
     with open(LAUNCHER, "w", encoding="utf-8") as output:
-        output.write(text)
+        output.write(text.replace(old, new, 1))
 
 
 def apply() -> None:
-    clean, applied = state()
-    if applied:
+    current = state()
+    if current == "applied":
         print("  already applied")
-        return
-    if not clean:
+    elif current == "mid":
+        write(MID_CHUNK, NEW_CHUNK)
+        print("  applied (next launcher start defaults to chunk 4608 and S184)")
+    elif current == "clean":
+        write(OLD_FILL, NEW_FILL)
+        write(OLD_CHUNK, NEW_CHUNK)
+        print("  applied (next launcher start defaults to chunk 4608 and S184)")
+    else:
         raise RuntimeError("launcher anchor mismatch")
-    replace(OLD_FILL, NEW_FILL, OLD_CHUNK, NEW_CHUNK)
-    print("  applied (next launcher start defaults to chunk 2048 and S184)")
 
 
 def revert() -> None:
-    clean, applied = state()
-    if clean:
+    current = state()
+    if current == "clean":
         print("  already clean")
-        return
-    if not applied:
+    elif current == "applied":
+        write(NEW_CHUNK, MID_CHUNK)
+        print("  reverted (back to the PP3 chunk 2048 default)")
+    elif current == "mid":
+        write(NEW_FILL, OLD_FILL)
+        write(MID_CHUNK, OLD_CHUNK)
+        print("  reverted (back to the pre-PP3 chunk 1024 default)")
+    else:
         raise RuntimeError("launcher anchor mismatch")
-    replace(NEW_FILL, OLD_FILL, NEW_CHUNK, OLD_CHUNK)
-    print("  reverted")
 
 
 if __name__ == "__main__":

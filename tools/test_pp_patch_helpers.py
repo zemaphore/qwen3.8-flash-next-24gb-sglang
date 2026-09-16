@@ -108,6 +108,43 @@ class LauncherHelperTests(unittest.TestCase):
             self.assertNotIn(old, launcher.read_text(encoding="utf-8"))
 
 
+class ChunkResidencyHelperTests(unittest.TestCase):
+    FILL_OLD = 'SGLANG_MOE_ELASTIC_FILL_MB="${SGLANG_MOE_ELASTIC_FILL_MB:-2048}"'
+    FILL_NEW = 'SGLANG_MOE_ELASTIC_FILL_MB="${SGLANG_MOE_ELASTIC_FILL_MB:-99999}"'
+    CHUNK_OLD = '--chunked-prefill-size "${SGLANG_3090_CHUNKED_PREFILL_SIZE:-1024}"'
+    CHUNK_MID = '--chunked-prefill-size "${SGLANG_3090_CHUNKED_PREFILL_SIZE:-2048}"'
+    CHUNK_NEW = '--chunked-prefill-size "${SGLANG_3090_CHUNKED_PREFILL_SIZE:-4608}"'
+
+    def test_ladder_up_then_down(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            launcher = Path(tmp) / "serve.sh"
+            launcher.write_text(
+                "#!/bin/sh\n" + self.FILL_OLD + " \\\n" + self.CHUNK_OLD + " \\\n",
+                encoding="utf-8",
+            )
+            env = {"SGLANG_3090_LAUNCHER": str(launcher)}
+            script = "patches/enable_prefill_chunk_residency.py"
+
+            # clean -> applied
+            self.assertEqual(run(script, "apply", env).returncode, 0)
+            text = launcher.read_text(encoding="utf-8")
+            self.assertIn(self.FILL_NEW, text)
+            self.assertIn(self.CHUNK_NEW, text)
+            self.assertEqual(run(script, "--check", env).returncode, 0)
+
+            # applied -> mid (undo PP12 only)
+            self.assertEqual(run(script, "revert", env).returncode, 0)
+            text = launcher.read_text(encoding="utf-8")
+            self.assertIn(self.CHUNK_MID, text)
+            self.assertNotIn(self.CHUNK_NEW, text)
+
+            # mid -> clean (undo PP3 too)
+            self.assertEqual(run(script, "revert", env).returncode, 0)
+            text = launcher.read_text(encoding="utf-8")
+            self.assertIn(self.FILL_OLD, text)
+            self.assertIn(self.CHUNK_OLD, text)
+
+
 class CaptureHelperTests(unittest.TestCase):
     def test_benchmark_row_parser(self):
         output = """  target   actual  prefill s  prefill t/s  decode t/s

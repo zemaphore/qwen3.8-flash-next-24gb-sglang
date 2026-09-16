@@ -166,6 +166,12 @@ def main() -> None:
         default=os.environ.get("SGLANG_URL", "http://127.0.0.1:30001/generate"),
     )
     parser.add_argument("--skip-heldout", action="store_true")
+    parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=2048,
+        help="expected live --chunked-prefill-size; must match the running server",
+    )
     args = parser.parse_args()
 
     try:
@@ -201,8 +207,10 @@ def main() -> None:
     if "--chunked-prefill-size" not in server_argv:
         raise SystemExit("live server has no --chunked-prefill-size argument")
     chunk_index = server_argv.index("--chunked-prefill-size") + 1
-    if chunk_index >= len(server_argv) or server_argv[chunk_index] != "2048":
-        raise SystemExit("live server is not using chunked-prefill-size 2048")
+    if chunk_index >= len(server_argv) or server_argv[chunk_index] != str(args.chunk_size):
+        raise SystemExit(
+            f"live server is not using chunked-prefill-size {args.chunk_size}"
+        )
 
     placement_record = torch.load(placement, map_location="cpu", weights_only=True)
     score = placement_record["mass"].float()
@@ -264,6 +272,7 @@ def main() -> None:
         "server_pid": pid,
         "server_argv": server_argv,
         "server_environment": selected_env,
+        "chunk_size": args.chunk_size,
         "launcher_snapshot": server_snapshot.name,
         "launcher_sha256": sha256(server_snapshot),
         "server_log_source": str(server_log),

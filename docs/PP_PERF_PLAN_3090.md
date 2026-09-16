@@ -28,6 +28,10 @@ then measured the shared-expert format path at ~44 ms/prompt (~1.2% of wall) and
 rejected it; that profile also corrected PP6's CPU-bound reading by showing the
 accepted post-PP11 stack is ~88% GPU-engine-active, leaving the tail-chunk fixed
 staging cost and the large PLE/linear-attention GEMMs as the remaining levers.
+PP12 then removed the tail's repeated staging by raising the prefill chunk to
+4,608 so the canonical prompt is a single extend: **1937.8 +/- 12.9** versus
+pooled 2,048 controls **1286.2 +/- 10.4 tok/s (+50.66%)**, exact oracles and
+unchanged decode. The 4,608 chunk is now the general launcher default.
 
 The PLE work now has a bounded policy that covers both measured regimes:
 
@@ -84,8 +88,9 @@ SGLANG_URL=http://127.0.0.1:30001/generate \
   python3 tools/bench_agentic.py --tokens 4096 --decode-tokens 256
 ```
 
-It currently tokenizes to 4,565 prompt tokens.  The accepted 2,048-token setup
-is scheduled as two full chunks plus a padded tail.  Do not substitute the repeated-sentence benchmark when
+It currently tokenizes to 4,565 prompt tokens.  Since PP12 the accepted setup
+uses a 4,608-token prefill chunk, so this workload runs as a single extend
+instead of two full 2,048-token chunks plus a padded tail.  Do not substitute the repeated-sentence benchmark when
 making an acceptance decision.  Do not run `llama-benchy` unless a later task
 explicitly asks for it.
 
@@ -133,6 +138,7 @@ must never be silently mixed into an exact A/B.
 | PP9 | RESEARCH | Fused QSA score/mask/top-k | Avoid full FP32 logits materialization at long prefixes | Prioritize only after 4.5k code PP work |
 | PP10 | RESEARCH | Host/PCIe operational audit | Link downgrade, IOMMU, VM scheduling, or CPU affinity may cap transfers | Narrowed: 23 GB/s H2D confirmed (Gen4 x16); remaining item is whether a PCIe or memory topology change unlocks more, and the decode GEMV's 10 GB/s SM host reads |
 | PP11 | **DONE** | Batched host-row DMA submission | Replace ~50k Python/Tensor row-copy submissions per chunk with four CUDA batch calls while resident gathers overlap on the current stream | Exact; 1183.4 vs 1110.9 pooled control, +6.53%; default on |
+| PP12 | **DONE** | Tail-chunk staging amortization | The 469-token tail pays a nearly full per-layer-chunk staging cost; fewer, larger chunks should cut total staging | Exact; chunk 4608 (one extend for the canonical prompt) 1937.8 +/- 12.9 vs pooled 2048 controls 1286.2 +/- 10.4 tok/s (**+50.66%**, t=98.3); decode unchanged; default promoted via `patches/enable_prefill_chunk_residency.py` |
 
 ## PP1 — PLE storage experiment
 
@@ -472,6 +478,48 @@ them only with a fresh profile of the accepted batch path.
 
 Evidence: [PP11 batched host-row DMA](logs/pp11_dma_batch_3090_2026-09-15.md).
 
+## PP12 — tail-chunk staging amortization (completed)
+
+Accepted. PP6 left the 469-token tail paying a nearly full per-layer-chunk
+staging cost, and the later-research list proposed merging or special-casing it.
+The canonical 4,565-token prompt ran as two 2,048-token chunks plus that tail;
+raising `SGLANG_3090_CHUNKED_PREFILL_SIZE` to 4,608 makes it one extend, so each
+layer's selected experts are staged once instead of three times.
+
+Three fresh-server arms via `tools/capture_pp5b_arm.py --skip-heldout`, presence
+placement, S184, one variable per restart:
+
+| Arm | Chunk | Measured PP tok/s | Mean +/- sample SD | Decode mean |
+|---|---:|---|---:|---:|
+| control A | 2,048 | 1296 / 1296 / 1283 / 1289 / 1288 | 1290.4 +/- 5.6 | 42.3 |
+| variant | 4,608 | 1943 / 1939 / 1916 / 1950 / 1941 | **1937.8 +/- 12.9** | 42.4 |
+| control B | 2,048 | 1287 / 1275 / 1264 / 1286 / 1298 | 1282.0 +/- 12.9 | 42.9 |
+| Pooled control | 2,048 | ten samples | 1286.2 +/- 10.4 | 42.6 |
+
+The variant is **+50.66%** over pooled control (t = 98.3; the smallest variant
+sample beats the largest control sample). Both oracles matched the accepted
+baseline in all arms (`m4_3090_untuned` 0/0, `lp2` 0.168757/0.011632); decode did
+not regress; capture minimum free VRAM was 2,433 MiB (variant) versus 2,941 MiB
+(controls). A long-prompt pass on a 4,608 server ran 4.6k/9.5k/20.3k/29.3k-token
+prompts with no OOM or fault and 2,211 MiB minimum free VRAM.
+
+The launcher default is promoted with the existing helper, now a three-state
+ladder (pre-PP3 1024 -> PP3 2048 -> PP12 4608):
+
+```bash
+python3 patches/enable_prefill_chunk_residency.py apply
+```
+
+`SGLANG_3090_CHUNKED_PREFILL_SIZE` still overrides per start. Caveat: a larger
+chunk raises the per-request logit/activation footprint about 0.5 GiB and would
+cost request interleaving on a multi-request server; this box runs
+`--max-running-requests 1`, so that trade does not apply.
+
+Evidence: [PP12 tail-chunk](logs/pp12_tail_chunk_3090_2026-09-16.md); raw arms
+[ctrl-a-2048](logs/raw/pp_tail_chunk_3090_2026-09-16/ctrl-a-2048/),
+[var-4608](logs/raw/pp_tail_chunk_3090_2026-09-16/var-4608/),
+[ctrl-b-2048](logs/raw/pp_tail_chunk_3090_2026-09-16/ctrl-b-2048/).
+
 ## Later research
 
 - Shared-expert format sweep: rejected in PP8 (measured ceiling ~1.2% of wall).
@@ -480,9 +528,8 @@ Evidence: [PP11 batched host-row DMA](logs/pp11_dma_batch_3090_2026-09-15.md).
 - At long prefixes, profile QSA's full FP32 score tensor and consider fusing
   score, mask, and hierarchical top-k.  The previously rejected paged-prefix KV
   kernel should not be repeated unchanged.
-- Tail-chunk staging amortization: the 469-token tail pays nearly a full
-  chunk's fixed staging cost; consider merging or special-casing it (~10% of
-  prompt tokens).
+- Tail-chunk staging amortization: addressed by PP12 (chunk 4,608 makes the
+  canonical prompt one extend, +50.66%).
 - Audit negotiated PCIe generation/width, BAR1, clocks/power/thermals, VM CPU
   affinity, NUMA locality, huge pages, and IOMMU mode before attributing a hard
   ceiling to the GPU.
@@ -514,12 +561,13 @@ Evidence: [PP11 batched host-row DMA](logs/pp11_dma_batch_3090_2026-09-15.md).
    SGLANG=/root/sglang python3 patches/moe_config_buckets.py --check
    ```
 
-5. PP11 and PP5c are accepted; the launcher default is PP5c prefill-presence
-   placement (`assets/expert_presence_code.pt`), selectable back to routing mass
-   with `SGLANG_MOE_PLACEMENT`. PP5b remains the canonical-only result. PP8 was
-   rejected on a measured ceiling. The remaining defined experiments are the
-   research items PP9, PP10 and the later-research list; start one only when the
-   owner continues the PP campaign.
+5. PP11, PP5c and PP12 are accepted; the launcher defaults are PP5c
+   prefill-presence placement (`assets/expert_presence_code.pt`) and a PP12
+   4,608-token prefill chunk, both selectable back to routing mass and 2,048
+   with `SGLANG_MOE_PLACEMENT` / `SGLANG_3090_CHUNKED_PREFILL_SIZE`. PP5b
+   remains the canonical-only result; PP8 was rejected on a measured ceiling.
+   The remaining defined experiments are the research items PP9, PP10 and the
+   later-research list; start one only when the owner continues the PP campaign.
 6. After every experiment, update the status table, append a dated result under
    the relevant section, and link the raw log/artifact.
 
@@ -534,9 +582,9 @@ PYTHONPATH=/root/sglang/python /root/quant/venv-sglang/bin/python -m unittest \
 ```
 
 State at this update: bulk pread, the 128 MiB recent-row cache, the 2,048-byte
-expert-gather tile, host-row DMA staging, PP11 DMA batching, a 2,048-token
-prefill chunk, S184 residency and PP5c prefill-presence placement are enabled;
-profiling is disabled. The prefill route dump is applied
+expert-gather tile, host-row DMA staging, PP11 DMA batching, a 4,608-token
+prefill chunk (PP12), S184 residency and PP5c prefill-presence placement are
+enabled; profiling is disabled. The prefill route dump is applied
 and pass-through in `/root/quant/serve-3090.sh` but off unless
 `SGLANG_PREFILL_ROUTE_DUMP` names a directory. No server is currently running;
 every PP5c arm was stopped cleanly after capture. The RTX 3090, `/dev/nvidia*`,
