@@ -1,5 +1,11 @@
 # The SGLang changes
 
+**Current planning status (2026-09-16):** the artifacts below reproduce the
+historical serving base and predate the final 3090 PP/RC work. Model support is
+now on upstream main. See the [RTX 3090 main migration plan](../docs/SGLANG_MAIN_MIGRATION_PLAN.md)
+for the promoted baseline, required patch amendments and acceptance gates.
+The migration is planned, not implemented.
+
 Two forms of the same change to SGLang: the flat serving patch, which is the verbatim diff of
 the tree that served the published numbers, and the five-commit series under `upstream/`, which
 is the reviewable form for `sgl-project/sglang`. The weights they serve are on the Hub:

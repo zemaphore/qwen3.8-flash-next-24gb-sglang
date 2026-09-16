@@ -11,6 +11,7 @@ notes live in [`../sglang/`](../sglang/). What was rejected, and why, is collect
 
 | File | What it is | Written at |
 |---|---|---|
+| [`SGLANG_MAIN_MIGRATION_PLAN.md`](SGLANG_MAIN_MIGRATION_PLAN.md) | Planned main-based port of the promoted PP/TG/RC profile; RTX 3090 only, patch disposition, validation and rollback | 2026-09-16 |
 | [`PP_PERF_PLAN_3090.md`](PP_PERF_PLAN_3090.md) | Closed RTX 3090 PP campaign, frozen defaults and qualified validation status | 2026-09-16 |
 | [`logs/pp_wrapup_3090_2026-09-16.md`](logs/pp_wrapup_3090_2026-09-16.md) | Final PP characterization, retained evidence and closure review limitations | 2026-09-16 |
 | [`TG_PERF_PLAN_3090.md`](TG_PERF_PLAN_3090.md) | Current RTX 3090 single-stream TG plan; TG0 baseline through candidate acceptance | 2026-09-16 |

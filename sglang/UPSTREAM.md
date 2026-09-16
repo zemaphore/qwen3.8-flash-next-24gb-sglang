@@ -1,5 +1,14 @@
 # Upstream status: the SGLang series for Qwen3.8-Flash-Next on one 24 GB GPU
 
+**Status correction (2026-09-16):** PR #36497 closed unmerged; replacement
+[PR #37500](https://github.com/sgl-project/sglang/pull/37500) landed model support
+on main. The historical review target and future-work assumptions below are
+superseded by the [main migration plan](../docs/SGLANG_MAIN_MIGRATION_PLAN.md).
+The new target is RTX 3090 (SM86) only, using the promoted PP/TG/RC profile with
+R1–R3 enabled. Other hardware measurements below are historical provenance,
+not migration claims or requirements. The existing series remains unchanged;
+the main-based implementation has not started.
+
 Status of the contribution to `sgl-project/sglang` as of 2026-09-03. The reviewable form of the
 serving patch is the five-commit series under [`upstream/`](upstream/); the flat patch
 [`qwen4exp-serving-73a255206f.patch`](qwen4exp-serving-73a255206f.patch) is the verbatim served
