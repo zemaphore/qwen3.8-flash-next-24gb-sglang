@@ -61,3 +61,19 @@ down cleanly (its last log lines are the normal drain). This happened before any
 venv command was issued (first command 20:21:07). Nothing in this step starts or
 stops a server; the rollback launcher `/root/quant/serve-3090.sh` remains
 available for a maintenance-window run.
+
+## Follow-up: cu13 JIT link layout (2026-09-16 20:54)
+
+First candidate bring-up crashed in the JIT toolchain before any model code:
+`ninja`/`ld: cannot find -lcudart` while linking
+`sgl_kernel_jit_gptq_marlin_repack`, because the main venv's
+`nvidia/cu13` lacked two layout entries the control venv has:
+
+```
+ln -sf lib                $VENV/lib/python3.12/site-packages/nvidia/cu13/lib64
+ln -sf libcudart.so.13    $VENV/lib/python3.12/site-packages/nvidia/cu13/lib/libcudart.so
+```
+
+After the fix `_jit_gptq_marlin_repack_module()` builds successfully. This is a
+venv layout fix, not a source-port change. The same two entries must be part
+of any rebuilt main venv.

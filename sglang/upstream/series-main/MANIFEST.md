@@ -14,16 +14,17 @@ Apply with `git am` in file-name order on a clean checkout of the base.
 
 | # | Patch | Commit subject | sha256 |
 |---|---|---|---|
-| 1 | `0001-fix-qwen4-CPU-offload-correctness-breakable-graphs-m.patch` | `fix(qwen4): CPU-offload correctness, breakable graphs, mmap PLE table` | `083c4119…8743f` |
-| 2 | `0002-feat-moe_wna16-2-bit-experts-expert-streaming-N-cont.patch` | `feat(moe_wna16): 2-bit experts, expert streaming, N-contiguous GEMV` | `bcb5db8d…ede51` |
-| 3 | `0003-feat-mem_cache-elastic-VMM-expert-row-arenas-lazy-KV.patch` | `feat(mem_cache): elastic VMM expert row arenas, lazy KV, quantized QSA pools` | `8ce26aa7…2e0cb` |
-| 4 | `0004-fix-mem_cache-R1-evict-on-pressure-and-R2-prefill-al.patch` | `fix(mem_cache): R1 evict-on-pressure and R2 prefill-alloc abort` | `5991f9cd…53e2f` |
-| 5 | `0005-feat-moe-prefix-cache-PP-model-wiring-optional-share.patch` | `feat(moe): prefix-cache PP model wiring, optional shared-expert overlap` | `cd112130…d454ec` |
+| 1 | `0001-fix-qwen4-CPU-offload-correctness-breakable-graphs-m.patch` | `fix(qwen4): CPU-offload correctness, breakable graphs, mmap PLE table` | `670b9d65…b1c785` |
+| 2 | `0002-feat-moe_wna16-2-bit-experts-expert-streaming-N-cont.patch` | `feat(moe_wna16): 2-bit experts, expert streaming, N-contiguous GEMV` | `a6579494…e833b1` |
+| 3 | `0003-feat-mem_cache-elastic-VMM-expert-row-arenas-lazy-KV.patch` | `feat(mem_cache): elastic VMM expert row arenas, lazy KV, quantized QSA pools` | `ba701590…1bdf2b9` |
+| 4 | `0004-fix-mem_cache-R1-evict-on-pressure-and-R2-prefill-al.patch` | `fix(mem_cache): R1 evict-on-pressure and R2 prefill-alloc abort` | `12407576…74603a` |
+| 5 | `0005-feat-moe-prefix-cache-PP-model-wiring-optional-share.patch` | `feat(moe): prefix-cache PP model wiring, optional shared-expert overlap` | `35ac9d3d…042882` |
+| 6 | `0006-fix-main-runtime-API-adjustments-found-at-candidate-.patch` | `fix(main): runtime API adjustments found at candidate bring-up` | `abc32def…3089a7` |
 
 Flattened form: [`../qwen4exp-serving-b02e16a8.patch`](../qwen4exp-serving-b02e16a8.patch)
-(35 files, +4,526 / −94), sha256 `b50abbb4abb610e20fc6a5f4021999f1abe678f7bce22b2487868ca02857fa22`.
-Base + flattened patch and base + the five patches both reproduce the identical
-tree (`f29efc9b…2370`), verified in scratch worktrees.
+(35 files, +4,528 / −94), sha256 `9743b441d58a1f0097ea5a25b98a2ce2e13de8b2e89d6bce83f97e8b2ae71acd`.
+Base + flattened patch and base + the six patches both reproduce the identical
+tree (`9f505c06…f1d`), verified in scratch worktrees.
 
 ## Optional patch (outside default acceptance)
 

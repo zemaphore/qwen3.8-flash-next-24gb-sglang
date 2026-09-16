@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: root <root@docker01.fra.askei.net>
 Date: Wed, 16 Sep 2026 20:41:22 +0000
-Subject: [PATCH 5/5] feat(moe): prefix-cache PP model wiring, optional
+Subject: [PATCH 5/6] feat(moe): prefix-cache PP model wiring, optional
  shared-expert overlap
 
 Port the model-side pieces of the accepted PP stack onto main b02e16a895.

@@ -1,0 +1,7 @@
+two sessions: B (20 turns) after A, no flush; A pages must be evicted
+  B turn  0: prompt=6553 cached=0 ok=True wall=4.175s free_vram=370MiB
+  B turn  5: prompt=22960 cached=19648 ok=True wall=1.955s free_vram=274MiB
+  B turn 10: prompt=39378 cached=36096 ok=True wall=1.98s free_vram=178MiB
+  B turn 15: prompt=57003 cached=53440 ok=True wall=2.101s free_vram=828MiB
+  B turn 19: prompt=71103 cached=67584 ok=True wall=2.055s free_vram=554MiB
+B hits_ok=20/20 final_prompt=71103 min_free_vram=130MiB

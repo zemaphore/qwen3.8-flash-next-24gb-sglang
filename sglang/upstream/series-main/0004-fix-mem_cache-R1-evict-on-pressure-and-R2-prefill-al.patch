@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: root <root@docker01.fra.askei.net>
 Date: Wed, 16 Sep 2026 20:40:35 +0000
-Subject: [PATCH 4/5] fix(mem_cache): R1 evict-on-pressure and R2 prefill-alloc
+Subject: [PATCH 4/6] fix(mem_cache): R1 evict-on-pressure and R2 prefill-alloc
  abort
 
 Port the RB robustness layers onto main b02e16a895 (both env-gated, default

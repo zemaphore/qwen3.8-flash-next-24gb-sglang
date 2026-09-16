@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: root <root@docker01.fra.askei.net>
 Date: Wed, 16 Sep 2026 20:36:46 +0000
-Subject: [PATCH 2/5] feat(moe_wna16): 2-bit experts, expert streaming,
+Subject: [PATCH 2/6] feat(moe_wna16): 2-bit experts, expert streaming,
  N-contiguous GEMV
 
 Port the accepted INT2/streaming changes onto main b02e16a895.

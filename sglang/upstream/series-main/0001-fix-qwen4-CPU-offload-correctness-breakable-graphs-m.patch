@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: root <root@docker01.fra.askei.net>
 Date: Wed, 16 Sep 2026 20:35:02 +0000
-Subject: [PATCH 1/5] fix(qwen4): CPU-offload correctness, breakable graphs,
+Subject: [PATCH 1/6] fix(qwen4): CPU-offload correctness, breakable graphs,
  mmap PLE table
 
 Port the accepted 3090 correctness, host-fix, graph-output and PLE changes

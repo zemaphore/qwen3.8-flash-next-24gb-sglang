@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: root <root@docker01.fra.askei.net>
 Date: Wed, 16 Sep 2026 20:40:00 +0000
-Subject: [PATCH 3/5] feat(mem_cache): elastic VMM expert row arenas, lazy KV,
+Subject: [PATCH 3/6] feat(mem_cache): elastic VMM expert row arenas, lazy KV,
  quantized QSA pools
 
 Port the placement/elastic, lazy-VMM KV and quantized QSA KV subsystems onto
