@@ -1,0 +1,131 @@
+RC1-a reproduction — RAM-backed hybrid prefix cache plan, RTX 3090
+Run timestamp (UTC): 2026-09-16T16:06:33Z (launch) ... 2026-09-16T16:14:51Z (control restore verified)
+
+Purpose
+-------
+docs/logs/rc1_gpu_hybrid_3090_2026-09-16.md §3 reports a first RC1 boot ("RC1-a",
+--max-mamba-cache-size 16) that produced: mamba pool 1.79 GiB, profiled KV capacity
+187,200 tokens, available_gpu_mem 2.75 GiB, then a CUDA OOM allocating ~54 MiB in
+the GDN extend kernel (chunk_fwd_o) during a ~6.5K-token prefill with ~53 MiB free.
+That boot's log was not retained (launcher truncates with `>`; RC1-b overwrote it).
+This run re-executes RC1-a with the log written to a new file to verify or correct
+the claim.
+
+Exact launch command
+---------------------
+SRVLOG=/root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/rc1_3090_2026-09-16/server-rc1a.log \
+CTL=/root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/rc1_3090_2026-09-16/elastic-rc1a.ctl \
+SGLANG_3090_MAMBA_SIZE=16 SGLANG_3090_MAX_TOKENS=262144 SGLANG_3090_LAZY_TOKENS=262144 \
+/root/quant/serve-3090-rc1.sh
+
+(launched via nohup at 2026-09-16T16:06:33Z; systemd-run user scope sglang-1789574790.scope)
+
+sha256sum /root/quant/serve-3090-rc1.sh:
+20487f9355f7fca2ecc72f8783049a066a12c029182e2bfa372e8fe10c01d33d
+(matches the expected checksum in the task spec — launcher unmodified)
+
+Pre-state
+---------
+- Control unit running: sglang-1789572227.scope, port 30001
+- get_server_info: disable_radix_cache=True, max_total_tokens=262144, max_mamba_cache_size=1
+- nvidia-smi before stop: 19503 MiB used, 4622 MiB free, 0% util
+- Control stopped cleanly; VRAM fully released (0 MiB used, 24125 MiB free) before RC1-a launch.
+
+Boot lines captured (server-rc1a.log)
+--------------------------------------
+Confirmed server_args (line 10): max_mamba_cache_size=16, max_total_tokens=262144 (as
+requested), context_length=262144, mamba_radix_cache_strategy='extra_buffer',
+uses_mamba_radix_cache=True, kv_cache_dtype='int8ring_int4', disable_radix_cache=False.
+
+Line 43: [2026-09-16 16:09:47] Mamba Cache is allocated. max_mamba_cache_size: 16,
+         conv_state size: 0.04GB, ssm_state size: 1.79GB
+Line 48: [2026-09-16 16:09:47] Memory pool end. avail mem=2.84 GB
+Line 58: [2026-09-16 16:09:49] max_total_num_tokens=187200, chunked_prefill_size=4608,
+         max_prefill_tokens=32768, max_running_requests=1, context_len=262144,
+         available_gpu_mem=2.75 GB
+Line 60: [2026-09-16 16:09:49] Tree cache initialized: source=default
+         impl=UnifiedRadixCache hybrid_swa=False hybrid_ssm=True hicache_attached=False
+         streaming_wrapped=False
+"up after 211 s" (launcher health-check line); "gc frozen" (freeze_gc succeeded)
+
+Verdict on boot figures: all three reported numbers REPRODUCE exactly:
+  - mamba pool (ssm_state): 1.79 GiB  -> matches report's "1.79 GiB"
+  - profiled KV capacity: 187,200 tokens (profiled down from the requested 262,144
+    max-total-tokens; the pool WAS reduced, confirming the report's inference)
+  - available_gpu_mem: 2.75 GB -> matches report's "2.75 GiB"
+
+nvidia-smi immediately after boot (post warmup/freeze_gc, before probe):
+  22847 MiB used, 1278 MiB free (sampled after all probe calls below; see per-step notes)
+
+Per-request probe results (tools/rc1_cache_probe.py base_prefix("rc1a-repro"), max_new=16)
+--------------------------------------------------------------------------------------------
+Script:
+  python3 - <<'EOF'
+  import sys; sys.path.insert(0,'/root/qwen3.8-flash-next-24gb-sglang/tools')
+  import rc1_cache_probe as p, json
+  text = p.base_prefix("rc1a-repro")
+  print(json.dumps(p.call("http://127.0.0.1:30001/generate", text, 16)))
+  EOF
+
+1) cold        prompt_tokens=6069  cached_tokens=0     completion_tokens=16  wall_s=5.467
+2) repeat      prompt_tokens=6069  cached_tokens=6016  completion_tokens=16  wall_s=1.105
+3) +tool_res_1 prompt_tokens=6078  cached_tokens=6016  completion_tokens=16  wall_s=1.034
+4) +tool_res_2 prompt_tokens=6087  cached_tokens=6016  completion_tokens=16  wall_s=0.990
+
+No OOM, no Traceback, no "chunk_fwd_o" line, no "out of memory" string appeared in
+server-rc1a.log after any of these 4 requests (grep across full log: 0 matches for
+OutOfMemory|out of memory|Traceback|chunk_fwd_o|CUDA error|illegal memory).
+
+5) Extra check per plan: one longer cold prompt (~19K tokens: repo_block x3 with
+   distinct markers rc1a-long-A/B/C), max_new=16:
+   prompt_tokens=18090  cached_tokens=0  completion_tokens=16  wall_s=7.888
+   Also no OOM / no matching error lines.
+
+nvidia-smi sampled after the full probe sequence (all 5 requests):
+  24079 MiB used, 46 MiB free  (server still /health-OK afterward)
+
+Verdict on the OOM claim: DID NOT REPRODUCE in this run. The ~6.5K-token prefill
+(measured here as 6069 prompt tokens for the committed probe's base_prefix, close
+to but not identical to the report's "~6.5K") completed successfully, as did the
+cache-hit repeat, the two appended variants, and a subsequent ~18K-token cold
+prefill. VRAM free at the end of the sequence (46 MiB) was comparably tight to the
+~53 MiB free the report describes at the point of its OOM, but no allocation
+failure occurred here — the server stayed healthy through all 5 requests and the
+scope was stopped intentionally afterward, not by a crash.
+
+This is a genuine divergence from docs/logs/rc1_gpu_hybrid_3090_2026-09-16.md §3's
+OOM claim: the boot-time memory figures (mamba pool, KV capacity, available_gpu_mem)
+reproduce exactly, but the reported CUDA OOM during the ~6.5K-token prefill in the
+GDN extend kernel (chunk_fwd_o) did not reproduce under this exact re-run. Possible
+explanations (not verified further per task scope): nondeterminism in the exact
+free-memory margin at OOM boundary, a slightly different prompt token count (6069
+vs "~6.5K" in the original), or the original OOM depended on a different request
+history/order not reproduced here. The report's OOM claim should be corrected to
+reflect this non-reproduction, or the discrepancy should be flagged for follow-up.
+
+Teardown and restore
+---------------------
+- RC1-a scope sglang-1789574790.scope stopped cleanly via `systemctl --user stop`.
+- Port 30001 freed immediately; nvidia-smi confirmed VRAM fully released
+  (0 MiB used, 24125 MiB free) before restarting the control.
+- Control restored via: nohup /root/quant/serve-3090.sh (unmodified, unit
+  sglang-1789575076.scope), health passed after 211 s, warmup + freeze_gc succeeded
+  ("up after 211 s", "gc frozen").
+- Post-restore get_server_info verification:
+    disable_radix_cache=True, max_total_tokens=262144, max_mamba_cache_size=1
+  (matches the pre-state control exactly).
+- Post-restore nvidia-smi: 19503 MiB used, 4622 MiB free (matches pre-state sample).
+
+Retained files (this raw dir)
+------------------------------
+- server-rc1a.log            — full RC1-a boot + probe server log (new; RC1-a's log
+                                that was previously lost)
+- launcher-rc1a.out           — stdout/stderr of the serve-3090-rc1.sh wrapper for
+                                this run ("up after 211 s", "gc frozen")
+- elastic-rc1a.ctl             — elastic ctl file created by this run
+- rc1a_probe_results.json     — JSON of the 4 base_prefix probe calls
+- rc1a_probe_long.json        — JSON of the ~19K-token cold-prompt probe call
+- launcher-control-restore.out — stdout/stderr of the control restore
+- rc1a_repro.txt              — this file
+
+No existing file in this raw dir (including server-rc1.log) was modified.
