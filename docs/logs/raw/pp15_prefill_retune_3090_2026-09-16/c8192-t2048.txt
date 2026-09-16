@@ -1,0 +1,25 @@
+# arm /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/pp15_prefill_retune_3090_2026-09-16/c8192-t2048.txt  2026-09-16T08:51:47Z
+    target   actual  prefill s  prefill t/s  decode t/s
+  ---------------------------------------------------------
+      4096     4565       3.96         1152        41.7
+    target   actual  prefill s  prefill t/s  decode t/s
+  ---------------------------------------------------------
+      4096     4565       1.98         2309        41.6
+    target   actual  prefill s  prefill t/s  decode t/s
+  ---------------------------------------------------------
+      4096     4565       1.74         2618        41.4
+    target   actual  prefill s  prefill t/s  decode t/s
+  ---------------------------------------------------------
+      4096     4565       1.74         2625        42.0
+    target   actual  prefill s  prefill t/s  decode t/s
+  ---------------------------------------------------------
+      4096     4565       1.75         2615        41.9
+    target   actual  prefill s  prefill t/s  decode t/s
+  ---------------------------------------------------------
+      4096     4565       1.75         2607        40.8
+    target   actual  prefill s  prefill t/s  decode t/s
+  ---------------------------------------------------------
+     12000    14446       7.44         1942        33.8
+    target   actual  prefill s  prefill t/s  decode t/s
+  ---------------------------------------------------------
+     30000    34661      17.64         1965        37.4

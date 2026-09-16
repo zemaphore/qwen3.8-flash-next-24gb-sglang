@@ -22,5 +22,13 @@
         "GROUP_SIZE_M": 16,
         "num_warps": 4,
         "num_stages": 2
+    },
+    "4565": {
+        "BLOCK_SIZE_M": 64,
+        "BLOCK_SIZE_N": 64,
+        "BLOCK_SIZE_K": 32,
+        "GROUP_SIZE_M": 8,
+        "num_warps": 4,
+        "num_stages": 3
     }
 }

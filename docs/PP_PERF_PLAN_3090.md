@@ -50,6 +50,12 @@ cache and moved each next layer's HtoD behind current-layer compute. It reached
 **2601.2 +/- 52.4 tok/s** versus adjacent control **1908.2 +/- 21.8**
 (**+36.32%**), preserved both exactness oracles, and passed the long-prompt
 memory check. It is accepted and enabled by default above a 2,048-token floor.
+PP15 then retuned the routed INT2 MoE on captured real routing and added an
+M=4565 entry to the E=384/E=432 sm_86 buckets: the captured canonical reaches
+**2687.4 +/- 48.3 tok/s** versus the 2583.4 reference (**+4.0%**, below the
+historical 5% gate, exact oracles). The PP14 chunk/threshold retune found no
+safe improvement (larger chunks win on medium prompts but exhaust VRAM), so the
+4,608-token chunk and 2,048-token prefetch floor remain.
 
 The PLE work now has a bounded policy that covers both measured regimes:
 
@@ -161,6 +167,7 @@ must never be silently mixed into an exact A/B.
 | PP12 | **DONE** | Tail-chunk staging amortization | The 469-token tail pays a nearly full per-layer-chunk staging cost; fewer, larger chunks should cut total staging | Exact; chunk 4608 (one extend for the canonical prompt) 1937.8 +/- 12.9 vs pooled 2048 controls 1286.2 +/- 10.4 tok/s (**+50.66%**, t=98.3); decode unchanged; default promoted via `patches/enable_prefill_chunk_residency.py` |
 | PP13 | **REJECTED** | Accepted-stack profile plus GDN/MoE kernel screens | Retuning the now-dominant compute kernels may improve one-chunk PP | Fresh current 1968.2 +/- 7.6 tok/s; dense GDN ceiling ~1.8% for +1.42 GiB; synthetic high-M MoE tiles looked faster in isolation but measured 1830.8 +/- 14.0 vs adjacent current 1926.0 +/- 5.3 tok/s (-4.94%); no default change |
 | PP14 | **DONE** | Cross-layer cold-row H2D prefetch | Prefetch fixed-order cold rows for layer L+1 during layer L compute, then GPU-compact after routing | Exact; 2601.2 vs 1908.2 adjacent control (+36.32%); 68.9k prompt passed with 1,221 MiB free; trace overlap 0.46% -> 51.70%; default on at >=2,048 tokens |
+| PP15 | **DONE** | Real-routing MoE retune + chunk/threshold retune | Tune the fused INT2 MoE on captured real top-k, and retune chunk/threshold now that prefetch is on | MoE M=4565 entry: canonical 2687.4 +/- 48.3 vs 2583.4 reference (**+4.0%**, below the historical 5% gate), oracles exact, +4.2% steady-state; chunk 6144 medium +11.9% but only 784 MiB free, chunk 8192 80 MiB, threshold 512 regresses; all kept off |
 
 ## PP1 — PLE storage experiment
 
@@ -593,6 +600,44 @@ tool reached **2468 tok/s** at 10,001 prompt tokens.
 Evidence: [PP14 result](logs/pp14_cross_layer_prefetch_3090_2026-09-16.md);
 [raw arms, long-context pass, trace and secondary benchmarks](logs/raw/pp14_cross_layer_prefetch_3090_2026-09-16/).
 
+## PP15 — real-routing MoE retune plus chunk/threshold retune (done)
+
+After PP14 a fresh extend profile is compute-bound: 1595.9 ms compute union in a
+1743.3 ms span with 901.3 ms (95.6%) of the 942.8 ms DMA union already overlapped
+and only ~106 ms without a GPU engine event. The largest kernel is the routed
+INT2 MoE at 536.0 ms, so PP15 tuned it on **real** routing rather than PP13's
+uniform synthetic distribution.
+
+`patches/prefill_route_dump.py` captured two canonical 48-layer top-k dumps.
+Real compact `E` is 406-502 per layer and the token distribution is skewed
+(layer 24: max 2691, mean 89, 457 nonzero). `tools/tune_moe_int2_real.py`
+replays those ids through `fused_experts_impl` and found a stable better pair for
+the M=4565 lookup (gate/up `BLOCK_SIZE_M=64, N=64, K=32, GROUP=8`; down
+`BLOCK_SIZE_M=64, N=128, K=32, GROUP=8`), 1.13-1.21x (mean 1.16x) across layers.
+The entries were added only to the E=384/E=432 sm_86 buckets at M=4565.
+
+The captured accepted arm measured canonical **2687.4 +/- 48.3** vs the PP14
+accepted reference **2583.4 +/- 65.4** (**+4.03%**); a same-session 10-sample
+control/variant pair excluding the documented re-warm transient gives 2585.0 +/-
+19.7 vs 2693.9 +/- 13.7 (**+4.21%**). Both oracles are unchanged. This is below
+the historical 5% screen gate and is recorded as such. Required characterization:
+llama-benchy `pp2048 @ d2048` **1246.81 +/- 40.96**, `tg256 @ d2048`
+**29.39 +/- 1.23**; the authors' unmodified tool at 10,001 tokens **2,524 tok/s**
+(PP14: 2,468; authors' published: 2,271).
+
+The chunk/threshold retune is closed negative: chunk 8192 made the 14,446-token
+prompt +17.7% but left **80 MiB** free on 34,661 tokens, chunk 9216 exceeds the
+`int8ring_int4` 8,192-slot ring and crashes, chunk 6144 gives +11.9% medium but
+leaves 784 MiB and low-memory lazy kernel loads, and a 512-token prefetch
+threshold regresses small tails. Chunk 4,608 / threshold 2,048 stay the defaults.
+The full-table gather (remove the `torch.unique` sync on prefetched layers,
+`patches/moe_prefetch_full_table.py`) is exact but only +0.9% alone and
+indistinguishable from the MoE config when stacked, so it is opt-in default-off.
+
+Evidence: [PP15 result](logs/pp15_real_routing_moe_3090_2026-09-16.md); raw arms
+and captures in `logs/raw/pp15_prefill_retune_3090_2026-09-16/` and
+`logs/raw/pp15_real_routing_moe_3090_2026-09-16/`.
+
 ## Later research
 
 - Shared-expert format sweep was rejected in PP8 (measured ceiling ~1.2% of
@@ -632,6 +677,7 @@ Evidence: [PP14 result](logs/pp14_cross_layer_prefetch_3090_2026-09-16.md);
    SGLANG=/root/sglang python3 patches/moe_host_dma_batch.py --check
    python3 patches/enable_moe_host_dma_batch.py --check
    SGLANG=/root/sglang python3 patches/moe_cross_layer_prefetch.py --check
+   SGLANG=/root/sglang python3 patches/moe_prefetch_full_table.py --check
    python3 patches/enable_moe_cross_layer_prefetch.py --check
    python3 patches/enable_prefill_presence_placement.py --check
    SGLANG=/root/sglang python3 patches/prefill_route_dump.py --check
@@ -661,9 +707,10 @@ PYTHONPATH=/root/sglang/python /root/quant/venv-sglang/bin/python -m unittest \
 
 State at this update: bulk pread, the 128 MiB recent-row cache, the 2,048-byte
 expert-gather tile, host-row DMA staging, PP11 DMA batching, a 4,608-token
-prefill chunk (PP12), S184 residency, PP5c prefill-presence placement, and PP14
-cross-layer cold-row prefetch above 2,048 tokens are enabled; profiling is
-disabled. The prefill route dump is applied
+prefill chunk (PP12), S184 residency, PP5c prefill-presence placement, PP14
+cross-layer cold-row prefetch above 2,048 tokens, and the PP15 M=4565 INT2 MoE
+config entries for the E=384/E=432 buckets are enabled; profiling is disabled.
+`patches/moe_prefetch_full_table.py` is installed but default-off. The prefill route dump is applied
 and pass-through in `/root/quant/serve-3090.sh` but off unless
 `SGLANG_PREFILL_ROUTE_DUMP` names a directory. No server is currently running;
 the PP14 prototype, adjacent control, and final-default scopes were stopped
