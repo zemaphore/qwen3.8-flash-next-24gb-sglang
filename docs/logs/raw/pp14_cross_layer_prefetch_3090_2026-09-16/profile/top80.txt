@@ -1,0 +1,82 @@
+duration events: 265,672; distinct names: 2,345
+    total ms    count    mean us  domain               name
+  122855.896      145  847282.04  sglang::scheduler    <built-in method __exit__ of pybind11_builtins.pybind11_detail_function_record_v1_system_libstdcpp_gxx_abi_1xxx_use_cxx11_abi_1 object at 0x7838e1d3c4f0>
+   35616.866       20 1780843.28  sglang::scheduler    threading.py(1030): _bootstrap
+   35616.862       20 1780843.08  sglang::scheduler    threading.py(1073): _bootstrap_inner
+   32055.204       18 1780844.67  sglang::scheduler    threading.py(1010): run
+   28493.482       16 1780842.62  sglang::scheduler    concurrent/futures/thread.py(89): _worker
+    6528.280      817    7990.55  sglang::scheduler    torch/nn/modules/module.py(1782): _call_impl
+    5208.883        3 1736294.27  sglang::scheduler    torch/utils/_contextlib.py(120): decorate_context
+    5186.173        4 1296543.25  sglang::scheduler    step[EXTEND bs=1 toks=4565]
+    3561.647        2 1780823.28  sglang::scheduler    tqdm/_monitor.py(69): run
+    3561.646        2 1780822.86  sglang::scheduler    threading.py(655): wait
+    3561.644        2 1780821.93  sglang::scheduler    threading.py(359): wait
+    1847.091       98   18847.86  sglang::scheduler    torch/_jit_internal.py(627): fn
+    1781.045        1 1781044.69  Spans                PyTorch Profiler (0)
+    1780.865        1 1780864.97  sglang::scheduler    torch/_inductor/compile_worker/subproc_pool.py(271): _read_thread
+    1780.864        1 1780863.62  sglang::scheduler    torch/_inductor/compile_worker/subproc_pool.py(76): _recv_msg
+    1780.851        1 1780850.59  sglang::scheduler    python/sglang/srt/utils/watchdog.py(127): _watchdog_thread
+    1780.849        1 1780849.01  sglang::scheduler    python/sglang/srt/utils/watchdog.py(147): _watchdog_once
+    1780.815        1 1780815.11  sglang::scheduler    <string>(1): <module>
+    1780.814        1 1780813.81  sglang::scheduler    multiprocessing/spawn.py(122): spawn_main
+    1780.813        1 1780812.58  sglang::scheduler    multiprocessing/spawn.py(135): _main
+    1780.811        1 1780811.49  sglang::scheduler    multiprocessing/process.py(314): _bootstrap
+    1780.811        1 1780810.70  sglang::scheduler    multiprocessing/process.py(108): run
+    1780.810        1 1780809.60  sglang::scheduler    python/sglang/srt/managers/scheduler.py(5068): run_scheduler_process
+    1780.808        1 1780807.74  sglang::scheduler    python/sglang/srt/managers/scheduler.py(1708): run_event_loop
+    1780.807        1 1780806.83  sglang::scheduler    python/sglang/srt/managers/scheduler.py(4918): dispatch_event_loop
+    1780.806        1 1780805.53  sglang::scheduler    torch/utils/_contextlib.py(124): decorate_context
+    1780.804        1 1780804.31  sglang::scheduler    python/sglang/srt/managers/scheduler.py(1746): event_loop_normal
+    1765.559        1 1765559.48  sglang::scheduler    python/sglang/srt/utils/nvtx_utils.py(109): wrapper
+    1765.556        1 1765556.27  sglang::scheduler    python/sglang/srt/managers/scheduler.py(3647): run_batch
+    1757.692        1 1757692.45  sglang::scheduler    python/sglang/srt/managers/tp_worker.py(574): forward_batch_generation
+    1743.745        1 1743744.71  sglang::scheduler    python/sglang/srt/model_executor/model_runner.py(1499): forward
+    1740.694        1 1740693.67  sglang::scheduler    python/sglang/srt/model_executor/model_runner.py(1643): _forward_raw
+    1739.661        1 1739661.42  sglang::scheduler    python/sglang/srt/model_executor/runner/eager_runner.py(204): execute
+    1739.643        1 1739642.64  sglang::scheduler    python/sglang/srt/model_executor/runner/eager_runner.py(258): _execute_extend
+    1736.441        1 1736440.65  sglang::scheduler    python/sglang/srt/models/qwen4_exp.py(1997): forward
+    1736.412        1 1736411.78  sglang::scheduler    python/sglang/srt/models/qwen3_vl.py(1417): forward
+    1735.991        1 1735991.39  sglang::scheduler    nn.Module: Qwen4ExpVLModel_0
+    1735.951        1 1735950.94  sglang::scheduler    python/sglang/srt/models/qwen4_exp.py(1938): forward
+    1735.873        1 1735873.14  sglang::scheduler    python/sglang/srt/models/qwen4_exp.py(1870): forward
+    1255.177       36   34866.02  sglang::scheduler    python/sglang/srt/models/qwen4_exp.py(1646): forward
+    1161.593       48   24199.86  sglang::scheduler    python/sglang/srt/models/qwen4_exp.py(1570): _run_qwen4_exp_mlp
+    1157.795       48   24120.72  sglang::scheduler    python/sglang/srt/models/qwen2_moe.py(592): forward
+    1125.062       48   23438.79  sglang::scheduler    python/sglang/srt/models/qwen2_moe.py(540): _forward_router_experts
+    1097.043       48   22855.07  sglang::scheduler    python/sglang/srt/layers/moe/fused_moe_triton/layer.py(1421): forward
+    1096.646       48   22846.79  sglang::scheduler    python/sglang/srt/layers/moe/fused_moe_triton/layer.py(1462): forward_impl
+    1091.195       48   22733.23  sglang::scheduler    python/sglang/srt/layers/moe/fused_moe_triton/layer.py(1530): run_moe_core
+    1090.455       48   22717.81  sglang::scheduler    python/sglang/srt/layers/quantization/moe_wna16.py(605): apply
+     955.743       48   19911.32  sglang::scheduler    python/sglang/srt/layers/moe/expert_stream.py(281): gather
+     938.930      193    4864.92  sglang::scheduler    Memcpy HtoD (Pinned -> Device)
+     923.175       49   18840.31  sglang::scheduler    torch/functional.py(1106): _return_inverse
+     922.952       49   18835.76  sglang::scheduler    torch/functional.py(803): _unique_impl
+     922.782       49   18832.29  sglang::scheduler    <built-in method _unique2 of type object at 0x78388119ff20>
+     922.065       49   18817.65  sglang::scheduler    aten::_unique2
+     907.880       64   14185.63  sglang::scheduler    aten::item
+     907.508       64   14179.81  sglang::scheduler    aten::_local_scalar_dense
+     905.983       73   12410.72  sglang::scheduler    cudaStreamSynchronize
+     535.994       96    5583.27  sglang::scheduler    fused_moe_kernel_gptq_awq_word
+     471.444       12   39287.03  sglang::scheduler    python/sglang/srt/models/qwen4_exp.py(1789): forward
+     462.964      384    1205.64  sglang::scheduler    void sglang::device::marlin::Marlin<__nv_bfloat16, 1125899923621888l, 256, 4, 16, 4, false, 4, 8, false>(int4 const*, int4 const*, int4*, int4*, int4 const*, unsigned short const*, int4 const*, int const*, int, int, int, int, int, int*, bool, bool, int)
+     280.662      602     466.22  sglang::scheduler    aten::to
+     280.022      191    1466.08  sglang::scheduler    aten::_to_copy
+     279.886      864     323.94  sglang::scheduler    aten::copy_
+     241.946        1  241945.75  sglang::scheduler    scheduler.run_batch
+     241.549      108    2236.56  sglang::scheduler    python/sglang/kernels/fused_op.py(623): forward
+     235.764       12   19647.01  sglang::scheduler    python/sglang/srt/models/qwen4_exp.py(1736): self_attention
+     228.624      138    1656.70  sglang::scheduler    cudaMemcpyAsync
+     216.722       12   18060.13  sglang::scheduler    python/sglang/srt/models/qwen4_exp.py(1698): _compute_qsa_topk_indices
+     216.500      194    1115.98  sglang::scheduler    ## Call CompiledFxGraph fvump7dmrtbk23lvshelpq5le34ytwpyg7ghoeno3wiraajkhwuu ##
+     215.495       12   17957.90  sglang::scheduler    python/sglang/srt/layers/attention/qsa/qsa_indexer.py(550): forward_cuda
+     204.467       15   13631.15  sglang::scheduler    <built-in method tolist of Tensor object at 0x78374feef110>
+     195.865       12   16322.11  sglang::scheduler    python/sglang/srt/layers/attention/qsa/metadata.py(124): get_prefill_mqa_inputs
+     157.401       48    3279.18  sglang::scheduler    python/sglang/srt/models/qwen4_exp.py(1519): _prepare_qwen4_exp_attn
+     124.836        1  124836.38  sglang::scheduler    nn.Module: Qwen4ExpLinearDecoderLayer_1
+     120.618       36    3350.49  sglang::scheduler    python/sglang/srt/models/qwen3_5.py(690): forward
+     112.084      424     264.35  sglang::scheduler    torch/_dynamo/eval_frame.py(1423): _fn
+     106.829      183     583.77  sglang::scheduler    void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_tn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_tn_align8::Params)
+     102.658       12    8554.83  sglang::scheduler    _sparse_gqa_prefill
+      98.170       97    1012.07  sglang::scheduler    python/sglang/srt/layers/hyperconnection.py(233): mix
+      95.351        1   95350.70  sglang::scheduler    nn.Module: Qwen4ExpPLELayer_0
+      95.326        1   95325.78  sglang::scheduler    python/sglang/srt/models/qwen4_exp.py(1405): forward

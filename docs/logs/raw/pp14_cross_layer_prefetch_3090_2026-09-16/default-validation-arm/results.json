@@ -1,0 +1,186 @@
+{
+  "arm": "default-validation",
+  "completed_utc": "2026-09-16T06:40:12.615956+00:00",
+  "records": [
+    {
+      "actual": 4565,
+      "argv": [
+        "/root/quant/venv-sglang/bin/python",
+        "/root/qwen3.8-flash-next-24gb-sglang/tools/bench_agentic.py",
+        "--corpus",
+        "/root/qwen3.8-flash-next-24gb-sglang/sglang/qwen4exp-serving-73a255206f.patch",
+        "--tokens",
+        "4096",
+        "--decode-tokens",
+        "256"
+      ],
+      "corpus": "canonical",
+      "decode_tps": 39.8,
+      "ended_utc": "2026-09-16T06:39:26.960352+00:00",
+      "prefill_s": 3.73,
+      "prefill_tps": 1224.0,
+      "raw_file": "bench-canonical-excluded-00.txt",
+      "raw_sha256": "3e4c844ffaaf201a1aaffeb86381df43c9dca03d5e5d61f059c730a2fb0abe37",
+      "returncode": 0,
+      "sample_index": 0,
+      "sample_kind": "excluded",
+      "started_utc": "2026-09-16T06:39:16.764622+00:00",
+      "wall_seconds": 10.195740411996667
+    },
+    {
+      "actual": 4565,
+      "argv": [
+        "/root/quant/venv-sglang/bin/python",
+        "/root/qwen3.8-flash-next-24gb-sglang/tools/bench_agentic.py",
+        "--corpus",
+        "/root/qwen3.8-flash-next-24gb-sglang/sglang/qwen4exp-serving-73a255206f.patch",
+        "--tokens",
+        "4096",
+        "--decode-tokens",
+        "256"
+      ],
+      "corpus": "canonical",
+      "decode_tps": 41.1,
+      "ended_utc": "2026-09-16T06:39:35.080379+00:00",
+      "prefill_s": 1.85,
+      "prefill_tps": 2470.0,
+      "raw_file": "bench-canonical-measured-01.txt",
+      "raw_sha256": "5c6f9e8bcbd924f4f813a239bf7f02ff2a42e76ece2d1ffd3bf549551e9dca9b",
+      "returncode": 0,
+      "sample_index": 1,
+      "sample_kind": "measured",
+      "started_utc": "2026-09-16T06:39:26.960503+00:00",
+      "wall_seconds": 8.119885411004361
+    },
+    {
+      "actual": 4565,
+      "argv": [
+        "/root/quant/venv-sglang/bin/python",
+        "/root/qwen3.8-flash-next-24gb-sglang/tools/bench_agentic.py",
+        "--corpus",
+        "/root/qwen3.8-flash-next-24gb-sglang/sglang/qwen4exp-serving-73a255206f.patch",
+        "--tokens",
+        "4096",
+        "--decode-tokens",
+        "256"
+      ],
+      "corpus": "canonical",
+      "decode_tps": 39.9,
+      "ended_utc": "2026-09-16T06:39:43.261546+00:00",
+      "prefill_s": 1.73,
+      "prefill_tps": 2636.0,
+      "raw_file": "bench-canonical-measured-02.txt",
+      "raw_sha256": "f08685319d43439988732245adb4ca0e2c2b8f73e643d4e317e0942b028fa1b2",
+      "returncode": 0,
+      "sample_index": 2,
+      "sample_kind": "measured",
+      "started_utc": "2026-09-16T06:39:35.080477+00:00",
+      "wall_seconds": 8.181079073998262
+    },
+    {
+      "actual": 4565,
+      "argv": [
+        "/root/quant/venv-sglang/bin/python",
+        "/root/qwen3.8-flash-next-24gb-sglang/tools/bench_agentic.py",
+        "--corpus",
+        "/root/qwen3.8-flash-next-24gb-sglang/sglang/qwen4exp-serving-73a255206f.patch",
+        "--tokens",
+        "4096",
+        "--decode-tokens",
+        "256"
+      ],
+      "corpus": "canonical",
+      "decode_tps": 41.7,
+      "ended_utc": "2026-09-16T06:39:51.196784+00:00",
+      "prefill_s": 1.76,
+      "prefill_tps": 2595.0,
+      "raw_file": "bench-canonical-measured-03.txt",
+      "raw_sha256": "a37043972ee86584c0878227007079052033ec1467d0f72e4a46b3593595edce",
+      "returncode": 0,
+      "sample_index": 3,
+      "sample_kind": "measured",
+      "started_utc": "2026-09-16T06:39:43.261684+00:00",
+      "wall_seconds": 7.935109156998806
+    },
+    {
+      "actual": 4565,
+      "argv": [
+        "/root/quant/venv-sglang/bin/python",
+        "/root/qwen3.8-flash-next-24gb-sglang/tools/bench_agentic.py",
+        "--corpus",
+        "/root/qwen3.8-flash-next-24gb-sglang/sglang/qwen4exp-serving-73a255206f.patch",
+        "--tokens",
+        "4096",
+        "--decode-tokens",
+        "256"
+      ],
+      "corpus": "canonical",
+      "decode_tps": 41.3,
+      "ended_utc": "2026-09-16T06:39:59.184823+00:00",
+      "prefill_s": 1.74,
+      "prefill_tps": 2616.0,
+      "raw_file": "bench-canonical-measured-04.txt",
+      "raw_sha256": "6cf7ef0c03ecf6f14b442b8cb09f49112b669081dda0269d7493024fb64cc01a",
+      "returncode": 0,
+      "sample_index": 4,
+      "sample_kind": "measured",
+      "started_utc": "2026-09-16T06:39:51.196899+00:00",
+      "wall_seconds": 7.987940065002476
+    },
+    {
+      "actual": 4565,
+      "argv": [
+        "/root/quant/venv-sglang/bin/python",
+        "/root/qwen3.8-flash-next-24gb-sglang/tools/bench_agentic.py",
+        "--corpus",
+        "/root/qwen3.8-flash-next-24gb-sglang/sglang/qwen4exp-serving-73a255206f.patch",
+        "--tokens",
+        "4096",
+        "--decode-tokens",
+        "256"
+      ],
+      "corpus": "canonical",
+      "decode_tps": 42.0,
+      "ended_utc": "2026-09-16T06:40:07.084614+00:00",
+      "prefill_s": 1.76,
+      "prefill_tps": 2600.0,
+      "raw_file": "bench-canonical-measured-05.txt",
+      "raw_sha256": "0600e8197d247085509febfbbac45229bcf797c83220a8701f6b66c0f4db7e16",
+      "returncode": 0,
+      "sample_index": 5,
+      "sample_kind": "measured",
+      "started_utc": "2026-09-16T06:39:59.184954+00:00",
+      "wall_seconds": 7.899672003004525
+    },
+    {
+      "argv": [
+        "/root/quant/venv-sglang/bin/python",
+        "/root/qwen3.8-flash-next-24gb-sglang/tools/logprob_diff.py",
+        "check",
+        "m4_3090_untuned"
+      ],
+      "ended_utc": "2026-09-16T06:40:10.296459+00:00",
+      "oracle": "m4_3090_untuned",
+      "raw_file": "oracle-m4_3090_untuned.txt",
+      "raw_sha256": "4dd005d5d2ceb6ee0e74cbb9f1dc5f9d8aa089b2d6a60dbe9d187adc4eff5aec",
+      "returncode": 0,
+      "started_utc": "2026-09-16T06:40:07.084752+00:00",
+      "wall_seconds": 3.2117160790003254
+    },
+    {
+      "argv": [
+        "/root/quant/venv-sglang/bin/python",
+        "/root/qwen3.8-flash-next-24gb-sglang/tools/logprob_diff.py",
+        "check",
+        "lp2"
+      ],
+      "ended_utc": "2026-09-16T06:40:12.583979+00:00",
+      "oracle": "lp2",
+      "raw_file": "oracle-lp2.txt",
+      "raw_sha256": "7e784c7b870776fea129b8ab341b4b7d6cefb2d75c2e5eba257d55db739703a6",
+      "returncode": 0,
+      "started_utc": "2026-09-16T06:40:10.296545+00:00",
+      "wall_seconds": 2.287450073999935
+    }
+  ]
+}

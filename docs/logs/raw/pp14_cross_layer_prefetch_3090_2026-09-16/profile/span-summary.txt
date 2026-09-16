@@ -1,0 +1,22 @@
+Trace: 1789539929.514334-TP-0-EXTEND.trace.json.gz
+Clipping span: CPU user_annotation step[EXTEND bs=1 toks=4565]
+Span duration: 1743.301 ms
+
+GPU engine union (kernel + memcpy + memset): 1637.406 ms (93.93% of span)
+Compute union (kernel + memset):              1595.895 ms (91.54% of span)
+DMA union (gpu_memcpy):                        942.783 ms (54.08% of span)
+Pinned HtoD union:                             938.925 ms (53.86% of span)
+Compute/DMA overlap:                           901.272 ms (51.70% of span)
+No GPU engine event:                           105.895 ms ( 6.07% of span)
+
+Named GPU kernel totals inside the span:
+  GPTQ/AWQ Marlin:                             470.869 ms
+  fused_moe_kernel_gptq_awq_word:              526.765 ms
+
+The prefetch stream issued 188 pinned HtoD events (47 layers x 4 tensor
+kinds), 20,127,129,600 bytes and 920.559 ms total. The ordinary layer-0 DMA
+stream issued four pinned HtoD events, 394,291,200 bytes and 18.366 ms total.
+
+Intervals are clipped to the CPU span and merged before union calculations.
+The PP13 accepted-stack trace used the same calculation and had only 10.879 ms
+(0.46%) compute/DMA overlap in a 2390.128 ms span.

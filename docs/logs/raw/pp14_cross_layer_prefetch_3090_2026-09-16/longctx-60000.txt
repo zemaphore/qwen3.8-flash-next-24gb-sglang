@@ -1,0 +1,10 @@
+  before: S 184 S_max 184 floor 184-None arena 11.06 GB free 4.51 GB
+  during: S 184 S_max 184 floor 184-None arena 11.06 GB free 4.51 GB
+  during: S 184 S_max 184 floor 184-None arena 11.06 GB free 4.51 GB
+  during: S 184 S_max 184 floor 184-None arena 11.06 GB free 4.51 GB
+  during: S 184 S_max 184 floor 184-None arena 11.06 GB free 4.51 GB
+  during: S 184 S_max 184 floor 184-None arena 11.06 GB free 4.51 GB
+  prompt 68905 tokens: prefill 27.9 s (2473 tok/s), decode 33.5 tok/s
+  answer: '\n\n<think>\n\n</think>\n\nfox\n'
+  during: S 184 S_max 184 floor 184-None arena 11.06 GB free 4.51 GB
+  after:  S 184 S_max 184 floor 184-None arena 11.06 GB free 4.51 GB

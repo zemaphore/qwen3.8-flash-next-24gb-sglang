@@ -54,6 +54,22 @@ fully applied, and each `revert()` refuses while a later layer is applied. `--ch
 prints its overlaid edits as MISMATCH and a `P-line` naming the overlay; that is the expected state, not
 damage.
 
+## Accepted post-campaign PP layers
+
+The original `assets/phase1_state.json` list above predates the RTX 3090 PP
+campaign. The current served tree also has these later layers applied in their
+documented order: PLE bulk pread and recent-row cache, gather block 2048, PP7
+host DMA gather, PP11 batched DMA, presence placement, PP12 chunk 4608, and
+PP14 cross-layer cold-row prefetch.
+
+| Item | Source patch | Launcher patch | Accepted behavior |
+|---|---|---|---|
+| PP14 cold prefetch | `moe_cross_layer_prefetch.py` | `enable_moe_cross_layer_prefetch.py` | One reusable ~637 MiB device cache overlaps the next layer's fixed cold-row HtoD with current MoE compute. Default on only at >=2,048 tokens; `SGLANG_MOE_COLD_PREFETCH=0` restores selected-row DMA. Exact; +36.32% canonical PP versus adjacent control, 68.9k prompt passed, trace overlap 0.46% -> 51.70%. |
+
+PP14 applies after `moe_host_dma_batch.py` because it reuses that layer's
+stable pinned-source address cache and `cudaMemcpyBatchAsync` helper. Revert
+PP14 before reverting PP11.
+
 ## Not in the accepted list
 
 | Item | Script | Status | Notes |

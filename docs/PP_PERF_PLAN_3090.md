@@ -8,12 +8,14 @@ its own plan in [DECODE_PERF_PLAN.md](DECODE_PERF_PLAN.md).
 
 ## Current conclusion
 
-The accepted post-PP12 stack measures **1968.2 +/- 7.6 tok/s** on the canonical
-4,565-token code prompt. PP13 shows the next material target is cross-layer
-expert-row prefetch: 738.7 ms of pinned HtoD and 1,426.4 ms of compute are both
-present in the one-extend span, but overlap by only 10.9 ms. Pure compute-format
-changes are not large enough: the real GDN format ceiling is ~1.8%, and high-M
-MoE configs selected by a synthetic uniform-route tuner regress the real server.
+The accepted post-PP14 stack measures **2583.4 +/- 65.4 tok/s** on the canonical
+4,565-token code prompt. PP14 overlaps next-layer cold-row HtoD with current
+MoE compute and is **+36.32%** in its fresh adjacent A/B (2601.2 versus 1908.2
+tok/s). The confirming trace shows 901.3 ms / 51.70% compute-DMA overlap versus
+10.9 ms / 0.46% on PP13. Exactness is unchanged, a 68,905-token prompt retains
+1,221 MiB minimum free VRAM, and the launcher defaults the optimization on for
+chunks of at least 2,048 tokens so short interactive requests keep the prior
+selected-row path.
 
 Earlier in the sequence, M4 improved its standalone INT2 MoE path by 1.38x
 geometric mean but moved end-to-end PP by only 1.8-4.1%. PP11 removed the
@@ -43,7 +45,11 @@ trace is 90.3% GPU-engine-active but contains 738.7 ms of pinned HtoD and
 1426.4 ms of compute with only 10.9 ms overlap. A real-tensor GDN format sweep
 was too small and memory-heavy, while synthetic high-M MoE configs regressed
 the fresh server by 4.94% versus the adjacent control. Both are rejected and
-no default changed. Cross-layer cold-row prefetch is the next material target.
+no default changed. PP14 then implemented a reusable full cold-row device
+cache and moved each next layer's HtoD behind current-layer compute. It reached
+**2601.2 +/- 52.4 tok/s** versus adjacent control **1908.2 +/- 21.8**
+(**+36.32%**), preserved both exactness oracles, and passed the long-prompt
+memory check. It is accepted and enabled by default above a 2,048-token floor.
 
 The PLE work now has a bounded policy that covers both measured regimes:
 
@@ -154,7 +160,7 @@ must never be silently mixed into an exact A/B.
 | PP11 | **DONE** | Batched host-row DMA submission | Replace ~50k Python/Tensor row-copy submissions per chunk with four CUDA batch calls while resident gathers overlap on the current stream | Exact; 1183.4 vs 1110.9 pooled control, +6.53%; default on |
 | PP12 | **DONE** | Tail-chunk staging amortization | The 469-token tail pays a nearly full per-layer-chunk staging cost; fewer, larger chunks should cut total staging | Exact; chunk 4608 (one extend for the canonical prompt) 1937.8 +/- 12.9 vs pooled 2048 controls 1286.2 +/- 10.4 tok/s (**+50.66%**, t=98.3); decode unchanged; default promoted via `patches/enable_prefill_chunk_residency.py` |
 | PP13 | **REJECTED** | Accepted-stack profile plus GDN/MoE kernel screens | Retuning the now-dominant compute kernels may improve one-chunk PP | Fresh current 1968.2 +/- 7.6 tok/s; dense GDN ceiling ~1.8% for +1.42 GiB; synthetic high-M MoE tiles looked faster in isolation but measured 1830.8 +/- 14.0 vs adjacent current 1926.0 +/- 5.3 tok/s (-4.94%); no default change |
-| PP14 | **NEXT** | Cross-layer cold-row H2D prefetch | Double-buffer fixed-order cold rows for layer L+1 during layer L compute, then DtoD-compact after routing | Exact; beat adjacent current control, retain long-prompt memory safety, and demonstrate real HtoD/compute overlap in a trace |
+| PP14 | **DONE** | Cross-layer cold-row H2D prefetch | Prefetch fixed-order cold rows for layer L+1 during layer L compute, then GPU-compact after routing | Exact; 2601.2 vs 1908.2 adjacent control (+36.32%); 68.9k prompt passed with 1,221 MiB free; trace overlap 0.46% -> 51.70%; default on at >=2,048 tokens |
 
 ## PP1 — PLE storage experiment
 
@@ -560,20 +566,32 @@ No tuned config entered `assets/` and the launcher remains unchanged.
 Evidence: [PP13 current-stack profile](logs/pp13_current_stack_profile_3090_2026-09-16.md);
 [raw profile, microbenchmarks and fresh-server arms](logs/raw/pp13_current_profile_3090_2026-09-16/).
 
-## PP14 — cross-layer cold-row prefetch (next)
+## PP14 — cross-layer cold-row prefetch (done)
 
-The current trace leaves a large structural opportunity: 738.7 ms of pinned
-HtoD is nearly serialized with compute. Implement the experiment behind a
-default-off environment flag and use alternating buffers. While layer L runs,
-copy all fixed cold rows for layer L+1 to an alternate device cache; once L+1
-routing is available, DtoD-compact the selected cold rows and gather selected
-resident rows into the ordinary fused-MoE staging layout. This avoids guessing
-the next route while moving the slow host transfer early.
+`patches/moe_cross_layer_prefetch.py` adds one reusable full-expert device cache
+per tensor kind. After layer L queues its fused MoE, the dedicated stream
+copies every fixed cold row for L+1. The next layer's existing table-gather
+kernel compacts resident and cached cold rows into the unchanged staging
+layout. A release event makes one cache sufficient; the planned alternating
+buffer was unnecessary after compaction.
 
-Budget roughly 0.6-0.7 GiB for the additional cache. Require unchanged
-oracles, an adjacent current control, no OOM on the existing long-prompt pass,
-and a confirming trace that the gain comes from HtoD/compute overlap. Keep the
-feature off by default unless the end-to-end result wins.
+The fresh adjacent control measured **1908.2 +/- 21.8 tok/s** and PP14 measured
+**2601.2 +/- 52.4** (**+36.32%**). A second fresh server using the final guarded
+launcher default reached **2583.4 +/- 65.4**. Both exactness oracles are
+unchanged. The trace reduced the extend span 2390.1 -> 1743.3 ms while
+compute/DMA overlap rose 10.9 -> 901.3 ms. A 68,905-token pass completed at
+2,473 tok/s with 1,221 MiB minimum free VRAM. The 637 MiB cache is allocated
+when a large prefill first initializes streamers.
+
+The feature defaults on via `patches/enable_moe_cross_layer_prefetch.py`, but
+only for chunks at or above `SGLANG_MOE_COLD_PREFETCH_MIN_TOKENS=2048`.
+`SGLANG_MOE_COLD_PREFETCH=0` restores the prior selected-row path. Requested
+current-best secondary results are also retained: llama-benchy `pp2048 @
+d2048` **1218.09 +/- 42.17 tok/s**, and the authors' default repeated-sentence
+tool reached **2468 tok/s** at 10,001 prompt tokens.
+
+Evidence: [PP14 result](logs/pp14_cross_layer_prefetch_3090_2026-09-16.md);
+[raw arms, long-context pass, trace and secondary benchmarks](logs/raw/pp14_cross_layer_prefetch_3090_2026-09-16/).
 
 ## Later research
 
@@ -613,19 +631,21 @@ feature off by default unless the end-to-end result wins.
    python3 patches/enable_moe_host_dma_gather.py --check
    SGLANG=/root/sglang python3 patches/moe_host_dma_batch.py --check
    python3 patches/enable_moe_host_dma_batch.py --check
+   SGLANG=/root/sglang python3 patches/moe_cross_layer_prefetch.py --check
+   python3 patches/enable_moe_cross_layer_prefetch.py --check
    python3 patches/enable_prefill_presence_placement.py --check
    SGLANG=/root/sglang python3 patches/prefill_route_dump.py --check
    python3 patches/enable_prefill_chunk_residency.py --check
    SGLANG=/root/sglang python3 patches/moe_config_buckets.py --check
    ```
 
-5. PP11, PP5c and PP12 are accepted; the launcher defaults are PP5c
+5. PP11, PP5c, PP12 and PP14 are accepted; the launcher defaults are PP5c
    prefill-presence placement (`assets/expert_presence_code.pt`) and a PP12
-   4,608-token prefill chunk, both selectable back to routing mass and 2,048
-   with `SGLANG_MOE_PLACEMENT` / `SGLANG_3090_CHUNKED_PREFILL_SIZE`. PP5b
-   remains the canonical-only result; PP8 and PP13 were rejected. PP14
-   cross-layer cold-row prefetch is the next implementation target; PP9 and
-   PP10 remain research items.
+   4,608-token prefill chunk, plus PP14 prefetch above a 2,048-token floor.
+   They remain selectable with `SGLANG_MOE_PLACEMENT`,
+   `SGLANG_3090_CHUNKED_PREFILL_SIZE`, `SGLANG_MOE_COLD_PREFETCH`, and
+   `SGLANG_MOE_COLD_PREFETCH_MIN_TOKENS`. PP5b remains the canonical-only
+   result; PP8 and PP13 were rejected. PP9 and PP10 remain research items.
 6. After every experiment, update the status table, append a dated result under
    the relevant section, and link the raw log/artifact.
 
@@ -641,11 +661,13 @@ PYTHONPATH=/root/sglang/python /root/quant/venv-sglang/bin/python -m unittest \
 
 State at this update: bulk pread, the 128 MiB recent-row cache, the 2,048-byte
 expert-gather tile, host-row DMA staging, PP11 DMA batching, a 4,608-token
-prefill chunk (PP12), S184 residency and PP5c prefill-presence placement are
-enabled; profiling is disabled. The prefill route dump is applied
+prefill chunk (PP12), S184 residency, PP5c prefill-presence placement, and PP14
+cross-layer cold-row prefetch above 2,048 tokens are enabled; profiling is
+disabled. The prefill route dump is applied
 and pass-through in `/root/quant/serve-3090.sh` but off unless
 `SGLANG_PREFILL_ROUTE_DUMP` names a directory. No server is currently running;
-the PP13 profile, tuned-screen and current-control scopes were stopped cleanly.
+the PP14 prototype, adjacent control, and final-default scopes were stopped
+cleanly.
 The RTX 3090, `/dev/nvidia*`, and driver 580.178.04 were available to this
-execution context. The PP13 profile was taken through the live
+execution context. The PP14 profile was taken through the live
 `/start_profile` endpoint with no production code or launcher change.
