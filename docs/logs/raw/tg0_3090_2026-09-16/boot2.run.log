@@ -1,0 +1,34 @@
+  stopped; remaining pids: []
+  healthy
+  boot2 prose        2048 #0 warmup  ok               tg=36.49 events=512 ptok=2048 free_min=2642.0
+  boot2 prose        2048 #1 measure ok               tg=37.87 events=512 ptok=2048 free_min=2642.0
+  boot2 prose        2048 #2 measure ok               tg=37.04 events=512 ptok=2048 free_min=2642.0
+  boot2 prose        2048 #3 measure ok               tg=37.81 events=512 ptok=2048 free_min=2642.0
+  boot2 reasoning    2048 #0 warmup  ok               tg=40.9 events=512 ptok=2048 free_min=2642.0
+  boot2 reasoning    2048 #1 measure ok               tg=40.41 events=512 ptok=2048 free_min=2642.0
+  boot2 reasoning    2048 #2 measure ok               tg=38.77 events=512 ptok=2048 free_min=2642.0
+  boot2 reasoning    2048 #3 measure ok               tg=38.01 events=512 ptok=2048 free_min=2642.0
+  boot2 code         2048 #0 warmup  ok               tg=34.61 events=512 ptok=2048 free_min=2642.0
+  boot2 code         2048 #1 measure ok               tg=34.4 events=512 ptok=2048 free_min=2642.0
+  boot2 code         2048 #2 measure ok               tg=34.88 events=512 ptok=2048 free_min=2642.0
+  boot2 code         2048 #3 measure ok               tg=34.68 events=512 ptok=2048 free_min=2642.0
+  wrote /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/tg0_3090_2026-09-16/boot2/summary.json
+Traceback (most recent call last):
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/tg_profile.py", line 322, in <module>
+    main()
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/tg_profile.py", line 311, in main
+    capture(args)
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/tg_profile.py", line 242, in capture
+    post_json(
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/tg_profile.py", line 66, in post_json
+    return json.loads(body) if body.strip() else {}
+           ^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)

@@ -1,0 +1,50 @@
+captured_utc=2026-09-16T13:00:42Z
+repo_commit=e329290613c08357145fa0973e6172612bab6e75
+repo_branch=pp-perf-3090
+repo_status:
+?? docs/logs/raw/tg0_3090_2026-09-16/
+73a255206f Introduce Qwen 3.8 Flash Next
+
+== sglang diff stat ==
+ .../kernels/ops/moe/fused_moe_triton_kernels.py    |  362 ++++++-
+ python/sglang/srt/configs/qwen4_exp.py             |    6 +-
+ .../srt/layers/attention/linear/gdn_backend.py     |    1 +
+ python/sglang/srt/layers/attention/qsa/metadata.py |   13 +-
+ .../sglang/srt/layers/attention/qsa/qsa_indexer.py |   23 +-
+ .../sglang/srt/layers/attention/qsa/sparse_attn.py | 1083 +++++++++++++++++++-
+ .../layers/attention/qwen_sparse_attn_backend.py   |  134 ++-
+ python/sglang/srt/layers/layernorm.py              |   26 +-
+ python/sglang/srt/layers/moe/moe_runner/triton.py  |    4 +
+ .../moe/moe_runner/triton_utils/fused_moe.py       |   58 +-
+ .../triton_utils/fused_moe_triton_config.py        |   54 +
+ python/sglang/srt/layers/quantization/moe_wna16.py |  309 +++++-
+ python/sglang/srt/layers/radix_linear_attention.py |   23 +-
+ python/sglang/srt/mem_cache/allocator/paged.py     |   28 +
+ python/sglang/srt/mem_cache/allocator/token.py     |   15 +
+ .../sglang/srt/mem_cache/kv_cache_configurator.py  |   23 +-
+ python/sglang/srt/mem_cache/kv_cache_dtype.py      |    8 +
+ python/sglang/srt/mem_cache/kv_vmm_backing.py      |   43 +
+ python/sglang/srt/mem_cache/memory_pool.py         |  195 +++-
+ .../sglang/srt/model_executor/pool_configurator.py |   11 +
+ .../runner_backend/breakable_cuda_graph_backend.py |   35 +
+ python/sglang/srt/models/qwen2_moe.py              |   17 +-
+ python/sglang/srt/models/qwen3_5.py                |   12 +-
+ python/sglang/srt/models/qwen4_exp.py              |  294 +++++-
+ python/sglang/srt/server_args.py                   |   13 +-
+ python/sglang/srt/speculative/ngram_worker.py      |  116 +++
+ python/sglang/srt/speculative/spec_utils.py        |   31 +
+ python/sglang/srt/utils/offloader.py               |   70 +-
+ test/manual/test_triton_moe_wna16.py               |   40 +-
+ 29 files changed, 2955 insertions(+), 92 deletions(-)
+
+== sglang diff sha256 ==
+05f91d4240fa0baee01c851c20de3c5a6204b53fc032326f381749f3c01cc0cf  -
+
+== untracked module sha256 ==
+29c00e3952a0a612d721b19ff8ec5e1f318a37130b89c876b5dceda5a563a798  /root/sglang/python/sglang/srt/layers/moe/expert_elastic.py
+f0850a1a68bed84d07e3458ad5e7296f5277586e632486d95c970d27635cc694  /root/sglang/python/sglang/srt/layers/moe/expert_gemv.py
+45fad94baea708d6daae3b318addae6bde943dae7aa8b131d78e07df80130eb5  /root/sglang/python/sglang/srt/layers/moe/expert_stream.py
+8cdc740392d3d208d97e3f83edecbb268169b95b04ddbd371a1be4ed661ca52b  /root/sglang/python/sglang/srt/layers/moe/row_arena.py
+adec73d971050853c81ef49cb0676f57f02693742258f2afc2c35ec5e1b09c57  /root/sglang/python/sglang/srt/mem_cache/int4_kv_pool.py
+83649aa071b1e9a125151bf406deea11676a3ce228e66bf1aaca4630ed1e93a4  /root/sglang/python/sglang/srt/mem_cache/int8_kv_pool.py
+cf0c96eddb3ef635764596d84369b61f190618673b3022cd6202003a9cd7a6d9  /root/sglang/python/sglang/srt/mem_cache/tiered_kv_pool.py

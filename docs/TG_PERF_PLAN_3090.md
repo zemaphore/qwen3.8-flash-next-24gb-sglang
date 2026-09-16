@@ -1,7 +1,9 @@
 # RTX 3090 token-generation performance plan
 
 Date: 2026-09-16
-Status: planned; TG0 has not run. Baseline evidence reviewed through `52b2238`.
+Status: TG0 complete (see [report](logs/tg0_baseline_3090_2026-09-16.md)); TG1
+is unblocked by the baseline, TG2 still waits on a material hypothesis. Baseline
+evidence reviewed through `52b2238`; TG0 ran at `e329290`.
 
 ## Objective and constraints
 
@@ -43,8 +45,8 @@ pinned-host expert rows in place. Do not reuse historical GPU bandwidth or
 
 | Stage | Status | Work | Exit condition |
 |---|---|---|---|
-| TG0 | TODO | Baseline, decode profile, validation harness audit | Reproducible measurements, attributed costs, explicit validation status, ranked next experiment |
-| TG1 | BLOCKED on TG0 | Presence versus mass placement at fixed S184 | Controlled TG/PP tradeoff and measured selection/traffic coverage |
+| TG0 | DONE | Baseline, decode profile, validation harness audit | Reproducible measurements, attributed costs, explicit validation status, ranked next experiment ([report](logs/tg0_baseline_3090_2026-09-16.md)); [next experiment ranked](logs/tg0_baseline_3090_2026-09-16.md#10-recommended-next-experiment-ranked-not-executed) |
+| TG1 | READY (TG0 done) | Presence versus mass placement at fixed S184 | Controlled TG/PP tradeoff and measured selection/traffic coverage |
 | TG2 | BLOCKED on profile | One bottleneck-specific engineering experiment | Repeated end-to-end result and path-specific correctness evidence |
 | TG3 | BLOCKED on candidate | Combined regression and capacity checks | Accept or reject candidate with retained evidence |
 

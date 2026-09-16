@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Long-prompt teacher-forced logprob oracle.
+"""Long-prompt teacher-forced logprob oracle (hardened).
 
 The existing short oracles (``tools/logprob_diff.py``) use three prompts that
 tokenize to a few hundred tokens.  They never reach the 4,565-token canonical
 extend, the M=4565 INT2 MoE config, or the PP14 cross-layer prefetch path that is
 gated at 2,048 tokens.  This tool scores a *fixed continuation* after longer
-fixed prompts, so numerically equivalent kernels agree within run-to-run noise
-while a wrong kernel/config moves the logprobs much further.
+fixed prompts.  A numerically equivalent kernel agrees within run-to-run noise;
+a broken one moves the logprobs much further.
 
 Prompts (all built deterministically, actual server token counts are recorded):
 
@@ -20,14 +20,28 @@ Prompts (all built deterministically, actual server token counts are recorded):
 Continuations come from ``tools/greedy/oa.json`` (fixed token ids), so every arm
 scores an identical suffix.
 
+Hardening added for TG0:
+
+* collected rows must carry identical ``prompt_ids`` and ``continuation_ids``,
+  exactly ``len(continuation_ids)`` finite logprobs, and self-consistent
+  metadata (``forced_prompt_tokens == prompt_tokens + continuation_tokens``);
+* :func:`stats` raises on mismatch instead of silently comparing truncated
+  arrays, and returns per-token deltas;
+* measurement/reporting is separated from pass/fail: ``check`` and ``compare``
+  report only, and fail only when the caller supplies ``--fail-above``.  The old
+  hard-coded 0.05 gate is gone because it is below the observed unchanged-server
+  drift (max |dlogprob| ~1.78 on early forced tokens).
+
   python3 long_logprob_oracle.py save  NAME
-  python3 long_logprob_oracle.py check NAME     # max/mean |dlogprob| vs NAME
-  python3 long_logprob_oracle.py compare A B    # symmetric: B vs A
+  python3 long_logprob_oracle.py check NAME [--fail-above T]
+  python3 long_logprob_oracle.py compare REFERENCE CURRENT [--fail-above T]
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
 import os
 import sys
 import urllib.request
@@ -40,6 +54,14 @@ MODEL = os.environ.get(
     "MODEL", "/mnt/ai_models/Qwen3.8-Flash-Next-int2-mixed-AutoRound-24GB-SGLang"
 )
 CONT = json.loads((REPO / "tools" / "greedy" / "oa.json").read_text())[2][:150]
+
+
+class OracleValidationError(ValueError):
+    """Raised when a collected or stored oracle payload is not usable."""
+
+
+def _finite(value) -> bool:
+    return isinstance(value, (int, float)) and math.isfinite(value)
 
 
 def tokenize(text: str) -> list[int]:
@@ -117,9 +139,89 @@ def forced_logprobs(ids: list[int], cont: list[int]) -> tuple[list[float], int]:
         }
     )
     meta = data["meta_info"]
-    logprobs = [t[0] for t in meta["input_token_logprobs"]]
-    logprobs = [value for value in logprobs if value is not None]
-    return logprobs[-len(cont):], int(meta["prompt_tokens"])
+    raw = [entry[0] for entry in meta["input_token_logprobs"]]
+    # logprob_start_len = len(ids)-1 returns the last prompt position plus every
+    # continuation position.  Require exactly that shape; do not drop entries and
+    # silently shift positions.
+    expected = len(cont) + 1
+    if len(raw) != expected:
+        raise OracleValidationError(
+            f"expected {expected} input logprobs from the forced request, got {len(raw)} "
+            "(truncated result)"
+        )
+    continuation = raw[1:]
+    if len(continuation) != len(cont):
+        raise OracleValidationError("continuation logprob count mismatch")
+    if not all(_finite(value) for value in continuation):
+        bad = [i for i, value in enumerate(continuation) if not _finite(value)]
+        raise OracleValidationError(
+            f"non-finite logprob at continuation positions {bad[:8]} (invalid result)"
+        )
+    return continuation, int(meta["prompt_tokens"])
+
+
+def validate_row(
+    name: str,
+    row: dict,
+    expect_ids: list[int] | None = None,
+    expect_cont_ids: list[int] | None = None,
+) -> None:
+    """Raise OracleValidationError naming every problem in one collected row."""
+    if not isinstance(row, dict):
+        raise OracleValidationError(f"{name}: row is not an object")
+    problems: list[str] = []
+    for key in ("prompt_tokens", "prompt_ids", "logprobs", "continuation_tokens"):
+        if key not in row:
+            problems.append(f"missing {key}")
+    if problems:
+        raise OracleValidationError(f"{name}: " + "; ".join(problems))
+
+    ids = row["prompt_ids"]
+    logprobs = row["logprobs"]
+    cont_ids = row.get("continuation_ids", CONT)
+
+    if not ids:
+        problems.append("empty prompt_ids")
+    if expect_ids is not None and list(ids) != list(expect_ids):
+        problems.append("prompt_ids differ from reference")
+    if expect_cont_ids is not None and list(cont_ids) != list(expect_cont_ids):
+        problems.append("continuation_ids differ from reference")
+    if row["continuation_tokens"] != len(cont_ids):
+        problems.append(
+            f"continuation_tokens={row['continuation_tokens']} != "
+            f"len(continuation_ids)={len(cont_ids)}"
+        )
+    if len(logprobs) != len(cont_ids):
+        problems.append(
+            f"logprob array has {len(logprobs)} entries, expected {len(cont_ids)} "
+            "(truncated or mismatched result)"
+        )
+    else:
+        bad = [i for i, value in enumerate(logprobs) if not _finite(value)]
+        if bad:
+            problems.append(f"non-finite logprob at positions {bad[:8]} (invalid result)")
+
+    prompt_tokens = row["prompt_tokens"]
+    forced = row.get("forced_prompt_tokens")
+    if forced is not None and forced != prompt_tokens + len(cont_ids):
+        problems.append(
+            f"forced_prompt_tokens={forced} != prompt_tokens + continuation "
+            f"({prompt_tokens + len(cont_ids)})"
+        )
+    server_prompt = row.get("server_prompt_tokens")
+    if server_prompt is not None and server_prompt != prompt_tokens:
+        problems.append(
+            f"server_prompt_tokens={server_prompt} != prompt_tokens={prompt_tokens}"
+        )
+    if problems:
+        raise OracleValidationError(f"{name}: " + "; ".join(problems))
+
+
+def validate_payload(payload: dict) -> None:
+    if not isinstance(payload, dict) or not payload:
+        raise OracleValidationError("payload is not a non-empty object")
+    for name, row in payload.items():
+        validate_row(name, row)
 
 
 def collect(cached: dict | None = None) -> dict:
@@ -141,33 +243,58 @@ def collect(cached: dict | None = None) -> dict:
             "forced_prompt_tokens": forced_prompt_tokens,
             "prompt_chars": len(text),
             "continuation_tokens": len(CONT),
+            "continuation_ids": list(CONT),
             "forced_tokens": len(logprobs),
             "prompt_ids": ids,
             "logprobs": logprobs,
         }
+        validate_row(name, result[name])
     return result
 
 
 def stats(reference: dict, current: dict) -> dict:
-    """Compare two collected payloads prompt by prompt."""
-    report = {}
+    """Compare two collected payloads prompt by prompt.
+
+    Raises OracleValidationError if either payload is unusable or if the current
+    payload does not score the reference's exact prompts and continuation.
+    """
+    validate_payload(reference)
+    validate_payload(current)
+    report: dict = {}
     for name in reference:
         if name not in current:
-            report[name] = {"error": "missing in current"}
-            continue
-        ref = reference[name]["logprobs"]
-        cur = current[name]["logprobs"]
-        n = min(len(ref), len(cur))
-        deltas = [abs(a - b) for a, b in zip(ref[:n], cur[:n])]
+            raise OracleValidationError(f"{name}: missing in current payload")
+        ref_row = reference[name]
+        cur_row = current[name]
+        validate_row(
+            name,
+            cur_row,
+            expect_ids=ref_row["prompt_ids"],
+            expect_cont_ids=ref_row.get("continuation_ids", CONT),
+        )
+        if cur_row["prompt_tokens"] != ref_row["prompt_tokens"]:
+            raise OracleValidationError(
+                f"{name}: prompt_tokens {cur_row['prompt_tokens']} != reference "
+                f"{ref_row['prompt_tokens']} (mismatched input)"
+            )
+        ref = ref_row["logprobs"]
+        cur = cur_row["logprobs"]
+        deltas = [abs(a - b) for a, b in zip(ref, cur)]
+        worst = max(range(len(deltas)), key=lambda i: deltas[i])
         report[name] = {
-            "prompt_tokens": current[name]["prompt_tokens"],
-            "compared_tokens": n,
-            "max": max(deltas) if deltas else 0.0,
-            "mean": (sum(deltas) / n) if n else 0.0,
+            "prompt_tokens": cur_row["prompt_tokens"],
+            "compared_tokens": len(deltas),
+            "max": max(deltas),
+            "mean": sum(deltas) / len(deltas),
+            "max_index": worst,
+            "max_at_index": deltas[worst],
+            "per_token_deltas": deltas,
+            "reference_logprobs": ref,
+            "current_logprobs": cur,
         }
-    all_max = max((v.get("max", 0.0) for v in report.values() if "max" in v), default=0.0)
-    total = sum(v.get("mean", 0.0) * v.get("compared_tokens", 0) for v in report.values())
-    count = sum(v.get("compared_tokens", 0) for v in report.values() if "max" in v)
+    all_max = max((v["max"] for v in report.values()), default=0.0)
+    total = sum(v["mean"] * v["compared_tokens"] for v in report.values())
+    count = sum(v["compared_tokens"] for v in report.values())
     report["_overall"] = {"max": all_max, "mean": (total / count) if count else 0.0}
     return report
 
@@ -177,16 +304,17 @@ def print_report(label: str, report: dict) -> None:
     for name, row in report.items():
         if name == "_overall":
             continue
-        if "error" in row:
-            print(f"    {name:14s} {row['error']}")
-        else:
-            print(
-                f"    {name:14s} prompt={row['prompt_tokens']:6d}  "
-                f"max |dlogprob| {row['max']:.6f}  mean {row['mean']:.6f}  "
-                f"over {row['compared_tokens']} forced tokens"
-            )
+        print(
+            f"    {name:14s} prompt={row['prompt_tokens']:6d}  "
+            f"max |dlogprob| {row['max']:.6f} (idx {row['max_index']})  "
+            f"mean {row['mean']:.6f}  over {row['compared_tokens']} forced tokens"
+        )
     overall = report["_overall"]
     print(f"    {'OVERALL':14s} max {overall['max']:.6f}  mean {overall['mean']:.6f}")
+
+
+def write_detail(path: Path, report: dict) -> None:
+    path.write_text(json.dumps(report, indent=1) + "\n")
 
 
 def main() -> None:
@@ -195,37 +323,61 @@ def main() -> None:
     for command in ("save", "check"):
         p = sub.add_parser(command)
         p.add_argument("name")
+        p.add_argument(
+            "--fail-above",
+            type=float,
+            default=None,
+            help="exit 1 when overall max |dlogprob| exceeds this (policy is caller-owned)",
+        )
     p = sub.add_parser("compare")
     p.add_argument("reference")
     p.add_argument("current")
+    p.add_argument("--fail-above", type=float, default=None)
     args = parser.parse_args()
 
     D.mkdir(parents=True, exist_ok=True)
-    path = D / f"{args.name}.json" if hasattr(args, "name") and args.name else None
+    path = D / f"{args.name}.json" if getattr(args, "name", None) else None
 
-    if args.cmd == "save":
-        cached = json.loads(path.read_text()) if path.exists() else None
-        payload = collect(cached)
-        path.write_text(json.dumps(payload, indent=1))
-        sizes = {name: (row["prompt_tokens"], row["forced_tokens"]) for name, row in payload.items()}
-        print(f"  saved {path}  (prompt_tokens, forced_tokens) = {sizes}")
-        return
+    try:
+        if args.cmd == "save":
+            cached = json.loads(path.read_text()) if path.exists() else None
+            payload = collect(cached)
+            path.write_text(json.dumps(payload, indent=1))
+            sizes = {
+                name: (row["prompt_tokens"], row["forced_tokens"])
+                for name, row in payload.items()
+            }
+            print(f"  saved {path}  (prompt_tokens, forced_tokens) = {sizes}")
+            return
 
-    if args.cmd == "check":
-        reference = json.loads(path.read_text())
-        cached = {name: {"prompt_ids": row["prompt_ids"], "prompt_tokens": row["prompt_tokens"]}
-                  for name, row in reference.items()}
-        current = collect(cached)
-        (D / f"{args.name}.last.json").write_text(json.dumps(current, indent=1))
-        report = stats(reference, current)
-        print_report(f"{args.name} vs fresh run", report)
-        sys.exit(0 if report["_overall"]["max"] < 0.05 else 1)
+        if args.cmd == "check":
+            reference = json.loads(path.read_text())
+            cached = {
+                name: {"prompt_ids": row["prompt_ids"], "prompt_tokens": row["prompt_tokens"]}
+                for name, row in reference.items()
+            }
+            current = collect(cached)
+            (D / f"{args.name}.last.json").write_text(json.dumps(current, indent=1))
+            report = stats(reference, current)
+            write_detail(D / f"{args.name}.check.json", report)
+            print_report(f"{args.name} vs fresh run", report)
+        elif args.cmd == "compare":
+            a = json.loads((D / f"{args.reference}.json").read_text())
+            b = json.loads((D / f"{args.current}.json").read_text())
+            report = stats(a, b)
+            write_detail(D / f"{args.current}.compare.json", report)
+            print_report(f"{args.current} vs {args.reference}", report)
+    except OracleValidationError as exc:
+        print(f"  ORACLE VALIDATION FAILED: {exc}", file=sys.stderr)
+        sys.exit(2)
 
-    if args.cmd == "compare":
-        a = json.loads((D / f"{args.reference}.json").read_text())
-        b = json.loads((D / f"{args.current}.json").read_text())
-        print_report(f"{args.current} vs {args.reference}", stats(a, b))
-        return
+    if args.fail_above is not None and args.fail_above and report["_overall"]["max"] > args.fail_above:
+        print(
+            f"  POLICY FAIL: overall max {report['_overall']['max']:.6f} > "
+            f"--fail-above {args.fail_above}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 if __name__ == "__main__":

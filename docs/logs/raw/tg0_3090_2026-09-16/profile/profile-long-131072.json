@@ -1,0 +1,196 @@
+{
+  "trace": "/root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/tg0_3090_2026-09-16/profile/profile-long-131072/1789567683.2186432-TP-0-DECODE.trace.json.gz",
+  "tokens": 20,
+  "trace_wall_ms": 642.699111328125,
+  "trace_wall_ms_per_token": 32.13495556640625,
+  "decode_graph_segments": 300,
+  "kernel_sum_ms": 727.0521349999952,
+  "kernel_sum_ms_per_token": 36.352606749999765,
+  "kernel_union_ms": 552.617951171875,
+  "kernel_union_ms_per_token": 27.63089755859375,
+  "dma_union_ms": 0.1632509765625,
+  "compute_dma_overlap_ms": 0.0,
+  "families": {
+    "expert_gemv": {
+      "count": 1920,
+      "sum_ms": 342.5648649999993,
+      "sum_ms_per_token": 17.128243249999965,
+      "top": [
+        [
+          "_moe_gemv_int2_tab",
+          342.5648649999993
+        ]
+      ]
+    },
+    "dense_marlin": {
+      "count": 8300,
+      "sum_ms": 269.6860889999967,
+      "sum_ms_per_token": 13.484304449999835,
+      "top": [
+        [
+          "void sglang::device::marlin::Marlin<__nv_bfloat16, 1125899923621888l, 256, 1, 8, 8, true, 4, 8, false>(int4 const*, int4 const*, int4*, int4*, int4 const*, unsigned short const*, int4 const*, int const*, int, int, int, int, int, int*, bool, bool, int)",
+          210.62083199999995
+        ],
+        [
+          "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, false, true, true, false, 7, false, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float> >(cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensorStridedBatched<__nv_bfloat16>, float>)",
+          49.36798199999996
+        ],
+        [
+          "void sglang::grouped_gemma_rmsnorm_kernel<2560l, false, __nv_bfloat16>(sglang::GroupedGemmaRMSNormParams)",
+          3.2464600000000665
+        ],
+        [
+          "void flash::flash_fwd_splitkv_kernel<Flash_fwd_kernel_traits<256, 64, 64, 4, false, false, cutlass::bfloat16_t, Flash_kernel_traits<256, 64, 64, 4, cutlass::bfloat16_t> >, false, false, false, false, true, false, true, false>(flash::Flash_fwd_params)",
+          2.323401000000001
+        ],
+        [
+          "void flash::flash_fwd_splitkv_combine_kernel<Flash_fwd_kernel_traits<256, 64, 64, 4, false, false, cutlass::bfloat16_t, Flash_kernel_traits<256, 64, 64, 4, cutlass::bfloat16_t> >, 4, 6, true>(flash::Flash_fwd_params)",
+          2.1150209999999996
+        ]
+      ]
+    },
+    "ple_graph": {
+      "count": 5780,
+      "sum_ms": 49.243729999999815,
+      "sum_ms_per_token": 2.4621864999999907,
+      "top": [
+        [
+          "_hc_mix_persistent_kernel",
+          42.94958500000005
+        ],
+        [
+          "void sglang::hc_combine_gate_kernel<4l, 2560l, false, __nv_bfloat16>(sglang::HcCombineSplitParams)",
+          3.2980500000000172
+        ],
+        [
+          "void sglang::hc_combine_apply_kernel<4l, 2560l, false, __nv_bfloat16>(sglang::HcCombineSplitParams)",
+          2.99609500000004
+        ]
+      ]
+    },
+    "router_sampling": {
+      "count": 3940,
+      "sum_ms": 21.360779999999618,
+      "sum_ms_per_token": 1.0680389999999809,
+      "top": [
+        [
+          "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<float>, std::array<char*, 1ul> >(int, at::native::FillFunctor<float>, std::array<char*, 1ul>)",
+          7.8716009999999885
+        ],
+        [
+          "void sglang::fast_topk_detail::fast_topk_kernel<512, false>(sglang::fast_topk_detail::FastTopKParams)",
+          6.015471
+        ],
+        [
+          "_router_triton_kernel",
+          4.624344000000035
+        ],
+        [
+          "_fused_gate_sigmoid_mul_add_kernel",
+          1.836036999999998
+        ],
+        [
+          "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<int>, std::array<char*, 1ul> >(int, at::native::FillFunctor<int>, std::array<char*, 1ul>)",
+          0.43849499999999975
+        ]
+      ]
+    },
+    "other": {
+      "count": 5560,
+      "sum_ms": 21.212042999999856,
+      "sum_ms_per_token": 1.0606021499999927,
+      "top": [
+        [
+          "kernel_kernel",
+          7.290706000000004
+        ],
+        [
+          "void at::native::reduce_kernel<128, 4, at::native::ReduceOp<c10::BFloat16, at::native::func_wrapper_t<c10::BFloat16, at::native::sum_functor<c10::BFloat16, float, c10::BFloat16>::operator()(at::TensorIterator&)::{lambda(float, float)#1}>, unsigned int, c10::BFloat16, 4, 8> >(at::native::ReduceOp<c10::BFloat16, at::native::func_wrapper_t<c10::BFloat16, at::native::sum_functor<c10::BFloat16, float, c10::BFloat16>::operator()(at::TensorIterator&)::{lambda(float, float)#1}>, unsigned int, c10::BFloat16, 4, 8>)",
+          3.859904999999984
+        ],
+        [
+          "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::silu_kernel(at::TensorIteratorBase&)::{lambda()#1}::operator()() const::{lambda()#6}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::(anonymous namespace)::silu_kernel(at::TensorIteratorBase&)::{lambda()#1}::operator()() const::{lambda()#6}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::silu_kernel(at::TensorIteratorBase&)::{lambda()#1}::operator()() const::{lambda()#6}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::(anonymous namespace)::silu_kernel(at::TensorIteratorBase&)::{lambda()#1}::operator()() const::{lambda()#6}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int)#1})",
+          3.487228999999995
+        ],
+        [
+          "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<c10::BFloat16, c10::BFloat16, c10::BFloat16, at::native::binary_internal::MulFunctor<float> > >(at::TensorIteratorBase&, at::native::BinaryFunctor<c10::BFloat16, c10::BFloat16, c10::BFloat16, at::native::binary_internal::MulFunctor<float> > const&)::{lambda(int)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<c10::BFloat16, c10::BFloat16, c10::BFloat16, at::native::binary_internal::MulFunctor<float> > >(at::TensorIteratorBase&, at::native::BinaryFunctor<c10::BFloat16, c10::BFloat16, c10::BFloat16, at::native::binary_internal::MulFunctor<float> > const&)::{lambda(int)#1})",
+          2.0535230000000153
+        ],
+        [
+          "void sglang::act_and_mul_kernel<__nv_bfloat16, (sglang::ActivationKind)0, false, false, false, false>(sglang::ActivationParams)",
+          1.9605150000000005
+        ]
+      ]
+    },
+    "gdn": {
+      "count": 2400,
+      "sum_ms": 11.10296500000005,
+      "sum_ms_per_token": 0.5551482500000026,
+      "top": [
+        [
+          "fused_recurrent_gated_delta_rule_packed_decode_kernel",
+          6.634422999999993
+        ],
+        [
+          "fused_qkvzba_split_reshape_cat_contiguous_kernel",
+          1.964028000000005
+        ],
+        [
+          "_causal_conv1d_update_kernel",
+          1.6605120000000002
+        ],
+        [
+          "_fused_qk_rmsnorm_rope_gate_kernel",
+          0.8440020000000011
+        ]
+      ]
+    },
+    "attention_kv": {
+      "count": 1960,
+      "sum_ms": 10.323318999999989,
+      "sum_ms_per_token": 0.5161659499999994,
+      "top": [
+        [
+          "void sglang::qsa_index_k_compress_kernel<__nv_bfloat16, 128, true, false>(sglang::QsaIndexKCompressParams)",
+          3.1899060000000015
+        ],
+        [
+          "void sglang::qsa_index_q_prep_kernel<__nv_bfloat16, 128, true, false>(sglang::QsaIndexQPrepParams)",
+          2.5158230000000006
+        ],
+        [
+          "_compact_kv_tiered",
+          2.1635520000000006
+        ],
+        [
+          "_quant_store_kv_tiered",
+          0.6387599999999999
+        ],
+        [
+          "_expand_qsa_block_indices_kernel",
+          0.5127420000000013
+        ]
+      ]
+    },
+    "expert_reads_dma": {
+      "count": 1000,
+      "sum_ms": 1.5583439999999955,
+      "sum_ms_per_token": 0.07791719999999977,
+      "top": [
+        [
+          "memcpy32_post",
+          1.5583439999999955
+        ]
+      ]
+    }
+  },
+  "idle_ms_per_token": 4.504058007812496,
+  "label": "long-131072",
+  "context_requested": 131072,
+  "prompts_class": "reasoning",
+  "prompt_tokens": 131072,
+  "unprofiled_ms_per_token": 35.344245150190545,
+  "profiled_ms_per_token": 32.14112630012096,
+  "overhead_pct": -9.06263194038625,
+  "captured_utc": "2026-09-16T14:09:44.881991+00:00"
+}

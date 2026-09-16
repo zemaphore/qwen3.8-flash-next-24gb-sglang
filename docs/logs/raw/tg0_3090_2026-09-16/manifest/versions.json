@@ -1,0 +1,16 @@
+{
+  "python": "3.12.3",
+  "torch": "2.13.0+cu130",
+  "triton": "3.7.1",
+  "transformers": "5.12.1",
+  "sglang_dist": "0.5.20.dev1+g73a255206",
+  "sglang_source": "/root/sglang",
+  "sglang_source_head": "73a255206f916366c8d26d4022f82ddfb0ab558d",
+  "cuda_runtime": "13.0",
+  "cudnn": 92000,
+  "nvcc": "Build cuda_13.3.r13.3/compiler.38244171_0",
+  "driver": "580.178.04",
+  "device": "NVIDIA GeForce RTX 3090",
+  "gpu_compute_capability": "8.6"
+}
+

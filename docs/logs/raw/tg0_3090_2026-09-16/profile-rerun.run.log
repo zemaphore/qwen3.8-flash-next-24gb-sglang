@@ -1,0 +1,37 @@
+  trace /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/tg0_3090_2026-09-16/profile/profile-short-2048/1789567460.9487212-TP-0-DECODE.trace.json.gz
+  tokens=20  graph_segments=300  wall=575.46 ms (28.77 ms/tok)  kernel_union=24.60 ms/tok  idle=4.17 ms/tok
+  family              count    sum ms    ms/tok
+  expert_gemv          1920   292.019    14.601
+  dense_marlin         8300   253.507    12.675
+  ple_graph            5780    48.906     2.445
+  other                5560    17.593     0.880
+  router_sampling      3940    16.140     0.807
+  gdn                  2400    10.924     0.546
+  attention_kv         1960    10.154     0.508
+  expert_reads_dma     1000     1.537     0.077
+  overhead: unprofiled 28.78 ms/tok -> profiled 54.63 ms/tok (+89.8%)
+  trace /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/tg0_3090_2026-09-16/profile/profile-long-32768/1789567492.5239854-TP-0-DECODE.trace.json.gz
+  tokens=20  graph_segments=300  wall=569.33 ms (28.47 ms/tok)  kernel_union=23.24 ms/tok  idle=5.22 ms/tok
+  family              count    sum ms    ms/tok
+  expert_gemv          1920   259.170    12.959
+  dense_marlin         8300   245.831    12.292
+  ple_graph            5780    49.605     2.480
+  other                5560    18.911     0.946
+  router_sampling      3940    18.273     0.914
+  gdn                  2400    11.232     0.562
+  attention_kv         1960    10.357     0.518
+  expert_reads_dma     1000     1.587     0.079
+  overhead: unprofiled 25.59 ms/tok -> profiled 268.15 ms/tok (+948.0%)
+  trace /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/tg0_3090_2026-09-16/profile/profile-long-131072/1789567683.2186432-TP-0-DECODE.trace.json.gz
+  tokens=20  graph_segments=300  wall=642.70 ms (32.13 ms/tok)  kernel_union=27.63 ms/tok  idle=4.50 ms/tok
+  family              count    sum ms    ms/tok
+  expert_gemv          1920   342.565    17.128
+  dense_marlin         8300   269.686    13.484
+  ple_graph            5780    49.244     2.462
+  router_sampling      3940    21.361     1.068
+  other                5560    21.212     1.061
+  gdn                  2400    11.103     0.555
+  attention_kv         1960    10.323     0.516
+  expert_reads_dma     1000     1.558     0.078
+  overhead: unprofiled 35.34 ms/tok -> profiled 32.14 ms/tok (-9.1%)
+PROFILE_RERUN_DONE

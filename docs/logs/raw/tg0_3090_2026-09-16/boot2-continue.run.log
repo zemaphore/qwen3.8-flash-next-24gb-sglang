@@ -1,0 +1,30 @@
+  trace /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/tg0_3090_2026-09-16/profile/profile-short-2048/1789567355.5633914-TP-0-DECODE.trace.json.gz
+  tokens=20  graph_segments=300  wall=622.30 ms (31.12 ms/tok)  kernel_union=26.35 ms/tok  idle=4.77 ms/tok
+  family              count    sum ms    ms/tok
+  expert_gemv          1920   327.319    16.366
+  dense_marlin         8300   261.141    13.057
+  ple_graph            5780    48.811     2.441
+  other                5560    17.405     0.870
+  router_sampling      3940    16.105     0.805
+  gdn                  2400    10.892     0.545
+  attention_kv         1960    10.188     0.509
+  expert_reads_dma     1000     1.542     0.077
+  overhead: unprofiled 64.68 ms/tok -> profiled 120.14 ms/tok (+85.8%)
+  trace /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/tg0_3090_2026-09-16/profile/profile-long-32768/1789567397.2779243-TP-0-DECODE.trace.json.gz
+  tokens=20  graph_segments=300  wall=548.85 ms (27.44 ms/tok)  kernel_union=22.85 ms/tok  idle=4.59 ms/tok
+  family              count    sum ms    ms/tok
+  expert_gemv          1920   249.358    12.468
+  dense_marlin         8300   244.524    12.226
+  ple_graph            5780    49.999     2.500
+  other                5560    19.077     0.954
+  router_sampling      3940    18.536     0.927
+  gdn                  2400    11.402     0.570
+  attention_kv         1960    10.660     0.533
+  expert_reads_dma     1000     1.604     0.080
+  overhead: unprofiled 490.48 ms/tok -> profiled 704.34 ms/tok (+43.6%)
+  prefix=8180 gen=32 crossing=8212 ring_cross=True max|dlogprob|=0.307662 (idx 4) mean=0.019797
+  wrote /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/tg0_3090_2026-09-16/numcheck/ring8192.json
+  prefix=2048 gen=32 crossing=2080 ring_cross=False max|dlogprob|=0.014735 (idx 21) mean=0.000837
+  wrote /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/tg0_3090_2026-09-16/numcheck/prefix2048.json
+  wrote /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/tg0_3090_2026-09-16/manifest/server-boot2-final.json
+BOOT2_CONTINUE_DONE

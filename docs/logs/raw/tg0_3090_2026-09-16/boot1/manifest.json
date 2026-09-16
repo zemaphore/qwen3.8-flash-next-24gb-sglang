@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "boot_label": "boot1",
+  "started_utc": "2026-09-16T13:05:54.880278+00:00",
+  "matrix": "full",
+  "warmups": 1,
+  "measured": 5,
+  "decode_tokens": 512,
+  "url": "http://127.0.0.1:30001/generate",
+  "prompts_json": "/root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/tg0_3090_2026-09-16/prompts/prompts.json",
+  "prompts_json_sha256": "443a5f88a53b34b8dc47d0d11cef25fcbb4d3191a4deffe31c32dca3b05c10a3",
+  "predeclared_order": [
+    [
+      "prose",
+      2048
+    ],
+    [
+      "reasoning",
+      2048
+    ],
+    [
+      "code",
+      2048
+    ],
+    [
+      "code",
+      32768
+    ],
+    [
+      "prose",
+      32768
+    ],
+    [
+      "reasoning",
+      32768
+    ],
+    [
+      "reasoning",
+      131072
+    ],
+    [
+      "code",
+      131072
+    ],
+    [
+      "prose",
+      131072
+    ]
+  ],
+  "frozen_input_state": {
+    "label": "before",
+    "captured_utc": "2026-09-16T13:05:54.887861+00:00",
+    "gpu": {
+      "pstate": "P2",
+      "temperature_c": 64.0,
+      "power_w": 116.48,
+      "memory_used_mib": 21483.0,
+      "memory_free_mib": 2642.0,
+      "util_pct": 0.0,
+      "clock_sm_mhz": 1725.0,
+      "clock_mem_mhz": 9501.0,
+      "clock_gr_mhz": 1725.0
+    },
+    "elastic_status": "time 13:05:06\nS_min 184 S_max 184 floor 184\narena_GB 11.062\nvram_free_GB 4.515\nmass_covered 0.4665\npool [128, 0, 0, 0] pin_used_MB 178\nS [184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184]\n",
+    "server_log_tail": "[2026-09-16 13:05:45] Using nearest MoE expert-count config E=352 for requested E=365 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=352,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json.\n[2026-09-16 13:05:45] Using nearest MoE expert-count config E=384 for requested E=392 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=384,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16.json.\n[2026-09-16 13:05:45] Using nearest MoE expert-count config E=384 for requested E=392 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=384,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json.\n[2026-09-16 13:05:45] Using nearest MoE expert-count config E=432 for requested E=469 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16.json.\n[2026-09-16 13:05:45] Using nearest MoE expert-count config E=432 for requested E=469 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json.\n[2026-09-16 13:05:45] Using nearest MoE expert-count config E=352 for requested E=323 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=352,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16.json.\n[2026-09-16 13:05:45] Using nearest MoE expert-count config E=352 for requested E=323 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=352,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json.\n[2026-09-16 13:05:45] Using MoE kernel config from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=384,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16.json.\n[2026-09-16 13:05:45] Using MoE kernel config from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=384,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json.\n[2026-09-16 13:05:45] Using nearest MoE expert-count config E=384 for requested E=395 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=384,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16.json.\n[2026-09-16 13:05:45] Using nearest MoE expert-count config E=384 for requested E=395 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=384,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json.\n[2026-09-16 13:05:45] Using nearest MoE expert-count config E=432 for requested E=423 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16.json.\n[2026-09-16 13:05:45] Using nearest MoE expert-count config E=432 for requested E=423 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json.\n[2026-09-16 13:05:45] Using nearest MoE expert-count config E=432 for requested E=444 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16.json.\n[2026-09-16 13:05:45] Using nearest MoE expert-count config E=432 for requested E=444 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json.\n[2026-09-16 13:05:45] Prefill batch, #new-seq: 1, #new-token: 2048, #cached-token: 0, full token usage: 0.01, mamba usage: 1.00, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 1210.09\n[2026-09-16 13:05:45] Decode batch, #running-req: 1, #full token: 2112, full token usage: 0.01, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 7.54, #queue-req: 0\n[2026-09-16 13:05:46] INFO:     127.0.0.1:38820 - \"POST /generate HTTP/1.1\" 200 OK\n[2026-09-16 13:05:46] KV lazy commit: tokens 2112 -> 6144 (owner backed 96 MB, torch reserved 11.44 GB, driver free 2.58 GB, capturing=False)\n[2026-09-16 13:05:47] Prefill batch, #new-seq: 1, #new-token: 2048, #cached-token: 0, full token usage: 0.01, mamba usage: 1.00, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 1268.68"
+  }
+}
