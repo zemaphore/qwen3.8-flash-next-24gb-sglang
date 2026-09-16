@@ -252,6 +252,22 @@ cache. It is manual today because the server is a transient `systemd-run
 | **R4** release backing on trim | Wire `release_beyond`/`uncommit_beyond` (`kv_vmm_backing.py:367`) to tree eviction so backing above the live+retained high-water mark is unmapped; never unmap a granule with a live/in-flight page; keep graph addresses stable | `kv_vmm_backing.py`, tree eviction hook | free VRAM recovers after a large session ends; no CUDA-graph faults across 100 mixed requests |
 | **R5** operational restart | Proper systemd unit with `Restart=on-failure` and a health probe instead of `systemd-run --scope`; alert on restart | launcher / unit file | kill -9 the scheduler → service back within one boot, alert emitted |
 
+**Implementation status (2026-09-16):** R1, R2 and R3 are implemented as
+default-off, env-gated patch scripts (`patches/kv_evict_on_physical_pressure.py`,
+`patches/prefill_alloc_abort.py`, `patches/kv_lazy_strict_headroom.py`;
+flags `SGLANG_KV_EVICT_ON_PRESSURE`, `SGLANG_PREFILL_ALLOC_ABORT`,
+`SGLANG_KV_LAZY_STRICT_HEADROOM`) and applied to the serving tree
+(modified-tree diff SHA-256 now `57cd72f9...`; with all flags at their
+default `0` the code paths are inert). The experimental launcher passes the
+three flags through. R5 is drafted as `tools/sglang-3090.service` (not
+installed; needs a foreground mode in the launcher). R4 is not started.
+Investigation note for R3: the existing `lazy_ensure` watermark
+(`SGLANG_KV_LAZY_HEADROOM_MB`, default 1536) is skipped by its own 30 s
+rate limit once the expert cache sits at its floor — that is why the 3072
+arm committed at 0.03 GB free; R3 re-checks the half-headroom refusal
+outside the rate limit. R2 v1 rolls back only batches whose requests have
+no committed KV; a continuing chunked prefill still re-raises.
+
 Order: R1 → R2 → R3, each validated against the retained crash logs as
 regression cases and against the RC4′ linear trace for no-regression. R4 only
 if R1–R3 leave measurable pressure (it is the riskiest: address stability and

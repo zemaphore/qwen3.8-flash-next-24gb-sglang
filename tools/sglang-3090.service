@@ -1,0 +1,32 @@
+# R5: run the promoted 3090 server as a restartable user service instead of a
+# transient `systemd-run --scope`. Not installed by default.
+#
+# Install:
+#   cp tools/sglang-3090.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now sglang-3090
+# The launcher must then run the server in the foreground (SGLANG_FOREGROUND=1)
+# and not wrap it in systemd-run; see docs/RAM_PREFIX_CACHE_PLAN_3090.md, RB/R5.
+#
+# Restart=on-failure covers the RC1-d crash mode (scheduler exception ->
+# SIGQUIT -> exit); the cache is empty after a restart and the boot takes
+# ~3.5-4 min. StartLimit* stops a crash loop after 3 restarts in 30 min.
+
+[Unit]
+Description=SGLang Qwen3.8-Flash-Next on RTX 3090 (promoted radix profile)
+StartLimitIntervalSec=1800
+StartLimitBurst=3
+
+[Service]
+Type=simple
+WorkingDirectory=/root/sglang
+Environment=SGLANG_FOREGROUND=1
+ExecStart=/root/quant/serve-3090.sh
+ExecStopPost=/bin/sh -c 'logger -t sglang-3090 "server exited with status $EXIT_STATUS ($SERVICE_RESULT)"'
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=1800
+KillMode=control-group
+MemoryMax=56G
+
+[Install]
+WantedBy=default.target
