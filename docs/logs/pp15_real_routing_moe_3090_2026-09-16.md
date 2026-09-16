@@ -135,14 +135,30 @@ versus M64-only **2687.0**, only **+0.3%**, inside the capture noise band. It is
 therefore opt-in (`SGLANG_MOE_PREFETCH_FIRST_LAYER=1`) and not a default. Oracles
 on the on-arm are exact (`m4` 0/0, `lp2` 0.168757/0.011632).
 
-## Direction 4 note (not pursued)
+## Direction 4 — QSA prefill metadata (measured no-op)
 
 After PP14 the extend span is GPU-compute-bound, so the long-context plan's
-first step was taken: the QSA indexer path is `_compute_qsa_topk_indices`
-216.7 ms, `qsa_indexer.forward_cuda` 215.5 ms, `get_prefill_mqa_inputs` 195.9 ms
-of CPU span and `_sparse_gqa_prefill` 102.7 ms of GPU time in the canonical
-extend. No cheap fusion was attempted in this pass. This is the largest
-remaining compute block after fused MoE (536.0 ms) and Marlin (463.0 ms).
+first step was profiling. The QSA indexer path is `_compute_qsa_topk_indices`
+216.7 ms, `qsa_indexer.forward_cuda` 215.5 ms, `get_prefill_mqa_inputs`
+195.9 ms of CPU span and `_sparse_gqa_prefill` 102.7 ms of GPU time. The
+metadata gather is dominated by `sequence_lengths.tolist()` — 186.4 ms over the
+12 QSA layers (15.5 ms each) — a device sync run once per layer on a value that
+is fixed per forward.
+
+`patches/qsa_prefill_host_lens.py` (default off) threads the already-available
+host `forward_batch.seq_lens_cpu` into the metadata so the loop no longer syncs,
+falling back automatically when the host copy is absent. It is exact
+(`m4` 0/0, `lp2` 0.168757/0.011632) and removes the sync, but it does **not**
+move end-to-end PP: a 10-sample arm measured 2704.9 +/- 15.7 versus M64-only
+2679.8 +/- 23.5 (t~2.5), yet pooling every QSA sample (22 -> 2685.1) against
+every M64-only sample (21 -> 2687.0) shows no effect. The sync was already
+hidden behind queued GPU work, consistent with the span's 91.5% GPU-compute
+occupancy. Kept opt-in for audit; the remaining QSA cost would need a genuine
+sparse-kernel change, which was not attempted.
+
+The largest remaining compute blocks after fused MoE (536.0 ms) and this are
+Marlin (463.0 ms, `SMEM`-bound with a fixed template and no easy lever) and the
+QSA indexer itself.
 
 ## Environment
 

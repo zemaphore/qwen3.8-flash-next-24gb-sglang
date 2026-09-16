@@ -1,5 +1,9 @@
 # PP15 real-routing MoE raw evidence
 
+- `accept-m64-qsa/` is the same capture with the opt-in QSA host-lens patch
+  active (`SGLANG_QSA_PREFILL_HOST_LENS=1`); its 5-sample canonical mean is
+  2657.0, inside the noise of `accept-m64`'s 2687.4, and the pooled 22-sample
+  comparison shows no effect. Kept for the audit.
 - `accept-m64-l0/` is the same capture with the opt-in first-layer prefetch
   active (`SGLANG_MOE_PREFETCH_FIRST_LAYER=1`); its 5-sample canonical mean is
   2681.8, which does not separate from `accept-m64`'s 2687.4. Kept for the audit.

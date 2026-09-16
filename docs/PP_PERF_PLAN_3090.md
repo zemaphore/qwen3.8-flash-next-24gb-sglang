@@ -636,6 +636,9 @@ indistinguishable from the MoE config when stacked, so it is opt-in default-off.
 A first-layer prefetch for layer 0's 18.4 ms serial HtoD
 (`patches/moe_first_layer_prefetch.py`) measured +0.87% (t=2.26) in a 10-sample
 bracket but only +0.3% pooled, inside the noise band; it is opt-in default-off.
+Likewise `patches/qsa_prefill_host_lens.py` removes the QSA indexer's 186 ms of
+per-forward `tolist` syncs but measured a pooled no-op (22 vs 21 samples,
+2685.1 vs 2687.0): the sync was already hidden, so it is opt-in default-off.
 
 Evidence: [PP15 result](logs/pp15_real_routing_moe_3090_2026-09-16.md); raw arms
 and captures in `logs/raw/pp15_prefill_retune_3090_2026-09-16/` and
@@ -682,6 +685,7 @@ and captures in `logs/raw/pp15_prefill_retune_3090_2026-09-16/` and
    SGLANG=/root/sglang python3 patches/moe_cross_layer_prefetch.py --check
    SGLANG=/root/sglang python3 patches/moe_prefetch_full_table.py --check
    SGLANG=/root/sglang python3 patches/moe_first_layer_prefetch.py --check
+   SGLANG=/root/sglang python3 patches/qsa_prefill_host_lens.py --check
    python3 patches/enable_moe_cross_layer_prefetch.py --check
    python3 patches/enable_prefill_presence_placement.py --check
    SGLANG=/root/sglang python3 patches/prefill_route_dump.py --check
@@ -714,7 +718,8 @@ expert-gather tile, host-row DMA staging, PP11 DMA batching, a 4,608-token
 prefill chunk (PP12), S184 residency, PP5c prefill-presence placement, PP14
 cross-layer cold-row prefetch above 2,048 tokens, and the PP15 M=4565 INT2 MoE
 config entries for the E=384/E=432 buckets are enabled; profiling is disabled.
-`patches/moe_prefetch_full_table.py` is installed but default-off. The prefill route dump is applied
+`patches/moe_prefetch_full_table.py`, `patches/moe_first_layer_prefetch.py`
+and `patches/qsa_prefill_host_lens.py` are installed but default-off. The prefill route dump is applied
 and pass-through in `/root/quant/serve-3090.sh` but off unless
 `SGLANG_PREFILL_ROUTE_DUMP` names a directory. No server is currently running;
 the PP14 prototype, adjacent control, and final-default scopes were stopped
