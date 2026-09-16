@@ -54,7 +54,7 @@ for n in (1, 3, 5):
 json.dump(rows, open(f"{out}/long_cold.json", "w"), indent=2)
 EOF
   python3 tools/rc1_reuse_checks.py --out-dir "$A/reuse_checks" --pool-tokens "$POOL" \
-    --capacity-max-k $((SLOTS + 2)) --session-turns "${SESSION_TURNS:-40}" --checks "$CHECKS" 2>&1 | tail -80
+    --capacity-max-k $((SLOTS + 2)) --session-turns "${SESSION_TURNS:-40}" --checks "$CHECKS" ${EXTRA_ARGS:-} 2>&1 | tail -80
   nvidia-smi --query-gpu=memory.used,memory.free --format=csv,noheader | tee "$A/nvidia_smi_after_checks.txt"
   echo "errors_in_log $(grep -ciE 'OutOfMemory|out of memory|Traceback' "$A/server.log")"
   echo "=== arm chunk=$C done $(date -u +%FT%TZ) ==="

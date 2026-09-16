@@ -27,3 +27,6 @@ errors_in_log 0
 === arm chunk=2048 done 2026-09-16T18:58:38Z ===
 === restoring control 2026-09-16T18:58:38Z ===
 vram_used_after_stop 0 MiB
+control: up after 201 s gc frozen 
+{'disable_radix_cache': False, 'max_total_tokens': 235520, 'max_mamba_cache_size': 4, 'chunked_prefill_size': 4608}
+ALL DONE 2026-09-16T19:02:13Z
