@@ -1122,3 +1122,9 @@ Running as unit: sglang-1789583539.scope; invocation ID: 9d247f867c6d4102ac4a551
 [2026-09-16 18:36:29] Decode batch, #running-req: 1, #full token: 36416, full token usage: 0.15, mamba num: 3, mamba usage: 0.75, cuda graph: True, gen throughput (token/s): 30.39, #queue-req: 0
 [2026-09-16 18:36:42] Prefill batch, #new-seq: 1, #new-token: 64, #cached-token: 0, full token usage: 0.00, mamba usage: 0.00, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 3.12
 [2026-09-16 18:36:43] INFO:     127.0.0.1:55950 - "GET /health HTTP/1.1" 200 OK
+[2026-09-16 18:39:31] SIGTERM received. signum=None frame=None. Draining requests and shutting down...
+[2026-09-16 18:39:31] Subprocess detokenizer (pid=458542) crashed with exit code -15. Triggering SIGQUIT for cleanup...
+[2026-09-16 18:39:31] SIGQUIT received. signum=None, frame=None. It usually means one child failed.
+[2026-09-16 18:39:31] Sleeping 5 seconds before crash diagnostics to let GPU activity settle.
+[2026-09-16 18:39:37] No live scheduler processes found; skipping py-spy and CUDA coredump.
+[2026-09-16 18:39:37] kill_process_tree called: parent_pid=458404, include_parent=True, pid=458404
