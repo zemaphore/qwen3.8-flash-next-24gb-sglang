@@ -8,11 +8,32 @@ its own plan in [DECODE_PERF_PLAN.md](DECODE_PERF_PLAN.md).
 
 ## Current conclusion
 
+**Campaign closed (2026-09-16).** This round of PP optimization is complete at
+repo revision `a50c32a`. The accepted defaults are frozen and the default-off
+research patches stay default-off. The remaining levers are configuration and
+scheduling changes showing diminishing returns; this is not a proven hardware
+ceiling. Wrap-up validation and final numbers:
+[PP campaign wrap-up](logs/pp_wrapup_3090_2026-09-16.md).
+
+Long-prompt teacher-forced logprob validation now covers the 4,565-token
+canonical extend and 11k/20k-token prompts spanning multiple 4,608 chunks plus a
+tail, so it reaches the PP15 M=4565 MoE config and the PP14 prefetch floor. The
+accepted ran-to-run envelope on a fixed server is max |dlogprob| 1.78 / mean
+0.05, concentrated on the first few unlikely forced tokens. The PP15 MoE config
+and the PP14 prefetch path are equivalent to their controls within that envelope
+but are **not** bit-exact; only the short oracles are reproduced exactly. Final
+accepted capture: canonical **2666.8 +/- 12.5 tok/s** (n=5, actual 4,565 tokens),
+held-out code 2590.0 +/- 6.9 and 2581.3 +/- 13.6 tok/s; depth sweep accepted up
+to a **257,456-token** prompt at 1,543 tok/s prefill and 80 MiB minimum free
+VRAM. GPU-compute time coverage of 91.5% in the PP15 profile means a GPU engine
+was active for 91.5% of the span; it is **not** 91.5% hardware efficiency.
+
 The accepted post-PP14 stack measures **2583.4 +/- 65.4 tok/s** on the canonical
 4,565-token code prompt. PP14 overlaps next-layer cold-row HtoD with current
 MoE compute and is **+36.32%** in its fresh adjacent A/B (2601.2 versus 1908.2
 tok/s). The confirming trace shows 901.3 ms / 51.70% compute-DMA overlap versus
-10.9 ms / 0.46% on PP13. Exactness is unchanged, a 68,905-token prompt retains
+10.9 ms / 0.46% on PP13. Both short exactness oracles are unchanged, a
+68,905-token prompt retains
 1,221 MiB minimum free VRAM, and the launcher defaults the optimization on for
 chunks of at least 2,048 tokens so short interactive requests keep the prior
 selected-row path.
@@ -53,9 +74,12 @@ memory check. It is accepted and enabled by default above a 2,048-token floor.
 PP15 then retuned the routed INT2 MoE on captured real routing and added an
 M=4565 entry to the E=384/E=432 sm_86 buckets: the captured canonical reaches
 **2687.4 +/- 48.3 tok/s** versus the 2583.4 reference (**+4.0%**, below the
-historical 5% gate, exact oracles). The PP14 chunk/threshold retune found no
+historical 5% gate, short oracles exact; wrap-up long-prompt validation below).
+The PP14 chunk/threshold retune found no
 safe improvement (larger chunks win on medium prompts but exhaust VRAM), so the
-4,608-token chunk and 2,048-token prefetch floor remain.
+4,608-token chunk and 2,048-token prefetch floor remain. The wrap-up also
+confirms that the full-table gather, first-layer prefetch, and QSA host-length
+patches show no demonstrated material benefit and remain default-off.
 
 The PLE work now has a bounded policy that covers both measured regimes:
 
@@ -143,6 +167,15 @@ systemd scope ID is not a substitute for raw evidence.
 An exact optimization must also pass the machine-local greedy/logprob oracle
 before acceptance.  Approximate changes require an explicit quality plan and
 must never be silently mixed into an exact A/B.
+
+The short oracles above are reproduced exactly. For anything that changes a path
+gated at a long prompt length (the PP15 M=4565 MoE config, the PP14 prefetch
+floor), also use `tools/long_logprob_oracle.py`: it scores a fixed continuation
+after 4,565/11,196/20,496-token prompts. Those logprobs are **not** bit-exact;
+on a fixed accepted server the run-to-run envelope is max |dlogprob| 1.78 / mean
+0.05, concentrated on the first few unlikely forced tokens. Report a changed
+path as "equivalent within run-to-run variability", never as "exact", unless the
+delta is below that envelope and the measurements support it.
 
 ## Experiment queue
 
@@ -584,11 +617,13 @@ buffer was unnecessary after compaction.
 
 The fresh adjacent control measured **1908.2 +/- 21.8 tok/s** and PP14 measured
 **2601.2 +/- 52.4** (**+36.32%**). A second fresh server using the final guarded
-launcher default reached **2583.4 +/- 65.4**. Both exactness oracles are
+launcher default reached **2583.4 +/- 65.4**. Both short exactness oracles are
 unchanged. The trace reduced the extend span 2390.1 -> 1743.3 ms while
 compute/DMA overlap rose 10.9 -> 901.3 ms. A 68,905-token pass completed at
 2,473 tok/s with 1,221 MiB minimum free VRAM. The 637 MiB cache is allocated
-when a large prefill first initializes streamers.
+when a large prefill first initializes streamers. Long-prompt validation
+(wrap-up) shows the prefetch path is equivalent to its off control within
+run-to-run variability, not bit-exact.
 
 The feature defaults on via `patches/enable_moe_cross_layer_prefetch.py`, but
 only for chunks at or above `SGLANG_MOE_COLD_PREFETCH_MIN_TOKENS=2048`.
@@ -619,11 +654,23 @@ The entries were added only to the E=384/E=432 sm_86 buckets at M=4565.
 The captured accepted arm measured canonical **2687.4 +/- 48.3** vs the PP14
 accepted reference **2583.4 +/- 65.4** (**+4.03%**); a same-session 10-sample
 control/variant pair excluding the documented re-warm transient gives 2585.0 +/-
-19.7 vs 2693.9 +/- 13.7 (**+4.21%**). Both oracles are unchanged. This is below
-the historical 5% screen gate and is recorded as such. Required characterization:
-llama-benchy `pp2048 @ d2048` **1246.81 +/- 40.96**, `tg256 @ d2048`
-**29.39 +/- 1.23**; the authors' unmodified tool at 10,001 tokens **2,524 tok/s**
-(PP14: 2,468; authors' published: 2,271).
+19.7 vs 2693.9 +/- 13.7 (**+4.21%**). Both short oracles are unchanged. This is
+below the historical 5% screen gate and is recorded as such. Required
+characterization: llama-benchy `pp2048 @ d2048` **1246.81 +/- 40.96**,
+`tg256 @ d2048` **29.39 +/- 1.23**; the authors' unmodified tool at 10,001 tokens
+**2,524 tok/s** (PP14: 2,468; authors' published: 2,271).
+
+Wrap-up validation (2026-09-16) re-ran the accepted stack and the two controls.
+`tools/long_logprob_oracle.py` over the 4,565/11,196/20,496-token prompts shows
+the M=4565 config is equivalent to the pre-PP15 configs within the fixed-server
+run-to-run envelope (change max 1.410 / mean 0.046 vs envelope max 1.781 / mean
+0.050), and the PP14 prefetch on/off delta (worst single early-token outlier
+2.797, same-config repeat 0.759 at that index) also sits inside the envelope.
+Neither changed path is bit-exact. Final accepted capture: canonical
+**2666.8 +/- 12.5 tok/s** (n=5), held-out code 2590.0 +/- 6.9 / 2581.3 +/- 13.6,
+depth sweep accepted to **257,456 tokens** at 1,543 tok/s prefill and 80 MiB
+minimum free VRAM; depths above the 262,144-token model context are rejected by
+the context check. See the [wrap-up result](logs/pp_wrapup_3090_2026-09-16.md).
 
 The chunk/threshold retune is closed negative: chunk 8192 made the 14,446-token
 prompt +17.7% but left **80 MiB** free on 34,661 tokens, chunk 9216 exceeds the
@@ -631,14 +678,17 @@ prompt +17.7% but left **80 MiB** free on 34,661 tokens, chunk 9216 exceeds the
 leaves 784 MiB and low-memory lazy kernel loads, and a 512-token prefetch
 threshold regresses small tails. Chunk 4,608 / threshold 2,048 stay the defaults.
 The full-table gather (remove the `torch.unique` sync on prefetched layers,
-`patches/moe_prefetch_full_table.py`) is exact but only +0.9% alone and
-indistinguishable from the MoE config when stacked, so it is opt-in default-off.
+`patches/moe_prefetch_full_table.py`) passes the short oracles but is only +0.9%
+alone and indistinguishable from the MoE config when stacked, so it is opt-in
+default-off with no demonstrated material benefit.
 A first-layer prefetch for layer 0's 18.4 ms serial HtoD
 (`patches/moe_first_layer_prefetch.py`) measured +0.87% (t=2.26) in a 10-sample
-bracket but only +0.3% pooled, inside the noise band; it is opt-in default-off.
+bracket but only +0.3% pooled, inside the noise band; it is opt-in default-off
+with no demonstrated material benefit.
 Likewise `patches/qsa_prefill_host_lens.py` removes the QSA indexer's 186 ms of
 per-forward `tolist` syncs but measured a pooled no-op (22 vs 21 samples,
-2685.1 vs 2687.0): the sync was already hidden, so it is opt-in default-off.
+2685.1 vs 2687.0): the sync was already hidden, so it is opt-in default-off with
+no demonstrated material benefit.
 
 Evidence: [PP15 result](logs/pp15_real_routing_moe_3090_2026-09-16.md); raw arms
 and captures in `logs/raw/pp15_prefill_retune_3090_2026-09-16/` and
@@ -646,20 +696,28 @@ and captures in `logs/raw/pp15_prefill_retune_3090_2026-09-16/` and
 
 ## Later research
 
-- Shared-expert format sweep was rejected in PP8 (measured ceiling ~1.2% of
-  wall); the larger GDN format path was rejected in PP13 (~1.8% ceiling for
-  +1.42 GiB).
-- If fused-MoE config tuning is revisited, replay retained real top-k routing
-  distributions. PP13 showed that uniform random routing selects harmful large
-  tiles even when the isolated kernel timing looks convincing.
-- At long prefixes, profile QSA's full FP32 score tensor and consider fusing
-  score, mask, and hierarchical top-k.  The previously rejected paged-prefix KV
-  kernel should not be repeated unchanged.
-- Tail-chunk staging amortization: addressed by PP12 (chunk 4,608 makes the
-  canonical prompt one extend, +50.66%).
-- Audit negotiated PCIe generation/width, BAR1, clocks/power/thermals, VM CPU
-  affinity, NUMA locality, huge pages, and IOMMU mode before attributing a hard
-  ceiling to the GPU.
+The campaign is closed. The items below are **possible future research, not
+queued work**. None should be opened without a concrete hypothesis, a target
+path, and a pre-declared gate; the measured record shows configuration and
+scheduling changes have reached diminishing returns, which is not the same as a
+proven hardware ceiling.
+
+- **Deeper fused INT2 MoE / Marlin work.** The routed INT2 MoE (536.0 ms) and
+  Marlin (~463 ms) are the largest remaining compute blocks. Any new kernel
+  attempt needs a specific shape/layout hypothesis first; PP13 showed uniform
+  random routing picks harmful tiles, so replay retained real top-k (PP15) and
+  gate on a real prompt.
+- **Long-prefix QSA kernel.** At long prefixes, profile QSA's full FP32 score
+  tensor and consider fusing score, mask, and hierarchical top-k. The
+  host-length metadata patch is a measured no-op; the win would have to come from
+  a genuine sparse-kernel change. The previously rejected paged-prefix KV kernel
+  should not be repeated unchanged.
+- **Hardware/topology audit.** Audit negotiated PCIe generation/width, BAR1,
+  clocks/power/thermals, VM CPU affinity, NUMA locality, huge pages, and IOMMU
+  mode before attributing any ceiling to the GPU.
+- Closed negative and not to be reopened in their tested forms: shared-expert
+  format sweep (PP8, ~1.2% ceiling), GDN format path (PP13, ~1.8% for +1.42 GiB),
+  tail-chunk staging (addressed by PP12), and the three default-off patches above.
 
 ## Resume checklist
 
@@ -693,9 +751,10 @@ and captures in `logs/raw/pp15_prefill_retune_3090_2026-09-16/` and
    SGLANG=/root/sglang python3 patches/moe_config_buckets.py --check
    ```
 
-5. PP11, PP5c, PP12 and PP14 are accepted; the launcher defaults are PP5c
-   prefill-presence placement (`assets/expert_presence_code.pt`) and a PP12
-   4,608-token prefill chunk, plus PP14 prefetch above a 2,048-token floor.
+5. PP11, PP5c, PP12, PP14 and PP15 are accepted; the launcher defaults are PP5c
+   prefill-presence placement (`assets/expert_presence_code.pt`), a PP12
+   4,608-token prefill chunk, PP14 prefetch above a 2,048-token floor, and the
+   PP15 M=4565 INT2 MoE entries for the E=384/E=432 buckets.
    They remain selectable with `SGLANG_MOE_PLACEMENT`,
    `SGLANG_3090_CHUNKED_PREFILL_SIZE`, `SGLANG_MOE_COLD_PREFETCH`, and
    `SGLANG_MOE_COLD_PREFETCH_MIN_TOKENS`. PP5b remains the canonical-only
@@ -722,8 +781,11 @@ config entries for the E=384/E=432 buckets are enabled; profiling is disabled.
 and `patches/qsa_prefill_host_lens.py` are installed but default-off. The prefill route dump is applied
 and pass-through in `/root/quant/serve-3090.sh` but off unless
 `SGLANG_PREFILL_ROUTE_DUMP` names a directory. No server is currently running;
-the PP14 prototype, adjacent control, and final-default scopes were stopped
-cleanly.
+the accepted-stack capture/depth-sweep boot, the pre-PP15 MoE-config arm, and
+the prefetch-off arm were all stopped cleanly, and the GPU is idle.
+The wrap-up validation and final characterization are in
+[logs/pp_wrapup_3090_2026-09-16.md](logs/pp_wrapup_3090_2026-09-16.md) with raw
+evidence under `logs/raw/pp_wrapup_3090_2026-09-16/`.
 The RTX 3090, `/dev/nvidia*`, and driver 580.178.04 were available to this
-execution context. The PP14 profile was taken through the live
+execution context. The PP15 profile was taken through the live
 `/start_profile` endpoint with no production code or launcher change.
