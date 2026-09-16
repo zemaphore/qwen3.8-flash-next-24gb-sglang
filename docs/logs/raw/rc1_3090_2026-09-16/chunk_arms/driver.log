@@ -1,0 +1,115 @@
+=== arm chunk=2048 slots=16 pool=262144 2026-09-16T16:59:57Z ===
+vram_used_after_stop 0 MiB
+launcher: up after 201 s gc frozen 
+[2026-09-16 17:03:13] Mamba Cache is allocated. max_mamba_cache_size: 16, conv_state size: 0.04GB, ssm_state size: 1.79GB 
+[2026-09-16 17:03:14] Memory pool end. avail mem=2.84 GB
+[2026-09-16 17:03:16] max_total_num_tokens=187200, chunked_prefill_size=2048, max_prefill_tokens=32768, max_running_requests=1, context_len=262144, available_gpu_mem=2.75 GB
+[2026-09-16 17:03:16] Tree cache initialized: source=default impl=UnifiedRadixCache hybrid_swa=False hybrid_ssm=True hicache_attached=False streaming_wrapped=False
+{'disable_radix_cache': False, 'max_total_tokens': 262144, 'max_mamba_cache_size': 16, 'chunked_prefill_size': 2048}
+21339 MiB, 2786 MiB
+long cold {'blocks': 1, 'prompt_tokens': 7230, 'cached': 0, 'wall_s': 6.968, 'prefill_tok_s': 1037.6}
+long cold {'blocks': 3, 'prompt_tokens': 21690, 'cached': 0, 'wall_s': 12.46, 'prefill_tok_s': 1740.8}
+long cold {'blocks': 5, 'prompt_tokens': 36150, 'cached': 0, 'wall_s': 18.932, 'prefill_tok_s': 1909.5}
+Traceback (most recent call last):
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 323, in <module>
+    main()
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 316, in main
+    check_churn(args.url, args.out_dir, nonce, args.churn_n, args.max_new)
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 149, in check_churn
+    c = gen(url, tx["base"], max_new)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 44, in gen
+    out = post(url, "/generate", body)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 31, in post
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 215, in urlopen
+    return opener.open(url, data, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 515, in open
+    response = self._open(req, data)
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 532, in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 492, in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 1373, in http_open
+    return self.do_open(http.client.HTTPConnection, req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 1348, in do_open
+    r = h.getresponse()
+        ^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/http/client.py", line 1457, in getresponse
+    response.begin()
+  File "/usr/lib/python3.12/http/client.py", line 336, in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/http/client.py", line 305, in _read_status
+    raise RemoteDisconnected("Remote end closed connection without"
+http.client.RemoteDisconnected: Remote end closed connection without response
+0 MiB, 24125 MiB
+errors_in_log 3
+=== arm chunk=2048 done 2026-09-16T17:11:18Z ===
+=== arm chunk=3072 slots=16 pool=262144 2026-09-16T17:11:18Z ===
+vram_used_after_stop 0 MiB
+launcher: up after 232 s gc frozen 
+[2026-09-16 17:15:04] Mamba Cache is allocated. max_mamba_cache_size: 16, conv_state size: 0.04GB, ssm_state size: 1.79GB 
+[2026-09-16 17:15:04] Memory pool end. avail mem=2.84 GB
+[2026-09-16 17:15:06] max_total_num_tokens=187200, chunked_prefill_size=3072, max_prefill_tokens=32768, max_running_requests=1, context_len=262144, available_gpu_mem=2.75 GB
+[2026-09-16 17:15:06] Tree cache initialized: source=default impl=UnifiedRadixCache hybrid_swa=False hybrid_ssm=True hicache_attached=False streaming_wrapped=False
+{'disable_radix_cache': False, 'max_total_tokens': 262144, 'max_mamba_cache_size': 16, 'chunked_prefill_size': 3072}
+21339 MiB, 2786 MiB
+long cold {'blocks': 1, 'prompt_tokens': 7230, 'cached': 0, 'wall_s': 6.452, 'prefill_tok_s': 1120.6}
+long cold {'blocks': 3, 'prompt_tokens': 21690, 'cached': 0, 'wall_s': 9.982, 'prefill_tok_s': 2172.9}
+long cold {'blocks': 5, 'prompt_tokens': 36150, 'cached': 0, 'wall_s': 15.756, 'prefill_tok_s': 2294.4}
+Traceback (most recent call last):
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 323, in <module>
+    main()
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 316, in main
+    check_churn(args.url, args.out_dir, nonce, args.churn_n, args.max_new)
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 149, in check_churn
+    c = gen(url, tx["base"], max_new)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 44, in gen
+    out = post(url, "/generate", body)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 31, in post
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 215, in urlopen
+    return opener.open(url, data, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 515, in open
+    response = self._open(req, data)
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 532, in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 492, in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 1373, in http_open
+    return self.do_open(http.client.HTTPConnection, req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 1348, in do_open
+    r = h.getresponse()
+        ^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/http/client.py", line 1457, in getresponse
+    response.begin()
+  File "/usr/lib/python3.12/http/client.py", line 336, in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/http/client.py", line 305, in _read_status
+    raise RemoteDisconnected("Remote end closed connection without"
+http.client.RemoteDisconnected: Remote end closed connection without response
+0 MiB, 24125 MiB
+errors_in_log 2
+=== arm chunk=3072 done 2026-09-16T17:22:04Z ===
+=== restoring control 2026-09-16T17:22:04Z ===
+vram_used_after_stop 0 MiB
+control: up after 241 s gc frozen 
+{'disable_radix_cache': True, 'max_total_tokens': 262144, 'max_mamba_cache_size': 1, 'chunked_prefill_size': 4608}
+ALL DONE 2026-09-16T17:26:13Z

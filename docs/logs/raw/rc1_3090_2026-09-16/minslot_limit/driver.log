@@ -1,0 +1,37 @@
+=== arm chunk=4608 slots=4 pool=262144 2026-09-16T17:37:14Z ===
+vram_used_after_stop 0 MiB
+launcher: up after 201 s gc frozen 
+[2026-09-16 17:40:36] Mamba Cache is allocated. max_mamba_cache_size: 4, conv_state size: 0.01GB, ssm_state size: 0.53GB 
+[2026-09-16 17:40:36] Memory pool end. avail mem=4.45 GB
+[2026-09-16 17:40:38] max_total_num_tokens=262144, chunked_prefill_size=4608, max_prefill_tokens=32768, max_running_requests=1, context_len=262144, available_gpu_mem=4.35 GB
+[2026-09-16 17:40:38] Tree cache initialized: source=default impl=UnifiedRadixCache hybrid_swa=False hybrid_ssm=True hicache_attached=False streaming_wrapped=False
+{'disable_radix_cache': False, 'max_total_tokens': 262144, 'max_mamba_cache_size': 4, 'chunked_prefill_size': 4608}
+19697 MiB, 4428 MiB
+long cold {'blocks': 1, 'prompt_tokens': 7230, 'cached': 0, 'wall_s': 5.545, 'prefill_tok_s': 1303.9}
+long cold {'blocks': 3, 'prompt_tokens': 21690, 'cached': 0, 'wall_s': 9.085, 'prefill_tok_s': 2387.5}
+long cold {'blocks': 5, 'prompt_tokens': 36150, 'cached': 0, 'wall_s': 14.793, 'prefill_tok_s': 2443.7}
+growing session: 70 turns, ~80 repo modules of tool result per turn, max_new=16
+  turn  0: prompt=6311 cached=0 uncached=6311 expected=[0,0] ok=True wall=3.628s free_vram=1302MiB
+  turn  5: prompt=22331 cached=19072 uncached=3259 expected=[19072,19136] ok=True wall=1.836s free_vram=1302MiB
+  turn 10: prompt=38352 cached=35136 uncached=3216 expected=[35136,35136] ok=True wall=1.849s free_vram=1302MiB
+  turn 15: prompt=55582 cached=52096 uncached=3486 expected=[52096,52096] ok=True wall=1.985s free_vram=1302MiB
+  turn 20: prompt=72812 cached=69376 uncached=3436 expected=[69312,69376] ok=True wall=2.006s free_vram=1436MiB
+  turn 25: prompt=90042 cached=86592 uncached=3450 expected=[86592,86592] ok=True wall=2.057s free_vram=956MiB
+  turn 30: prompt=107272 cached=103808 uncached=3464 expected=[103808,103808] ok=True wall=2.103s free_vram=860MiB
+  turn 35: prompt=124502 cached=121024 uncached=3478 expected=[121024,121024] ok=True wall=2.187s free_vram=658MiB
+  turn 40: prompt=141732 cached=138240 uncached=3492 expected=[138240,138240] ok=True wall=2.17s free_vram=1094MiB
+  turn 45: prompt=158962 cached=155456 uncached=3506 expected=[155456,155520] ok=True wall=2.264s free_vram=928MiB
+  turn 50: prompt=176192 cached=172736 uncached=3456 expected=[172736,172736] ok=True wall=2.288s free_vram=1162MiB
+  turn 55: prompt=193422 cached=189952 uncached=3470 expected=[189952,189952] ok=True wall=2.389s free_vram=1074MiB
+  turn 60: prompt=210652 cached=207168 uncached=3484 expected=[207168,207168] ok=True wall=2.458s free_vram=938MiB
+  turn 65: prompt=227882 cached=224384 uncached=3498 expected=[224384,224448] ok=True wall=2.507s free_vram=216MiB
+  turn 69: prompt=241666 cached=238208 uncached=3458 expected=[238208,238208] ok=True wall=2.525s free_vram=112MiB
+hits_ok=70/70 final_prompt=241666 min_free_vram=30MiB warm_wall_median=2.173s
+24013 MiB, 112 MiB
+errors_in_log 0
+=== arm chunk=4608 done 2026-09-16T17:43:54Z ===
+=== restoring control 2026-09-16T17:43:54Z ===
+vram_used_after_stop 0 MiB
+control: up after 221 s gc frozen 
+{'disable_radix_cache': True, 'max_total_tokens': 262144, 'max_mamba_cache_size': 1, 'chunked_prefill_size': 4608}
+ALL DONE 2026-09-16T17:47:50Z

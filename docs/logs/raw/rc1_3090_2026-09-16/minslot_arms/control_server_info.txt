@@ -1,0 +1,1 @@
+{'disable_radix_cache': True, 'max_total_tokens': 262144, 'max_mamba_cache_size': 1, 'chunked_prefill_size': 4608}

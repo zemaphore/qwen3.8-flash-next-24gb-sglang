@@ -3,9 +3,15 @@
 Date: 2026-09-16
 Status: RC0 and RC1 complete (see [RC0](logs/rc0_feasibility_3090_2026-09-16.md)
 and [RC1](logs/rc1_gpu_hybrid_3090_2026-09-16.md) reports). Serving source is
-unchanged; RC1 enabled the built-in hybrid tree via a separate launcher at a
-131,072-token capacity (reported tradeoff, not a promoted default). No RAM tier
-or agentic benchmark yet. Objective corrected before implementation (below).
+unchanged; RC1 enabled the built-in hybrid tree via a separate launcher.
+**Re-scoped 2026-09-16:** the target workload is one consumer driving one
+linear conversation with growing context and no forks. For that workload RC1
+§5.2 shows a 4-mamba-slot GPU-only profile keeps the full 262,144 pool and
+hits on every turn of a 70-turn session to 241,666 tokens (warm turns
+1.8–2.5 s vs ~157 s cold re-prefill), so the RAM tier (RC2/RC3) is **parked**
+as out of scope;
+the remaining stage is a linear-session benchmark and promotion decision
+(RC4′). The multi-conversation design below is retained for reference.
 Starting point: accepted RTX 3090 stack; TG0 complete.
 
 ## Objective
@@ -203,9 +209,9 @@ request. Host spill must not create an unbounded queue while the user is idle.
 |---|---|---|
 | RC0 | DONE | Read-only inventory after TG0; measure memory budgets and state layouts | [RC0 report](logs/rc0_feasibility_3090_2026-09-16.md): compatibility matrix, snapshot schema, precision contract, explicit budgets and test protocol |
 | RC1 | DONE | Enable GPU-only hybrid cache on an isolated branch with enough state slots | [RC1 report](logs/rc1_gpu_hybrid_3090_2026-09-16.md): `UnifiedRadixCache` + Mamba extra-buffer; page-aligned hits for repeated/append/branch/A→B→A; GPU hit indistinguishable from recompute under the stack's own drift (teacher-forced suffix; same-slot hits only, not the RC2/RC3 bound); capacity capped 131,072 with 8 mamba slots (16 slots boots at 187,200 with ~46 MiB headroom; original OOM not reproduced); hot tier = 6 conversations, whole-prefix miss on slot eviction; re-hit after eviction works; free VRAM → 4 MiB under retention (lazy backing never released); no RAM transfer yet |
-| RC2 | Implement quantized KV/QSA and recurrent/PLE host round trip | Bit-preserving component tests, remapping/ring tests and incremental continuation comparisons |
-| RC3 | Integrate RAM entries, restore, eviction and physical-memory accounting | A→B→A reuse works after GPU eviction; bounded RAM/VRAM and safe abort/failure behavior. Must address RC1's measured limits: recurrent/PLE checkpoints spill with KV (6-conversation hot tier), and lazy KV backing is reclaimed under retention (4 MiB free measured) |
-| RC4 | Agentic workload benchmark and long-context validation | Evidence-based latency/capacity tradeoff and accept/reject decision |
+| RC2 | PARKED | Implement quantized KV/QSA and recurrent/PLE host round trip | Only needed for forks/interleaved sessions (out of target workload) |
+| RC3 | PARKED | Integrate RAM entries, restore, eviction and physical-memory accounting | As RC2; if ever resumed, must first fix the RC1-d crash modes: allocator must evict on physical pressure and lazy backing must be reclaimable |
+| RC4′ | NEXT | Linear-session benchmark on the 4-slot profile vs the frozen no-cache control | Full-trace wall time for growing sessions at ~32K/128K/near-limit, near-limit capacity with hits, TG/cold-PP reported, accept/reject and rollback |
 
 Each stage should produce a scoped commit and raw evidence before proceeding.
 RC0 can conclude a design is blocked; do not build on an unresolved snapshot

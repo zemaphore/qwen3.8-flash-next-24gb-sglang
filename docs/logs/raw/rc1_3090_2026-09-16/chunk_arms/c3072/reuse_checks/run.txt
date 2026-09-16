@@ -1,0 +1,4 @@
+utc 2026-09-16T17:15:50Z
+nonce 6aaacec6
+args {'url': 'http://127.0.0.1:30001', 'out_dir': '/root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/rc1_3090_2026-09-16/chunk_arms/c3072/reuse_checks', 'max_new': 16, 'trials': 6, 'churn_n': 30, 'pool_tokens': 262144, 'capacity_max_k': 18, 'checks': 'mamba_capacity,churn,evict_rehit'}
+page 64

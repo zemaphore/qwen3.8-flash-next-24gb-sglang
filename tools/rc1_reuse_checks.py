@@ -241,6 +241,37 @@ def check_mamba_capacity(url, out_dir, nonce, max_new, max_k=10):
     write(out_dir, "mamba_capacity", {"rows": rows}, lines)
 
 
+def check_growing_session(url, out_dir, nonce, max_new, turns, turn_modules):
+    """One linear session: each turn appends the previous output plus a tool result."""
+    flush(url)
+    text = base_prefix(f"session-{nonce}")
+    rows, lines = [], [f"growing session: {turns} turns, ~{turn_modules} repo modules of tool result per turn, max_new={max_new}"]
+    prev_prompt = prev_total = None
+    for t in range(turns):
+        r = gen(url, text, max_new)
+        exp_lo = 0 if prev_prompt is None else floor_page(prev_prompt)
+        exp_hi = 0 if prev_total is None else floor_page(prev_total)
+        ok = exp_lo <= r["cached_tokens"] <= exp_hi if t else r["cached_tokens"] == 0
+        fv = free_vram_mib()
+        rows.append({"turn": t, "prompt_tokens": r["prompt_tokens"], "cached_tokens": r["cached_tokens"],
+                     "uncached": (r["prompt_tokens"] or 0) - r["cached_tokens"], "expected_range": [exp_lo, exp_hi],
+                     "hit_ok": ok, "wall_s": r["wall_s"], "free_vram_mib": fv, "completion_tokens": r["completion_tokens"]})
+        if t % 5 == 0 or t == turns - 1 or not ok:
+            lines.append(f"  turn {t:2d}: prompt={r['prompt_tokens']} cached={r['cached_tokens']} uncached={rows[-1]['uncached']} "
+                         f"expected=[{exp_lo},{exp_hi}] ok={ok} wall={r['wall_s']}s free_vram={fv}MiB")
+        prev_prompt = r["prompt_tokens"]
+        prev_total = (r["prompt_tokens"] or 0) + (r["completion_tokens"] or 0)
+        tool = "".join(
+            f"# {nonce} turn{t} module {i}\ndef handler_{t}_{i}(request):\n    return {{'turn': {t}, 'id': {i}}}\n\n"
+            for i in range(turn_modules)
+        )
+        text = text + r["text"] + f"\n\nTool result for turn {t}:\n" + tool + f"\nUser: continue with turn {t + 1}.\n"
+    hits = sum(r["hit_ok"] for r in rows)
+    lines.append(f"hits_ok={hits}/{turns} final_prompt={rows[-1]['prompt_tokens']} min_free_vram={min(r['free_vram_mib'] or 0 for r in rows)}MiB "
+                 f"warm_wall_median={sorted(r['wall_s'] for r in rows[1:])[len(rows) // 2]}s")
+    write(out_dir, "growing_session", {"rows": rows}, lines)
+
+
 def check_evict_rehit(url, out_dir, nonce, max_new, pool_tokens, filler_tokens_target):
     """A cold -> enough unique fillers to exceed the pool -> A again -> A again."""
     tx = texts(f"evict-{nonce}")
@@ -296,6 +327,9 @@ def main():
     ap.add_argument("--trials", type=int, default=6)
     ap.add_argument("--churn-n", type=int, default=30)
     ap.add_argument("--pool-tokens", type=int, default=131072)
+    ap.add_argument("--capacity-max-k", type=int, default=10)
+    ap.add_argument("--session-turns", type=int, default=40)
+    ap.add_argument("--session-turn-modules", type=int, default=80)
     ap.add_argument("--checks", default="determinism,logprob_reuse,suffix_logprob,mamba_capacity,churn,evict_rehit")
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
@@ -310,7 +344,9 @@ def main():
     if "suffix_logprob" in checks:
         check_suffix_logprob(args.url, args.out_dir, nonce, args.trials, args.max_new)
     if "mamba_capacity" in checks:
-        check_mamba_capacity(args.url, args.out_dir, nonce, args.max_new)
+        check_mamba_capacity(args.url, args.out_dir, nonce, args.max_new, args.capacity_max_k)
+    if "growing_session" in checks:
+        check_growing_session(args.url, args.out_dir, nonce, args.max_new, args.session_turns, args.session_turn_modules)
     if "churn" in checks:
         check_churn(args.url, args.out_dir, nonce, args.churn_n, args.max_new)
     if "evict_rehit" in checks:

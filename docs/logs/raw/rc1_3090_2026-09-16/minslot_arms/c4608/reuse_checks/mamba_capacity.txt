@@ -1,0 +1,8 @@
+mamba/hot-tier capacity: A cold, k short unique fillers, A again
+  k= 0 intervening -> A cached=6592 (full=6592) wall=0.507s
+  k= 1 intervening -> A cached=6592 (full=6592) wall=0.475s
+  k= 2 intervening -> A cached=0 (full=6592) wall=3.462s
+  k= 3 intervening -> A cached=0 (full=6592) wall=3.458s
+  k= 4 intervening -> A cached=0 (full=6592) wall=3.465s
+  k= 5 intervening -> A cached=0 (full=6592) wall=3.506s
+  k= 6 intervening -> A cached=0 (full=6592) wall=3.469s
