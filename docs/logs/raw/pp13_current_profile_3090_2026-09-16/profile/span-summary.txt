@@ -1,0 +1,18 @@
+Trace: 1789534681.5462308-TP-0-EXTEND.trace.json.gz
+Clipping span: CPU user_annotation step[EXTEND bs=1 toks=4565]
+Span duration: 2390.128 ms
+
+GPU engine union (kernel + memcpy + memset): 2158.204 ms (90.30% of span)
+Compute union (kernel + memset):              1426.363 ms (59.68% of span)
+DMA union (gpu_memcpy):                        742.721 ms (31.07% of span)
+Pinned HtoD union:                             738.687 ms (30.91% of span)
+Compute/DMA overlap:                            10.879 ms ( 0.46% of span)
+No GPU engine event:                           231.923 ms ( 9.70% of span)
+
+Named GPU kernel totals inside the span:
+  GPTQ/AWQ Marlin:                             421.536 ms
+  fused_moe_kernel_gptq_awq_word:              481.609 ms
+
+Intervals are clipped to the CPU span and merged before union calculations.
+Named totals are sums of clipped kernel intervals; neither named family
+overlapped a gpu_memcpy interval in this capture.

@@ -1,0 +1,36 @@
+[transformers] Unrecognized keys in `rope_parameters` for 'rope_type'='default': {'mrope_interleaved', 'mrope_section'}
+[transformers] Unrecognized keys in `rope_parameters` for 'rope_type'='default': {'mrope_interleaved', 'mrope_section'}
+Breakable CUDA graph is incompatible with multimodal model; disabling prefill CUDA graph.
+E=480 M=4565
+    10.757 ms  up=(64, 64, 32, 8, 4, 3) down=(64, 64, 32, 8, 4, 3)
+    12.647 ms  up=(32, 64, 32, 8, 4, 3) down=(32, 64, 32, 8, 4, 3)
+  coordinate round 1/1
+    18.621 ms  up=(16, 64, 32, 8, 4, 3) down=(16, 64, 32, 8, 4, 3)
+    10.760 ms  up=(128, 64, 32, 8, 4, 3) down=(128, 64, 32, 8, 4, 3)
+    15.155 ms  up=(64, 16, 32, 8, 4, 3) down=(64, 64, 32, 8, 4, 3)
+    12.436 ms  up=(64, 32, 32, 8, 4, 3) down=(64, 64, 32, 8, 4, 3)
+    10.861 ms  up=(64, 128, 32, 8, 4, 3) down=(64, 64, 32, 8, 4, 3)
+    11.237 ms  up=(64, 64, 64, 8, 4, 3) down=(64, 64, 32, 8, 4, 3)
+    14.619 ms  up=(64, 64, 128, 8, 4, 3) down=(64, 64, 32, 8, 4, 3)
+    11.605 ms  up=(64, 64, 32, 1, 4, 3) down=(64, 64, 32, 8, 4, 3)
+    11.366 ms  up=(64, 64, 32, 4, 4, 3) down=(64, 64, 32, 8, 4, 3)
+    11.621 ms  up=(64, 64, 32, 16, 4, 3) down=(64, 64, 32, 8, 4, 3)
+    12.211 ms  up=(64, 64, 32, 32, 4, 3) down=(64, 64, 32, 8, 4, 3)
+    11.941 ms  up=(64, 64, 32, 8, 8, 3) down=(64, 64, 32, 8, 4, 3)
+    11.353 ms  up=(64, 64, 32, 8, 4, 2) down=(64, 64, 32, 8, 4, 3)
+    11.044 ms  up=(64, 64, 32, 8, 4, 4) down=(64, 64, 32, 8, 4, 3)
+    16.464 ms  up=(64, 64, 32, 8, 4, 3) down=(64, 16, 32, 8, 4, 3)
+    12.893 ms  up=(64, 64, 32, 8, 4, 3) down=(64, 32, 32, 8, 4, 3)
+    10.579 ms  up=(64, 64, 32, 8, 4, 3) down=(64, 128, 32, 8, 4, 3)
+    11.292 ms  up=(64, 64, 32, 8, 4, 3) down=(64, 64, 64, 8, 4, 3)
+    12.878 ms  up=(64, 64, 32, 8, 4, 3) down=(64, 64, 128, 8, 4, 3)
+    10.916 ms  up=(64, 64, 32, 8, 4, 3) down=(64, 64, 32, 1, 4, 3)
+    10.753 ms  up=(64, 64, 32, 8, 4, 3) down=(64, 64, 32, 4, 4, 3)
+    10.933 ms  up=(64, 64, 32, 8, 4, 3) down=(64, 64, 32, 16, 4, 3)
+    10.934 ms  up=(64, 64, 32, 8, 4, 3) down=(64, 64, 32, 32, 4, 3)
+    11.575 ms  up=(64, 64, 32, 8, 4, 3) down=(64, 64, 32, 8, 8, 3)
+    11.217 ms  up=(64, 64, 32, 8, 4, 3) down=(64, 64, 32, 8, 4, 2)
+    11.363 ms  up=(64, 64, 32, 8, 4, 3) down=(64, 64, 32, 8, 4, 4)
+  BEST 10.579 ms, fallback 10.941 ms, 1.034x, accepted=True, rel=0.000e+00, max=0.000e+00
+Wrote configs to docs/logs/raw/pp13_current_profile_3090_2026-09-16/moe-config-screen/configs
+Wrote report to docs/logs/raw/pp13_current_profile_3090_2026-09-16/moe-config-screen/tuning.json

@@ -1,0 +1,41 @@
+device: NVIDIA GeForce RTX 3090
+
+[in_proj_qkvz] K=2560 N=16384 packed=40.6 MiB dense=80.0 MiB extra=39.4 MiB dequant_once=0.012s
+  probe marlin_bf16        rel_l2=2.13257e-03 max_abs=3.90625e-03
+  probe marlin_fp16_cast   rel_l2=2.60160e-03 max_abs=7.81250e-03
+  probe w8a8               rel_l2=1.84105e-02 max_abs=4.15039e-02
+  M=2048 (171.8 GFLOP)
+    marlin_bf16             2956.0 us    58.1 TF/s   1.00x
+    marlin_fp16_kernel      3276.5 us    52.4 TF/s   0.90x
+    marlin_fp16_cast        3308.9 us    51.9 TF/s   0.89x
+    dense_bf16              2809.8 us    61.1 TF/s   1.05x
+    dense_fp16_cast         2543.0 us    67.6 TF/s   1.16x
+    w8a8_e2e                4831.7 us    35.6 TF/s   0.61x
+  M=4565 w8a8_e2e unsupported: CUDA error: CUBLAS_STATUS_NOT_SUPPORTED when calling cublasLtMatmul with transpose_mat1 0 transpose_mat2 0 m 16384 n 4565 k 2560 mat1_ld 16384 mat2_ld 2560 result_ld 16384 abType 3 cType 10 computeType 72 scaleType 10
+  M=4565 (382.9 GFLOP)
+    marlin_bf16             7102.3 us    53.9 TF/s   1.00x
+    marlin_fp16_kernel      6949.9 us    55.1 TF/s   1.02x
+    marlin_fp16_cast        7489.1 us    51.1 TF/s   0.95x
+    dense_bf16              5894.1 us    65.0 TF/s   1.20x
+    dense_fp16_cast         6228.5 us    61.5 TF/s   1.14x
+    w8a8_e2e                   nan us     nan TF/s    nanx
+
+[out_proj] K=6144 N=2560 packed=15.2 MiB dense=30.0 MiB extra=14.8 MiB dequant_once=0.001s
+  probe marlin_bf16        rel_l2=3.83370e-03 max_abs=7.81250e-03
+  probe marlin_fp16_cast   rel_l2=2.66201e-03 max_abs=3.90625e-03
+  probe w8a8               rel_l2=2.37022e-02 max_abs=5.54199e-02
+  M=2048 (64.4 GFLOP)
+    marlin_bf16              994.7 us    64.8 TF/s   1.00x
+    marlin_fp16_kernel       978.9 us    65.8 TF/s   1.02x
+    marlin_fp16_cast        1609.5 us    40.0 TF/s   0.62x
+    dense_bf16              1344.6 us    47.9 TF/s   0.74x
+    dense_fp16_cast         1240.7 us    51.9 TF/s   0.80x
+    w8a8_e2e                2110.2 us    30.5 TF/s   0.47x
+  M=4565 w8a8_e2e unsupported: CUDA error: CUBLAS_STATUS_NOT_SUPPORTED when calling cublasLtMatmul with transpose_mat1 0 transpose_mat2 0 m 2560 n 4565 k 6144 mat1_ld 2560 mat2_ld 6144 result_ld 2560 abType 3 cType 10 computeType 72 scaleType 10
+  M=4565 (143.6 GFLOP)
+    marlin_bf16             2487.0 us    57.7 TF/s   1.00x
+    marlin_fp16_kernel      2675.5 us    53.7 TF/s   0.93x
+    marlin_fp16_cast        2728.6 us    52.6 TF/s   0.91x
+    dense_bf16              2539.3 us    56.6 TF/s   0.98x
+    dense_fp16_cast         2623.0 us    54.7 TF/s   0.95x
+    w8a8_e2e                   nan us     nan TF/s    nanx

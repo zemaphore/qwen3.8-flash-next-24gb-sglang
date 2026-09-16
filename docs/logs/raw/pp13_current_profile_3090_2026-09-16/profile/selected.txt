@@ -1,0 +1,202 @@
+duration events: 338,004; distinct names: 2,335
+    total ms    count    mean us  domain               name
+    1617.353       48   33694.85  sglang::scheduler    python/sglang/srt/layers/moe/fused_moe_triton/layer.py(1421): forward
+    1617.038       48   33688.30  sglang::scheduler    python/sglang/srt/layers/moe/fused_moe_triton/layer.py(1462): forward_impl
+    1612.986       48   33603.87  sglang::scheduler    python/sglang/srt/layers/moe/fused_moe_triton/layer.py(1530): run_moe_core
+     747.906      193    3875.16  sglang::scheduler    Memcpy HtoD (Pinned -> Device)
+     491.517       96    5119.97  sglang::scheduler    fused_moe_kernel_gptq_awq_word
+     414.037      384    1078.22  sglang::scheduler    void sglang::device::marlin::Marlin<__nv_bfloat16, 1125899923621888l, 256, 4, 16, 4, false, 4, 8, false>(int4 const*, int4 const*, int4*, int4*, int4 const*, unsigned short const*, int4 const*, int const*, int, int, int, int, int, int*, bool, bool, int)
+     408.410      279    1463.84  sglang::scheduler    cudaMemcpyAsync
+     401.352      108    3716.22  sglang::scheduler    python/sglang/kernels/fused_op.py(623): forward
+     393.464       12   32788.68  sglang::scheduler    python/sglang/srt/models/qwen4_exp.py(1736): self_attention
+     375.887       12   31323.93  sglang::scheduler    python/sglang/srt/layers/attention/qsa/qsa_indexer.py(550): forward_cuda
+     359.552       12   29962.64  sglang::scheduler    python/sglang/srt/layers/attention/qsa/metadata.py(124): get_prefill_mqa_inputs
+      72.256       48    1505.33  sglang::scheduler    python/sglang/srt/layers/attention/hybrid_linear_attn_backend.py(1172): forward
+      71.647       48    1492.64  sglang::scheduler    python/sglang/srt/layers/attention/hybrid_linear_attn_backend.py(1142): forward_extend
+      66.350       36    1843.06  sglang::scheduler    python/sglang/srt/layers/radix_linear_attention.py(95): forward
+      64.527       36    1792.41  sglang::scheduler    python/sglang/srt/layers/attention/linear/gdn_backend.py(489): forward_extend
+      62.005      855      72.52  sglang::scheduler    triton/runtime/jit.py(370): <lambda>
+      57.858       48    1205.38  sglang::scheduler    python/sglang/srt/layers/moe/moe_runner/triton.py(182): fused_experts_none_to_triton
+      56.389       48    1174.78  sglang::scheduler    python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe.py(247): fused_experts
+      55.768      855      65.23  sglang::scheduler    triton/runtime/jit.py(708): run
+      55.468       48    1155.58  sglang::scheduler    <built-in method outplace_fused_experts of pybind11_builtins.pybind11_detail_function_record_v1_system_libstdcpp_gxx_abi_1xxx_use_cxx11_abi_1 object at 0x752fdeff5a50>
+      55.163        1   55163.12  sglang::scheduler    nn.Module: Qwen4ExpAttentionDecoderLayer_3
+      54.424        1   54424.22  sglang::scheduler    nn.Module: Qwen4ExpAttentionDecoderLayer_0
+      53.929        1   53928.54  sglang::scheduler    nn.Module: Qwen4ExpAttentionDecoderLayer_10
+      53.189        1   53188.80  sglang::scheduler    nn.Module: Qwen4ExpAttentionDecoderLayer_2
+      53.055        1   53054.94  sglang::scheduler    nn.Module: Qwen4ExpAttentionDecoderLayer_1
+      53.022        1   53022.29  sglang::scheduler    nn.Module: Qwen4ExpAttentionDecoderLayer_7
+      53.016        1   53015.50  sglang::scheduler    nn.Module: Qwen4ExpAttentionDecoderLayer_5
+      52.924        1   52923.66  sglang::scheduler    nn.Module: Qwen4ExpAttentionDecoderLayer_8
+      52.256       48    1088.67  sglang::scheduler    sglang::outplace_fused_experts
+      52.202        1   52201.76  sglang::scheduler    nn.Module: Qwen4ExpAttentionDecoderLayer_9
+      52.067        1   52066.77  sglang::scheduler    nn.Module: Qwen4ExpAttentionDecoderLayer_11
+      51.045        1   51044.96  sglang::scheduler    nn.Module: Qwen4ExpAttentionDecoderLayer_6
+      50.791        1   50791.32  sglang::scheduler    nn.Module: Qwen4ExpAttentionDecoderLayer_4
+      50.619       48    1054.57  sglang::scheduler    python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe.py(175): outplace_fused_experts
+      50.101       48    1043.78  sglang::scheduler    python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe.py(971): fused_experts_impl
+      46.314       36    1286.49  sglang::scheduler    python/sglang/srt/layers/attention/linear/gdn_backend.py(284): extend
+      46.096       36    1280.45  sglang::scheduler    python/sglang/srt/layers/attention/linear/kernels/gdn_triton.py(169): extend
+      45.257       36    1257.13  sglang::scheduler    python/sglang/kernels/ops/attention/fla/chunk.py(132): chunk_gated_delta_rule
+      45.086       72     626.19  sglang::scheduler    python/sglang/kernels/ops/attention/fla/utils.py(150): wrapper
+      42.932        1   42932.26  sglang::scheduler    nn.Module: FusedMoE_41
+      42.730        1   42730.17  sglang::scheduler    nn.Module: FusedMoE_22
+      42.632        1   42631.52  sglang::scheduler    nn.Module: FusedMoE_24
+      42.508        1   42508.10  sglang::scheduler    nn.Module: FusedMoE_18
+      42.322        1   42322.06  sglang::scheduler    nn.Module: FusedMoE_4
+      42.206        1   42205.78  sglang::scheduler    nn.Module: FusedMoE_38
+      42.196        1   42195.80  sglang::scheduler    nn.Module: FusedMoE_36
+      41.936        1   41936.32  sglang::scheduler    nn.Module: FusedMoE_13
+      41.677        1   41676.97  sglang::scheduler    nn.Module: FusedMoE_6
+      41.567        1   41566.68  sglang::scheduler    nn.Module: FusedMoE_34
+      41.524        1   41523.58  sglang::scheduler    nn.Module: FusedMoE_2
+      41.239        1   41238.94  sglang::scheduler    nn.Module: FusedMoE_45
+      41.029        1   41029.08  sglang::scheduler    nn.Module: FusedMoE_8
+      40.958        1   40958.03  sglang::scheduler    nn.Module: FusedMoE_21
+      40.866        1   40866.14  sglang::scheduler    nn.Module: FusedMoE_5
+      40.828        1   40827.91  sglang::scheduler    nn.Module: FusedMoE_29
+      40.818        1   40818.15  sglang::scheduler    nn.Module: FusedMoE_12
+      40.374        1   40374.04  sglang::scheduler    nn.Module: FusedMoE_10
+      40.372        1   40372.02  sglang::scheduler    nn.Module: FusedMoE_33
+      40.357        1   40357.00  sglang::scheduler    nn.Module: FusedMoE_44
+      40.293        1   40293.47  sglang::scheduler    nn.Module: FusedMoE_42
+      40.197        1   40196.65  sglang::scheduler    nn.Module: FusedMoE_9
+      40.033        1   40033.28  sglang::scheduler    nn.Module: FusedMoE_17
+      39.850        1   39850.28  sglang::scheduler    nn.Module: FusedMoE_14
+      39.637        1   39637.49  sglang::scheduler    nn.Module: FusedMoE_20
+      39.636        1   39635.79  sglang::scheduler    nn.Module: FusedMoE_30
+      39.453        1   39452.59  sglang::scheduler    nn.Module: FusedMoE_46
+      39.130        1   39129.94  sglang::scheduler    nn.Module: FusedMoE_28
+      39.083        1   39082.93  sglang::scheduler    nn.Module: FusedMoE_25
+      38.910        1   38909.81  sglang::scheduler    nn.Module: FusedMoE_37
+      37.740        1   37739.95  sglang::scheduler    nn.Module: FusedMoE_32
+      37.564        1   37564.49  sglang::scheduler    nn.Module: FusedMoE_40
+      36.648       36    1017.99  sglang::scheduler    python/sglang/kernels/ops/attention/fla/chunk.py(89): forward
+      36.544        1   36543.60  sglang::scheduler    nn.Module: FusedMoE_16
+      35.520        1   35520.36  sglang::scheduler    nn.Module: FusedMoE_26
+      29.205       48     608.43  sglang::scheduler    python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe.py(477): _fused_moe_kernel_sequence
+      28.116        1   28115.53  sglang::scheduler    nn.Module: FusedMoE_1
+      26.776      193     138.74  sglang::scheduler    python/sglang/srt/layers/quantization/gptq/schemes/gptq_marlin.py(155): apply_weights
+      25.744      194     132.70  sglang::scheduler    triton_poi_fused_mean_mul_sigmoid_view_1
+      24.245      193     125.62  sglang::scheduler    python/sglang/srt/layers/quantization/marlin_utils.py(488): apply_gptq_marlin_linear
+      23.563       36     654.53  sglang::scheduler    python/sglang/kernels/ops/attention/fla/chunk.py(36): chunk_gated_delta_rule_fwd
+      22.096      192     115.09  sglang::scheduler    cudaMemcpyBatchAsync
+      19.508       48     406.42  sglang::scheduler    python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe.py(387): _prepare_fused_moe_run
+      19.464        1   19463.62  sglang::scheduler    nn.Module: FusedMoE_15
+      17.772        1   17772.06  sglang::scheduler    nn.Module: FusedMoE_43
+      17.615      193      91.27  sglang::scheduler    python/sglang/kernels/ops/quantization/gptq_marlin.py(35): gptq_marlin_gemm
+      17.392        1   17391.78  sglang::scheduler    nn.Module: FusedMoE_3
+      17.386        1   17385.93  sglang::scheduler    nn.Module: FusedMoE_31
+      17.273        1   17272.83  sglang::scheduler    nn.Module: FusedMoE_11
+      16.972        1   16972.33  sglang::scheduler    nn.Module: FusedMoE_23
+      16.616        1   16615.87  sglang::scheduler    nn.Module: FusedMoE_47
+      16.601        1   16601.25  sglang::scheduler    nn.Module: FusedMoE_7
+      16.581        1   16580.81  sglang::scheduler    nn.Module: FusedMoE_39
+      16.309        1   16308.92  sglang::scheduler    nn.Module: FusedMoE_27
+      16.229        1   16228.87  sglang::scheduler    nn.Module: FusedMoE_35
+      16.220        1   16219.75  sglang::scheduler    nn.Module: FusedMoE_19
+      16.061      855      18.79  sglang::scheduler    triton/backends/nvidia/driver.py(313): __call__
+      15.190      194      78.30  sglang::scheduler    torch/_inductor/runtime/triton_heuristics.py(2059): run
+      14.672       96     152.84  sglang::scheduler    python/sglang/kernels/ops/moe/fused_moe_triton_kernels.py(1091): invoke_fused_moe_kernel
+      13.533       36     375.91  sglang::scheduler    fused_qkvzba_split_reshape_cat_contiguous_kernel
+      10.383       48     216.32  sglang::scheduler    python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe_triton_config.py(312): try_get_optimal_moe_config
+      10.348       36     287.46  sglang::scheduler    python/sglang/kernels/ops/attention/fla/chunk_fwd.py(339): chunk_gated_delta_rule_fwd_intra
+      10.142        1   10142.08  sglang::scheduler    nn.Module: FusedMoE_0
+       9.695       48     201.97  sglang::scheduler    python/sglang/srt/layers/moe/topk.py(827): fused_topk
+       9.034       36     250.94  sglang::scheduler    python/sglang/kernels/ops/attention/fla/layernorm_gated.py(461): forward
+       9.002        1    9001.53  sglang::scheduler    nn.Module: RadixLinearAttention_0
+       8.765      110      79.69  sglang::scheduler    python/sglang/kernels/ops/attention/fla/utils.py(119): wrapper
+       8.717       36     242.13  sglang::scheduler    python/sglang/kernels/ops/attention/fla/layernorm_gated.py(375): layernorm_fn
+       8.099       48     168.73  sglang::scheduler    python/sglang/srt/layers/moe/moe_runner/triton_utils/moe_align_block_size.py(32): moe_align_block_size
+       8.009       16     500.58  sglang::scheduler    python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe_triton_config.py(89): get_moe_configs
+       7.498      192      39.05  sglang::scheduler    void sglang::device::marlin::Marlin<__nv_bfloat16, 1125899923621888l, 256, 2, 16, 4, false, 4, 8, false>(int4 const*, int4 const*, int4*, int4*, int4 const*, unsigned short const*, int4 const*, int const*, int, int, int, int, int, int*, bool, bool, int)
+       7.296       72     101.34  sglang::scheduler    triton/runtime/autotuner.py(212): run
+       6.962       36     193.38  sglang::scheduler    python/sglang/kernels/ops/attention/fla/layernorm_gated.py(349): forward
+       6.818       12     568.18  sglang::scheduler    python/sglang/srt/layers/radix_attention.py(150): forward
+       6.814       36     189.27  sglang::scheduler    python/sglang/kernels/ops/attention/fla/layernorm_gated.py(304): rms_norm_gated
+       6.757       48     140.76  sglang::scheduler    python/sglang/kernels/ops/moe/moe_fused_gate.py(254): moe_fused_gate
+       6.733       12     561.06  sglang::scheduler    python/sglang/srt/layers/attention/qsa/qsa_indexer.py(452): select_prefill_tokens
+       6.469        1    6469.08  sglang::scheduler    python/sglang/kernels/ops/attention/fla/index.py(16): prepare_chunk_indices
+       6.337       12     528.09  sglang::scheduler    python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py(1400): forward_extend
+       6.322       12     526.86  sglang::scheduler    python/sglang/srt/models/qwen3_5.py(1099): forward_prepare_cuda_fused
+       5.899       36     163.85  sglang::scheduler    python/sglang/kernels/ops/attention/fla/layernorm_gated.py(208): _layer_norm_fwd
+       5.501       36     152.79  sglang::scheduler    python/sglang/kernels/ops/attention/fla/chunk_delta_h.py(316): chunk_gated_delta_rule_fwd_h
+       5.328      855       6.23  sglang::scheduler    triton/runtime/jit.py(574): compute_cache_key
+       5.209       72      72.35  sglang::scheduler    python/sglang/kernels/ops/attention/fla/l2norm.py(73): l2norm_fwd
+       5.179       48     107.91  sglang::scheduler    _fused_gate_sigmoid_mul_add_kernel
+       5.169      842       6.14  sglang::scheduler    triton/runtime/jit.py(1109): __call__
+       5.163       36     143.42  sglang::scheduler    python/sglang/srt/layers/attention/mamba/causal_conv1d.py(43): causal_conv1d_fn
+       4.878       36     135.51  sglang::scheduler    triton/runtime/autotuner.py(456): run
+       4.876       36     135.46  sglang::scheduler    python/sglang/kernels/ops/mamba/causal_conv1d_triton.py(388): causal_conv1d_fn
+       4.546       36     126.28  sglang::scheduler    python/sglang/kernels/ops/attention/triton_gdn_fused_proj.py(271): fused_qkvzba_split_reshape_cat_contiguous
+       4.428       12     368.97  sglang::scheduler    python/sglang/srt/layers/attention/qsa/qsa_indexer.py(177): project_qk
+       4.342       48      90.45  sglang::scheduler    python/sglang/kernels/ops/elementwise/elementwise.py(503): fused_gate_sigmoid_mul_add
+       4.321      194      22.27  sglang::scheduler    triton_poi_fused_div_silu_0
+       4.149       12     345.76  sglang::scheduler    _fused_qk_rmsnorm_rope_gate_kernel
+       4.148      194      21.38  sglang::scheduler    torch/_inductor/runtime/triton_heuristics.py(2023): _pre_launch
+       3.876       12     323.04  sglang::scheduler    python/sglang/srt/layers/attention/qsa/metadata.py(17): build_qsa_row_ranges
+       3.847      194      19.83  sglang::scheduler    torch/_inductor/runtime/static_triton_launcher.py(250): run
+       3.786       36     105.16  sglang::scheduler    python/sglang/kernels/ops/attention/fla/chunk_o.py(126): chunk_fwd_o
+       3.703       12     308.59  sglang::scheduler    python/sglang/srt/layers/attention/qsa/qsa_indexer.py(303): update_key_state_and_compress
+       3.611        1    3611.32  sglang::scheduler    python/sglang/srt/layers/attention/hybrid_linear_attn_backend.py(1059): init_forward_metadata
+       3.474       12     289.49  sglang::scheduler    python/sglang/srt/layers/attention/qsa/mqa.py(389): qsa_mqa_prefill
+       3.414       12     284.50  sglang::scheduler    python/sglang/srt/layers/attention/qsa/mqa.py(284): tilelang_qsa_mqa_prefill
+       3.406        1    3406.43  sglang::scheduler    python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py(815): init_forward_metadata
+       3.388        1    3388.17  sglang::scheduler    python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py(606): _metadata_from_forward_batch
+       3.224       36      89.56  sglang::scheduler    python/sglang/kernels/ops/attention/fla/wy_fast.py(111): recompute_w_u_fwd
+       3.162      432       7.32  sglang::scheduler    python/sglang/kernels/ops/attention/fla/utils.py(153): <genexpr>
+       3.072       36      85.33  sglang::scheduler    python/sglang/kernels/ops/attention/fla/fused_gdn_gating.py(44): fused_gdn_gating
+       2.802       36      77.83  sglang::scheduler    python/sglang/kernels/ops/attention/fla/cumsum.py(251): chunk_local_cumsum
+       2.685      855       3.14  sglang::scheduler    triton/compiler/compiler.py(482): launch_metadata
+       2.579      105      24.57  sglang::scheduler    Memcpy HtoD (Pageable -> Device)
+       2.562       36      71.16  sglang::scheduler    python/sglang/kernels/ops/attention/fla/cumsum.py(159): chunk_local_cumsum_scalar
+       2.420       12     201.67  sglang::scheduler    _fused_sigmoid_mul_kernel
+       2.362     1720       1.37  sglang::scheduler    triton/language/core.py(352): _unwrap_if_constexpr
+       2.306        1    2305.97  sglang::scheduler    nn.Module: RadixLinearAttention_31
+       2.116        1    2116.25  sglang::scheduler    nn.Module: RadixLinearAttention_2
+       2.004       12     167.03  sglang::scheduler    python/sglang/srt/layers/attention/qsa/qsa_indexer.py(241): _fused_compress_store
+       1.974       12     164.48  sglang::scheduler    python/sglang/srt/layers/attention/qsa/sparse_attn.py(1073): quant_store_kv_tiered
+       1.972        1    1972.09  sglang::scheduler    nn.Module: RadixLinearAttention_15
+       1.935       48      40.31  sglang::scheduler    _router_triton_kernel
+       1.892        1    1891.79  sglang::scheduler    nn.Module: RadixLinearAttention_4
+       1.870        1    1869.58  sglang::scheduler    nn.Module: RadixLinearAttention_19
+       1.843        1    1842.85  sglang::scheduler    nn.Module: RadixLinearAttention_24
+       1.839        1    1839.15  sglang::scheduler    nn.Module: RadixLinearAttention_7
+       1.813       12     151.06  sglang::scheduler    python/sglang/kernels/ops/attention/fused_qk_rmsnorm_rope_gate.py(131): fused_qk_gemma_rmsnorm_rope_gate
+       1.801        1    1800.71  sglang::scheduler    nn.Module: RadixLinearAttention_14
+       1.800        1    1800.08  sglang::scheduler    python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py(555): _qsa_build_write_plan
+       1.788        1    1788.22  sglang::scheduler    nn.Module: RadixLinearAttention_23
+       1.766        1    1766.18  sglang::scheduler    nn.Module: RadixLinearAttention_5
+       1.763        1    1763.01  sglang::scheduler    nn.Module: RadixLinearAttention_29
+       1.755        1    1755.44  sglang::scheduler    nn.Module: RadixLinearAttention_13
+       1.745        1    1744.77  sglang::scheduler    nn.Module: RadixLinearAttention_34
+       1.722        1    1721.81  sglang::scheduler    nn.Module: RadixLinearAttention_11
+       1.697      193       8.80  sglang::scheduler    python/sglang/srt/layers/quantization/marlin_utils.py(463): should_use_atomic_add_reduce
+       1.679        1    1679.20  sglang::scheduler    nn.Module: RadixLinearAttention_28
+       1.647        1    1646.59  sglang::scheduler    nn.Module: RadixLinearAttention_20
+       1.633        1    1632.98  sglang::scheduler    nn.Module: RadixLinearAttention_26
+       1.619        1    1618.61  sglang::scheduler    nn.Module: RadixLinearAttention_22
+       1.584        1    1584.18  sglang::scheduler    nn.Module: RadixLinearAttention_33
+       1.565      194       8.06  sglang::scheduler    torch/_inductor/runtime/triton_heuristics.py(2001): get_profiler_kwargs
+       1.558        1    1557.58  sglang::scheduler    nn.Module: RadixLinearAttention_6
+       1.527        1    1526.96  sglang::scheduler    nn.Module: RadixLinearAttention_10
+       1.521        1    1520.73  sglang::scheduler    nn.Module: RadixLinearAttention_17
+       1.510        1    1509.71  sglang::scheduler    nn.Module: RadixLinearAttention_30
+       1.509        1    1508.67  sglang::scheduler    nn.Module: RadixLinearAttention_16
+       1.506        1    1505.77  sglang::scheduler    nn.Module: RadixLinearAttention_35
+       1.490       12     124.16  sglang::scheduler    python/sglang/srt/layers/attention/qsa/kernel.py(260): expand_qsa_block_indices
+       1.483       16      92.66  sglang::scheduler    python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe_triton_config.py(20): _find_nearest_expert_config
+       1.477        1    1476.73  sglang::scheduler    nn.Module: RadixLinearAttention_32
+       1.473        1    1473.23  sglang::scheduler    nn.Module: RadixLinearAttention_12
+       1.465        1    1464.55  sglang::scheduler    nn.Module: RadixLinearAttention_3
+       1.448        1    1448.09  sglang::scheduler    nn.Module: RadixLinearAttention_8
+       1.447        1    1446.79  sglang::scheduler    nn.Module: RadixLinearAttention_21
+       1.432        1    1431.84  sglang::scheduler    nn.Module: RadixLinearAttention_27
+       1.428        1    1428.34  sglang::scheduler    nn.Module: RadixLinearAttention_9
+       1.420        1    1419.82  sglang::scheduler    nn.Module: RadixLinearAttention_18
+       1.403        1    1403.02  sglang::scheduler    nn.Module: RadixLinearAttention_25
+       1.354       12     112.79  sglang::scheduler    python/sglang/srt/layers/attention/qsa/kernel.py(228): triton_expand_qsa_block_indices
+       1.279        1    1279.32  sglang::scheduler    python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py(494): _qsa_write_plan
+       1.256       60      20.93  sglang::scheduler    Memcpy DtoD (Device -> Device)
+       1.240       12     103.36  sglang::scheduler    python/sglang/srt/layers/attention/qsa/sparse_attn.py(128): sparse_gqa_fwd_interface_triton
+       1.168        1    1167.84  sglang::scheduler    nn.Module: RadixLinearAttention_1

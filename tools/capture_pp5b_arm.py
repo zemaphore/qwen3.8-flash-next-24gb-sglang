@@ -39,14 +39,28 @@ REPO = Path(__file__).resolve().parents[1]
 BENCH = REPO / "tools" / "bench_agentic.py"
 LAUNCHER = Path("/root/quant/serve-3090.sh")
 DEFAULT_PYTHON = Path("/root/quant/venv-sglang/bin/python")
-DEFAULT_STATUS = Path("/root/quant/elastic.ctl.status")
 EXPECTED_ENV = {
+    "SGLANG_KV_LAZY": "1",
+    "SGLANG_KV_LAZY_SAFETY": "0.77",
+    "SGLANG_KV_LAZY_TOKENS": "262144",
+    "SGLANG_KV_TIERS_W": "8192",
+    "SGLANG_MOE_CONFIG_NEAREST_E": "1",
+    "SGLANG_MOE_EAGER_SHARED_OVERLAP_MAX_TOKENS": "0",
+    "SGLANG_MOE_ELASTIC_FILL_MB": "99999",
+    "SGLANG_MOE_ELASTIC_PIN_MB": "512",
+    "SGLANG_MOE_ELASTIC_RESERVE_ROWS": "0",
     "SGLANG_MOE_GATHER_BLOCK": "2048",
     "SGLANG_MOE_GATHER_DMA": "1",
     "SGLANG_MOE_GATHER_DMA_BATCH": "1",
     "SGLANG_MOE_PLACEMENT_S": "184",
     "SGLANG_MOE_EXPERT_STREAM": "1",
     "SGLANG_MOE_ELASTIC": "1",
+    "SGLANG_QWEN4_PLE_BULK_PREAD": "1",
+    "SGLANG_QWEN4_PLE_BULK_PREAD_MIN_UNIQUE": "2048",
+    "SGLANG_QWEN4_PLE_PROFILE": "0",
+    "SGLANG_QWEN4_PLE_RECENT_CACHE_MB": "128",
+    "SGLANG_QWEN4_PLE_WORKERS": "16",
+    "SGLANG_VLM_CACHE_SIZE_MB": "0",
 }
 CORPORA = (
     ("canonical", REPO / "sglang" / "qwen4exp-serving-73a255206f.patch", 5),
@@ -109,6 +123,73 @@ def status_values(path: Path) -> tuple[str, dict[str, str]]:
     return raw, values
 
 
+def status_path_for_server(
+    server_env: dict[str, str], requested: Path | None = None
+) -> Path:
+    control = server_env.get("SGLANG_MOE_ELASTIC_CTL")
+    if not control:
+        raise ValueError("live server has no SGLANG_MOE_ELASTIC_CTL")
+    expected = Path(control + ".status").resolve()
+    if requested is not None and requested.resolve() != expected:
+        raise ValueError(
+            f"status file does not belong to the live server: expected {expected}, "
+            f"got {requested.resolve()}"
+        )
+    return expected
+
+
+def validate_status(path: Path, expected_signature: float) -> tuple[str, float]:
+    raw, values = status_values(path)
+    if values.get("S_min") != "184 S_max 184 floor 184":
+        raise ValueError(f"elastic status is not fixed at S184: {values.get('S_min')!r}")
+    try:
+        actual_signature = float(values["mass_covered"])
+    except (KeyError, ValueError) as exc:
+        raise ValueError("elastic status has no valid mass_covered value") from exc
+    if f"{actual_signature:.4f}" != f"{expected_signature:.4f}":
+        raise ValueError(
+            f"placement signature mismatch: expected {expected_signature:.4f}, "
+            f"status has {actual_signature:.4f}"
+        )
+    return raw, actual_signature
+
+
+def prepare_output_dir(output: Path, server_log: Path) -> None:
+    if output.exists() and not output.is_dir():
+        raise ValueError(f"output path is not a directory: {output}")
+    output.mkdir(parents=True, exist_ok=True)
+    allowed_live_log = server_log if server_log.parent == output else None
+    unexpected = [
+        item
+        for item in output.iterdir()
+        if allowed_live_log is None or item.resolve() != allowed_live_log
+    ]
+    if unexpected:
+        names = ", ".join(sorted(item.name for item in unexpected))
+        raise ValueError(
+            f"refusing to use non-empty evidence directory {output}: {names}"
+        )
+
+
+def parse_benchmark_row(raw: str) -> dict[str, int | float]:
+    matches = list(ROW_RE.finditer(raw))
+    if len(matches) != 1:
+        raise ValueError(f"expected exactly one benchmark result row, found {len(matches)}")
+    return {
+        key: float(value) if key != "actual" else int(value)
+        for key, value in matches[0].groupdict().items()
+    }
+
+
+def checksum_manifest(output: Path, excluded_names: set[str] | None = None) -> str:
+    excluded = excluded_names or set()
+    lines = []
+    for path in sorted(item for item in output.iterdir() if item.is_file()):
+        if path.name != "SHA256SUMS" and path.name not in excluded:
+            lines.append(f"{sha256(path)}  {path.name}")
+    return "\n".join(lines) + "\n"
+
+
 def run_raw(argv: list[str], path: Path, env: dict[str, str], timeout: int = 1200) -> dict:
     started = utc_now()
     begin = time.monotonic()
@@ -159,7 +240,14 @@ def main() -> None:
     parser.add_argument("--placement", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--server-log", type=Path, required=True)
-    parser.add_argument("--status-file", type=Path, default=DEFAULT_STATUS)
+    parser.add_argument(
+        "--status-file",
+        type=Path,
+        help=(
+            "elastic status path; defaults to <live SGLANG_MOE_ELASTIC_CTL>.status "
+            "and must match that path when supplied"
+        ),
+    )
     parser.add_argument("--python", type=Path, default=DEFAULT_PYTHON)
     parser.add_argument(
         "--url",
@@ -185,11 +273,12 @@ def main() -> None:
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", args.arm):
         raise SystemExit("--arm must contain only lowercase letters, digits and hyphens")
     placement = args.placement.resolve(strict=True)
+    server_log = args.server_log.resolve(strict=True)
     output = args.output_dir.resolve()
-    output.mkdir(parents=True, exist_ok=True)
-    for reserved in ("metadata.json", "results.json", "SHA256SUMS"):
-        if (output / reserved).exists():
-            raise SystemExit(f"refusing to overwrite completed evidence: {output / reserved}")
+    try:
+        prepare_output_dir(output, server_log)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
 
     pid, server_argv, server_env = live_server()
     live_placement = Path(server_env.get("SGLANG_MOE_PLACEMENT", "")).resolve()
@@ -204,6 +293,10 @@ def main() -> None:
     }
     if mismatches:
         raise SystemExit(f"live PP stack mismatch: {json.dumps(mismatches, sort_keys=True)}")
+    try:
+        status_file = status_path_for_server(server_env, args.status_file)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     if "--chunked-prefill-size" not in server_argv:
         raise SystemExit("live server has no --chunked-prefill-size argument")
     chunk_index = server_argv.index("--chunked-prefill-size") + 1
@@ -215,15 +308,10 @@ def main() -> None:
     placement_record = torch.load(placement, map_location="cpu", weights_only=True)
     score = placement_record["mass"].float()
     expected_signature = float(torch.topk(score, 184, dim=1).values.sum() / score.sum())
-    status_raw, status = status_values(args.status_file)
-    if status.get("S_min") != "184 S_max 184 floor 184":
-        raise SystemExit(f"elastic status is not fixed at S184: {status.get('S_min')!r}")
-    actual_signature = float(status["mass_covered"])
-    if f"{actual_signature:.4f}" != f"{expected_signature:.4f}":
-        raise SystemExit(
-            f"placement signature mismatch: expected {expected_signature:.4f}, "
-            f"status has {actual_signature:.4f}"
-        )
+    try:
+        status_raw, actual_signature = validate_status(status_file, expected_signature)
+    except (OSError, ValueError) as exc:
+        raise SystemExit(str(exc)) from exc
 
     repo_status = subprocess.run(
         ["git", "status", "--porcelain=v1"],
@@ -241,28 +329,17 @@ def main() -> None:
     ).stdout.strip()
     server_snapshot = output / "server-launcher.snapshot.sh"
     shutil.copyfile(LAUNCHER, server_snapshot)
-    server_log = args.server_log.resolve(strict=True)
     shutil.copyfile(server_log, output / "server.log.before.txt")
     (output / "elastic-status.before.txt").write_text(status_raw, encoding="utf-8")
 
     selected_env = {
         key: value
         for key, value in sorted(server_env.items())
-        if key in EXPECTED_ENV
-        or key.startswith("SGLANG_QWEN4_PLE_")
-        or key
-        in {
-            "SGLANG_MOE_CONFIG_DIR",
-            "SGLANG_MOE_ELASTIC_CTL",
-            "SGLANG_MOE_ELASTIC_FILL_MB",
-            "SGLANG_MOE_ELASTIC_PIN_MB",
-            "SGLANG_MOE_ELASTIC_RESERVE_ROWS",
-            "SGLANG_MOE_PLACEMENT",
-            "SGLANG_PREFILL_ROUTE_DUMP",
-        }
+        if key.startswith("SGLANG_")
     }
+    live_log_name = server_log.name if server_log.parent == output else None
     metadata = {
-        "schema": 1,
+        "schema": 2,
         "arm": args.arm,
         "started_utc": utc_now(),
         "repo_commit": repo_commit,
@@ -281,7 +358,8 @@ def main() -> None:
         "placement_sha256": sha256(placement),
         "placement_signature_expected": round(expected_signature, 6),
         "placement_signature_status": actual_signature,
-        "status_file": str(args.status_file),
+        "status_file": str(status_file),
+        "checksum_excluded": [live_log_name] if live_log_name else [],
         "endpoint": health(args.url),
         "corpora": [
             {
@@ -336,18 +414,18 @@ def main() -> None:
                     raw_path,
                     command_env,
                 )
-                match = ROW_RE.search(raw_path.read_text(encoding="utf-8"))
-                if not match:
-                    raise RuntimeError(f"could not parse benchmark row in {raw_path}")
+                try:
+                    result_row = parse_benchmark_row(
+                        raw_path.read_text(encoding="utf-8")
+                    )
+                except ValueError as exc:
+                    raise RuntimeError(f"could not parse benchmark row in {raw_path}: {exc}") from exc
                 record.update(
                     {
                         "corpus": corpus_name,
                         "sample_kind": kind,
                         "sample_index": number,
-                        **{
-                            key: float(value) if key != "actual" else int(value)
-                            for key, value in match.groupdict().items()
-                        },
+                        **result_row,
                     }
                 )
                 records.append(record)
@@ -372,7 +450,17 @@ def main() -> None:
             monitor.wait(timeout=10)
         monitor_stream.close()
 
-    final_status_raw, _ = status_values(args.status_file)
+    try:
+        final_status_raw, final_signature = validate_status(
+            status_file, expected_signature
+        )
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"final elastic status validation failed: {exc}") from exc
+    if final_signature != actual_signature:
+        raise RuntimeError(
+            "elastic placement signature changed during capture: "
+            f"{actual_signature} -> {final_signature}"
+        )
     (output / "elastic-status.after.txt").write_text(final_status_raw, encoding="utf-8")
     shutil.copyfile(server_log, output / "server.log.after.txt")
     captured_server_log = output / "server.log"
@@ -387,11 +475,10 @@ def main() -> None:
         + "\n",
         encoding="utf-8",
     )
-    checksum_lines = []
-    for path in sorted(item for item in output.iterdir() if item.is_file()):
-        if path.name != "SHA256SUMS":
-            checksum_lines.append(f"{sha256(path)}  {path.name}")
-    (output / "SHA256SUMS").write_text("\n".join(checksum_lines) + "\n", encoding="utf-8")
+    excluded_names = {live_log_name} if live_log_name else set()
+    (output / "SHA256SUMS").write_text(
+        checksum_manifest(output, excluded_names), encoding="utf-8"
+    )
     print(f"captured {args.arm}: {output}")
 
 

@@ -1,0 +1,5 @@
+duration events: 338,004; distinct names: 2,469
+    total ms    count    mean us  domain               name
+     414.037      384    1078.22  sglang::scheduler    void sglang::device::marlin::Marlin<__nv_bfloat16, 1125899923621888l, 256, 4, 16, 4, false, 4, 8, false>(int4 const*, int4 const*, int4*, int4*, int4 const*, unsigned short const*, int4 const*, int const*, int, int, int, int, int, int*, bool, bool, int) grid=[82, 1, 1]
+       7.498      192      39.05  sglang::scheduler    void sglang::device::marlin::Marlin<__nv_bfloat16, 1125899923621888l, 256, 2, 16, 4, false, 4, 8, false>(int4 const*, int4 const*, int4*, int4*, int4 const*, unsigned short const*, int4 const*, int const*, int, int, int, int, int, int*, bool, bool, int) grid=[82, 1, 1]
+       0.753        1     752.61  sglang::scheduler    void sglang::device::marlin::Marlin<__nv_bfloat16, 1125899923621888l, 256, 1, 8, 8, true, 4, 8, false>(int4 const*, int4 const*, int4*, int4*, int4 const*, unsigned short const*, int4 const*, int const*, int, int, int, int, int, int*, bool, bool, int) grid=[82, 1, 1]

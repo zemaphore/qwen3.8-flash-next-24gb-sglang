@@ -7,7 +7,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.capture_pp5b_arm import ROW_RE, status_values
+from tools.capture_pp5b_arm import (
+    checksum_manifest,
+    parse_benchmark_row,
+    prepare_output_dir,
+    status_path_for_server,
+    status_values,
+    validate_status,
+)
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -151,17 +158,22 @@ class CaptureHelperTests(unittest.TestCase):
   ---------------------------------------------------------
       4096     4565       3.67          1244        41.5
 """
-        match = ROW_RE.search(output)
-        self.assertIsNotNone(match)
         self.assertEqual(
-            match.groupdict(),
+            parse_benchmark_row(output),
             {
-                "actual": "4565",
-                "prefill_s": "3.67",
-                "prefill_tps": "1244",
-                "decode_tps": "41.5",
+                "actual": 4565,
+                "prefill_s": 3.67,
+                "prefill_tps": 1244.0,
+                "decode_tps": 41.5,
             },
         )
+
+    def test_benchmark_row_parser_rejects_missing_and_duplicate_rows(self):
+        row = "4096 4565 3.67 1244 41.5\n"
+        with self.assertRaisesRegex(ValueError, "found 0"):
+            parse_benchmark_row("no result\n")
+        with self.assertRaisesRegex(ValueError, "found 2"):
+            parse_benchmark_row(row + row)
 
     def test_elastic_status_parser(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -176,6 +188,46 @@ class CaptureHelperTests(unittest.TestCase):
             self.assertEqual(actual_raw, raw)
             self.assertEqual(values["S_min"], "184 S_max 184 floor 184")
             self.assertEqual(values["mass_covered"], "0.4665")
+            self.assertEqual(validate_status(status, 0.46654), (raw, 0.4665))
+
+            with self.assertRaisesRegex(ValueError, "signature mismatch"):
+                validate_status(status, 0.5000)
+            status.write_text(
+                "S_min 183 S_max 184 floor 183\nmass_covered 0.4665\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "not fixed at S184"):
+                validate_status(status, 0.4665)
+
+    def test_elastic_status_path_is_bound_to_live_control_file(self):
+        env = {"SGLANG_MOE_ELASTIC_CTL": "/tmp/capture-test.ctl"}
+        expected = Path("/tmp/capture-test.ctl.status")
+        self.assertEqual(status_path_for_server(env), expected)
+        self.assertEqual(status_path_for_server(env, expected), expected)
+        with self.assertRaisesRegex(ValueError, "does not belong"):
+            status_path_for_server(env, Path("/tmp/stale.status"))
+        with self.assertRaisesRegex(ValueError, "has no SGLANG_MOE_ELASTIC_CTL"):
+            status_path_for_server({})
+
+    def test_output_directory_allows_only_live_server_log(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "arm"
+            output.mkdir()
+            server_log = output / "server.log"
+            server_log.write_text("live\n", encoding="utf-8")
+            prepare_output_dir(output, server_log)
+            (output / "partial.txt").write_text("partial\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "partial.txt"):
+                prepare_output_dir(output, server_log)
+
+    def test_checksum_manifest_excludes_mutable_live_log(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp)
+            (output / "server.log").write_text("live\n", encoding="utf-8")
+            (output / "server.log.after.txt").write_text("frozen\n", encoding="utf-8")
+            manifest = checksum_manifest(output, {"server.log"})
+            self.assertNotIn("  server.log\n", manifest)
+            self.assertIn("  server.log.after.txt\n", manifest)
 
 
 class SourcePatchTests(unittest.TestCase):

@@ -1,7 +1,8 @@
 # Tools
 
-Measurement and benchmark tools. All of them talk to a running server on `127.0.0.1:30000` over HTTP
-(`/generate`, `/v1/chat/completions`) and never start or stop one, except where noted. State files
+Measurement and benchmark tools. Most talk to a running server on `127.0.0.1:30000` over HTTP
+(`/generate`, `/v1/chat/completions`) and never start or stop one, except where noted; the RTX 3090
+PP capture tool targets that launcher's port 30001. State files
 (`nll/`, `greedy/`, `logprob/`, `spec_lossless/`, `needle_results.tsv`, `elastic.ctl`) are created next
 to the scripts and are git-ignored, except the two oracle inputs listed below.
 
@@ -22,9 +23,10 @@ to the scripts and are git-ignored, except the two oracle inputs listed below.
 | `keepalive.sh` | One tiny request every 5 s to keep the server processes from being swapped out during long measurements. |
 | `expert_freq.py` | Builds the routing-mass histogram (`assets/expert_freq.pt`) from a `SGLANG_ROUTE_DUMP` directory (`host_fixes.py` item `dump`). Imports torch. |
 | `pp5_presence.py` | Offline layer-matched prefill-placement analysis; filters tiny launcher warmups and can reproduce `assets/expert_presence_code.pt`. |
-| `capture_pp5b_arm.py` | Auditable per-arm capture against an already-running server: validates the live placement/PP11 environment and the live `--chunked-prefill-size` against `--chunk-size` (default 2,048), then retains raw canonical and held-out code outputs, GPU samples, exactness oracles, elastic status, launcher snapshot, server log and checksums. `--skip-heldout` keeps an arm canonical-only (used by PP12). It never starts or stops the server. |
+| `capture_pp5b_arm.py` | Auditable per-arm capture against an already-running 3090 server: validates the live placement/PP11 environment, binds status capture to the live elastic-control path, records all live `SGLANG_*` settings, and checks the live `--chunked-prefill-size` against `--chunk-size` (default 2,048). It retains raw canonical and held-out code outputs, GPU samples, exactness oracles, elastic status, launcher snapshot, and before/after server logs. Checksums cover the frozen log snapshot and exclude a live log written inside the evidence directory. The output directory must otherwise be empty. `--skip-heldout` keeps an arm canonical-only (used by PP12). It never starts or stops the server. |
 | `pp11_batch_copy_bench.py` | Model-free PP11 microbenchmark comparing the per-row PyTorch copy loop with one `cudaMemcpyBatchAsync` submission for the production row shape/count. |
 | `pp8_shared_expert_format_bench.py` | PP8 format sweep on the real layer-0 shared-expert GPTQ tensors: production W8A16 Marlin (validated against a dequantized BF16 reference) vs dequantized BF16 cuBLAS vs INT8xINT8 at M = 469/1024/2048. Needs the venv cu13 toolkit on `PATH`/`CUDA_HOME`; no server. |
+| `pp13_gdn_format_bench.py` | Current-stack format sweep for the dominant layer-0 GDN W8 projections at M = 2,048/4,565: production BF16 Marlin, FP16 Marlin with/without boundary casts, dequantized BF16/FP16 cuBLAS, and W8A8 including activation/output conversion. Reports one-time conversion and persistent-memory cost. Needs the venv cu13 toolkit on `PATH`/`CUDA_HOME`; the server must be stopped. |
 | `test_pp5_presence.py`, `test_pp_patch_helpers.py` | CPU regressions for PP5 layer/chunk accounting and PP7/PP11 patch-helper round trips, launcher migration, and mixed-state rejection. |
 | `spec_lossless.py` | Lossless gate for NGRAM speculation (spec-path logprobs vs teacher forcing, near-tie rule). |
 | `probe_trtllm_sm120.py` | Standalone call of FlashInfer's `trtllm_batch_decode_with_kv_cache` (the sparse-decode route `qwen4-main-squashed` takes on exact SM120 since #36806) at the QSA backend's shapes (24 query heads, 2 KV heads, head_dim 256, page 64, topk 2,051) against a torch softmax reference. Needs flashinfer and an nvcc >= 12.9 at `CUDA_HOME`; no server. Output on the reference machine: `docs/logs/probe_trtllm_sm120.log` (`sglang/UPSTREAM.md`, `sglang/upstream/PR-4.md`). |

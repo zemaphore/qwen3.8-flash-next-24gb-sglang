@@ -1,6 +1,6 @@
 # RTX 3090 prompt-processing performance plan
 
-Last updated: 2026-09-15
+Last updated: 2026-09-16
 
 This is the resumability and status document for improving Qwen3.8-Flash-Next
 prompt-processing (PP) performance on the 24 GB RTX 3090 host.  Decode work has
@@ -8,13 +8,19 @@ its own plan in [DECODE_PERF_PLAN.md](DECODE_PERF_PLAN.md).
 
 ## Current conclusion
 
-The tuned INT2 MoE kernel is not the dominant end-to-end PP opportunity.  M4
-improved its standalone path by 1.38x geometric mean but moved end-to-end PP by
-only 1.8-4.1% in the earlier measurements.  The remaining measured PP target is
-expert staging-path CPU/synchronization overhead. PP11 removed the per-row
-Python copy-submission bottleneck with `cudaMemcpyBatchAsync`: bracketing code
-controls pooled to 1110.9 tok/s while PP11 reached **1183.4 tok/s (+6.53%)**,
-so it is accepted and enabled by default. GDN tuning missed its standalone gate.
+The accepted post-PP12 stack measures **1968.2 +/- 7.6 tok/s** on the canonical
+4,565-token code prompt. PP13 shows the next material target is cross-layer
+expert-row prefetch: 738.7 ms of pinned HtoD and 1,426.4 ms of compute are both
+present in the one-extend span, but overlap by only 10.9 ms. Pure compute-format
+changes are not large enough: the real GDN format ceiling is ~1.8%, and high-M
+MoE configs selected by a synthetic uniform-route tuner regress the real server.
+
+Earlier in the sequence, M4 improved its standalone INT2 MoE path by 1.38x
+geometric mean but moved end-to-end PP by only 1.8-4.1%. PP11 removed the
+per-row Python copy-submission bottleneck with `cudaMemcpyBatchAsync`:
+bracketing code controls pooled to 1110.9 tok/s while PP11 reached **1183.4
+tok/s (+6.53%)**, so it is accepted and enabled by default. GDN tuning missed
+its standalone gate.
 Static prefill-aware placement missed its original gate on PP7, but the PP5b
 interaction test on PP11 measured presence **1244.0** versus pooled mass controls
 **1177.3 tok/s (+5.67%)** with unchanged exactness oracles. Review flagged that
@@ -31,7 +37,13 @@ staging cost and the large PLE/linear-attention GEMMs as the remaining levers.
 PP12 then removed the tail's repeated staging by raising the prefill chunk to
 4,608 so the canonical prompt is a single extend: **1937.8 +/- 12.9** versus
 pooled 2,048 controls **1286.2 +/- 10.4 tok/s (+50.66%)**, exact oracles and
-unchanged decode. The 4,608 chunk is now the general launcher default.
+unchanged decode. The 4,608 chunk is now the general launcher default. PP13
+then refreshed the accepted stack at **1968.2 +/- 7.6 tok/s**. Its one-extend
+trace is 90.3% GPU-engine-active but contains 738.7 ms of pinned HtoD and
+1426.4 ms of compute with only 10.9 ms overlap. A real-tensor GDN format sweep
+was too small and memory-heavy, while synthetic high-M MoE configs regressed
+the fresh server by 4.94% versus the adjacent control. Both are rejected and
+no default changed. Cross-layer cold-row prefetch is the next material target.
 
 The PLE work now has a bounded policy that covers both measured regimes:
 
@@ -52,17 +64,17 @@ PP5's first static-placement analysis was invalidated on review: it included
 two launcher warmups and crossed the chunk and layer axes.  The repaired
 analysis found 236.68 -> 211.16 cold rows/layer-chunk (-10.8%) for presence,
 but a bracketing PP7 E2E A/B measured only **+3.1%** (1110.0 -> 1144.8 tok/s),
-below the 5% gate, so routing mass remains the default.  PP7 found
+below the 5% gate, so routing mass remained the default at that stage. PP7 found
 the true wall: the ~46 ms/layer-chunk of expert staging was SM host-read bound
 at ~7.5-10 GB/s in every geometry, so the DMA engine (~22 GB/s) was used to
 stage the cold rows instead, giving **1111.8 tok/s** warmed, +74.8% over PP3,
-bit-identical.  Prompt-processing time on the code workload is now ~4.1 s.  A full
+bit-identical. Prompt-processing time on the code workload was then ~4.1 s. A full
 torch-profiler capture of the PP7 stack (PP6) then measured the steady
 2,048-token chunk: 875.2 ms pinned-HtoD DMA staging, 238.0 ms INT2 fused MoE,
 172.4 ms Marlin, and only 40.2 ms across all 36 GDN layers; the SMs idle ~63%
 of the span while the single-threaded CPU staging path (unique2, tolist syncs,
-~50k per-row copies) consumes 78% of the CPU wall.  The next lever is
-therefore motivated PP11. Batching the cold-row copies reduced CPU submission
+~50k per-row copies) consumed 78% of the CPU wall and motivated PP11. Batching
+the cold-row copies reduced CPU submission
 and reached **1183.4 tok/s**, +6.53% over pooled pre/post controls, while keeping
 the staging bytes and machine oracles unchanged. The authors' original
 repeated-sentence speed tool reached 1,909 tok/s at 10,001 tokens, about 84% of
@@ -108,11 +120,13 @@ per server restart.  Record actual prompt tokens, prefill seconds, PP tok/s,
 decode tok/s, exact launcher/environment delta, server log path, errors, and
 minimum free VRAM.
 
-For PP5b/PP5c, use `tools/capture_pp5b_arm.py` on each freshly started arm. It
-retains the unparsed output of every request, the filtered live server
-environment, placement hash/signature, elastic status, GPU samples, exactness
-oracles, and before/after server logs. Commit the resulting raw directory; a
-summary table or systemd scope ID is not a substitute for raw evidence.
+For captured PP experiments, use `tools/capture_pp5b_arm.py` on each freshly
+started arm. It retains the unparsed output of every request, all live
+`SGLANG_*` settings, placement hash/signature, elastic status bound to the live
+control path, GPU samples, exactness oracles, and before/after server logs. Its
+checksums cover the frozen log snapshot, not a live log that the server may
+append during shutdown. Commit the resulting raw directory; a summary table or
+systemd scope ID is not a substitute for raw evidence.
 
 An exact optimization must also pass the machine-local greedy/logprob oracle
 before acceptance.  Approximate changes require an explicit quality plan and
@@ -139,6 +153,8 @@ must never be silently mixed into an exact A/B.
 | PP10 | RESEARCH | Host/PCIe operational audit | Link downgrade, IOMMU, VM scheduling, or CPU affinity may cap transfers | Narrowed: 23 GB/s H2D confirmed (Gen4 x16); remaining item is whether a PCIe or memory topology change unlocks more, and the decode GEMV's 10 GB/s SM host reads |
 | PP11 | **DONE** | Batched host-row DMA submission | Replace ~50k Python/Tensor row-copy submissions per chunk with four CUDA batch calls while resident gathers overlap on the current stream | Exact; 1183.4 vs 1110.9 pooled control, +6.53%; default on |
 | PP12 | **DONE** | Tail-chunk staging amortization | The 469-token tail pays a nearly full per-layer-chunk staging cost; fewer, larger chunks should cut total staging | Exact; chunk 4608 (one extend for the canonical prompt) 1937.8 +/- 12.9 vs pooled 2048 controls 1286.2 +/- 10.4 tok/s (**+50.66%**, t=98.3); decode unchanged; default promoted via `patches/enable_prefill_chunk_residency.py` |
+| PP13 | **REJECTED** | Accepted-stack profile plus GDN/MoE kernel screens | Retuning the now-dominant compute kernels may improve one-chunk PP | Fresh current 1968.2 +/- 7.6 tok/s; dense GDN ceiling ~1.8% for +1.42 GiB; synthetic high-M MoE tiles looked faster in isolation but measured 1830.8 +/- 14.0 vs adjacent current 1926.0 +/- 5.3 tok/s (-4.94%); no default change |
+| PP14 | **NEXT** | Cross-layer cold-row H2D prefetch | Double-buffer fixed-order cold rows for layer L+1 during layer L compute, then DtoD-compact after routing | Exact; beat adjacent current control, retain long-prompt memory safety, and demonstrate real HtoD/compute overlap in a trace |
 
 ## PP1 — PLE storage experiment
 
@@ -520,11 +536,53 @@ Evidence: [PP12 tail-chunk](logs/pp12_tail_chunk_3090_2026-09-16.md); raw arms
 [var-4608](logs/raw/pp_tail_chunk_3090_2026-09-16/var-4608/),
 [ctrl-b-2048](logs/raw/pp_tail_chunk_3090_2026-09-16/ctrl-b-2048/).
 
+## PP13 — accepted-stack profile and kernel screens (closed)
+
+A fresh PP12-stack run reached **1968.2 +/- 7.6 tok/s**. The profiled one-extend
+span was 2,390.1 ms with GPU engines active for 90.3% of wall: 1,426.4 ms
+compute and 742.7 ms DMA, but only 10.9 ms of overlap. Named routed-MoE and
+Marlin kernels contributed 481.6 and 421.5 ms respectively.
+
+Two low-risk compute paths were screened and rejected:
+
+- Dequantized BF16 improves the GDN `in_proj_qkvz` microbenchmark by 1.21 ms
+  per layer, only ~43.5 ms / 1.8% per prompt, while adding ~1.42 GiB. The GDN
+  `out_proj` does not improve; FP16 casts and W8A8 do not produce a viable
+  alternative.
+- Synthetic uniform-route tuning found 11-23% fused-MoE kernel reductions at
+  E432/E480/E512, but the isolated configs measured **1830.8 +/- 14.0 tok/s**
+  on the real server versus current-C **1926.0 +/- 5.3** (-4.94%) and pooled
+  current **1947.1 +/- 23.1** (-5.97%). Exactness was unchanged. The synthetic
+  route distribution did not predict the padding cost of real skewed routing.
+
+No tuned config entered `assets/` and the launcher remains unchanged.
+
+Evidence: [PP13 current-stack profile](logs/pp13_current_stack_profile_3090_2026-09-16.md);
+[raw profile, microbenchmarks and fresh-server arms](logs/raw/pp13_current_profile_3090_2026-09-16/).
+
+## PP14 — cross-layer cold-row prefetch (next)
+
+The current trace leaves a large structural opportunity: 738.7 ms of pinned
+HtoD is nearly serialized with compute. Implement the experiment behind a
+default-off environment flag and use alternating buffers. While layer L runs,
+copy all fixed cold rows for layer L+1 to an alternate device cache; once L+1
+routing is available, DtoD-compact the selected cold rows and gather selected
+resident rows into the ordinary fused-MoE staging layout. This avoids guessing
+the next route while moving the slow host transfer early.
+
+Budget roughly 0.6-0.7 GiB for the additional cache. Require unchanged
+oracles, an adjacent current control, no OOM on the existing long-prompt pass,
+and a confirming trace that the gain comes from HtoD/compute overlap. Keep the
+feature off by default unless the end-to-end result wins.
+
 ## Later research
 
-- Shared-expert format sweep: rejected in PP8 (measured ceiling ~1.2% of wall).
-  A format sweep for the larger PLE/linear-attention Marlin GEMMs is a separate
-  item.
+- Shared-expert format sweep was rejected in PP8 (measured ceiling ~1.2% of
+  wall); the larger GDN format path was rejected in PP13 (~1.8% ceiling for
+  +1.42 GiB).
+- If fused-MoE config tuning is revisited, replay retained real top-k routing
+  distributions. PP13 showed that uniform random routing selects harmful large
+  tiles even when the isolated kernel timing looks convincing.
 - At long prefixes, profile QSA's full FP32 score tensor and consider fusing
   score, mask, and hierarchical top-k.  The previously rejected paged-prefix KV
   kernel should not be repeated unchanged.
@@ -565,9 +623,9 @@ Evidence: [PP12 tail-chunk](logs/pp12_tail_chunk_3090_2026-09-16.md); raw arms
    prefill-presence placement (`assets/expert_presence_code.pt`) and a PP12
    4,608-token prefill chunk, both selectable back to routing mass and 2,048
    with `SGLANG_MOE_PLACEMENT` / `SGLANG_3090_CHUNKED_PREFILL_SIZE`. PP5b
-   remains the canonical-only result; PP8 was rejected on a measured ceiling.
-   The remaining defined experiments are the research items PP9, PP10 and the
-   later-research list; start one only when the owner continues the PP campaign.
+   remains the canonical-only result; PP8 and PP13 were rejected. PP14
+   cross-layer cold-row prefetch is the next implementation target; PP9 and
+   PP10 remain research items.
 6. After every experiment, update the status table, append a dated result under
    the relevant section, and link the raw log/artifact.
 
@@ -587,8 +645,7 @@ prefill chunk (PP12), S184 residency and PP5c prefill-presence placement are
 enabled; profiling is disabled. The prefill route dump is applied
 and pass-through in `/root/quant/serve-3090.sh` but off unless
 `SGLANG_PREFILL_ROUTE_DUMP` names a directory. No server is currently running;
-every PP5c arm was stopped cleanly after capture. The RTX 3090, `/dev/nvidia*`,
-and driver 580.178.04 were available to the execution context that captured
-PP5c, so the earlier sandbox device-node limitation did not apply here. The PP6
-profile was taken through the live `/start_profile`
-endpoint with no code change or restart.
+the PP13 profile, tuned-screen and current-control scopes were stopped cleanly.
+The RTX 3090, `/dev/nvidia*`, and driver 580.178.04 were available to this
+execution context. The PP13 profile was taken through the live
+`/start_profile` endpoint with no production code or launcher change.

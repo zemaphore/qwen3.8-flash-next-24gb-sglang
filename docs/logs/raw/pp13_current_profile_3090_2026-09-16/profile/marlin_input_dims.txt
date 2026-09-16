@@ -1,0 +1,3 @@
+duration events: 338,004; distinct names: 3,632
+    total ms    count    mean us  domain               name
+      24.245      193     125.62  sglang::scheduler    python/sglang/srt/layers/quantization/marlin_utils.py(488): apply_gptq_marlin_linear

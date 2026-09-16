@@ -1,0 +1,70 @@
+{
+  "bits": 8,
+  "device": "NVIDIA GeForce RTX 3090",
+  "group_size": 128,
+  "iters": 12,
+  "projections": [
+    {
+      "dense_extra_mib": 39.375,
+      "dense_mib": 80.0,
+      "dequant_once_seconds": 0.012481347999710124,
+      "k": 2560,
+      "n": 16384,
+      "packed_mib": 40.625,
+      "projection": "in_proj_qkvz",
+      "rows": [
+        {
+          "dense_bf16": 2.8098373413085938,
+          "dense_fp16_cast": 2.543000062306722,
+          "m": 2048,
+          "marlin_bf16": 2.9560108184814453,
+          "marlin_fp16_cast": 3.3088906606038413,
+          "marlin_fp16_kernel": 3.276543935139974,
+          "projection": "in_proj_qkvz",
+          "w8a8_e2e": 4.831725438435872
+        },
+        {
+          "dense_bf16": 5.894144058227539,
+          "dense_fp16_cast": 6.2284800211588545,
+          "m": 4565,
+          "marlin_bf16": 7.102293650309245,
+          "marlin_fp16_cast": 7.48911730448405,
+          "marlin_fp16_kernel": 6.949888229370117,
+          "projection": "in_proj_qkvz",
+          "w8a8_e2e": null
+        }
+      ]
+    },
+    {
+      "dense_extra_mib": 14.765625,
+      "dense_mib": 30.0,
+      "dequant_once_seconds": 0.0008755880007811356,
+      "k": 6144,
+      "n": 2560,
+      "packed_mib": 15.234375,
+      "projection": "out_proj",
+      "rows": [
+        {
+          "dense_bf16": 1.344589392344157,
+          "dense_fp16_cast": 1.2406613032023113,
+          "m": 2048,
+          "marlin_bf16": 0.9947066307067871,
+          "marlin_fp16_cast": 1.6094719568888347,
+          "marlin_fp16_kernel": 0.9788586298624674,
+          "projection": "out_proj",
+          "w8a8_e2e": 2.110208034515381
+        },
+        {
+          "dense_bf16": 2.5392640431722007,
+          "dense_fp16_cast": 2.622975985209147,
+          "m": 4565,
+          "marlin_bf16": 2.486954689025879,
+          "marlin_fp16_cast": 2.728618621826172,
+          "marlin_fp16_kernel": 2.6755412419637046,
+          "projection": "out_proj",
+          "w8a8_e2e": null
+        }
+      ]
+    }
+  ]
+}
