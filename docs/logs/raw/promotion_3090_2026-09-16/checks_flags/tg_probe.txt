@@ -1,0 +1,2 @@
+tg probe: depths=[32000] gen=256 warm_prime=True; streamed, ITL from chunk arrival
+  depth 28920: cached=28864 TTFT=0.557s TG=30.7 tok/s ITL med/p95=32.56/40.23 ms wall=8.863s chunks=256 free_vram=1594MiB (prime cold 12.886s)

@@ -1,0 +1,23 @@
+[
+  {
+    "blocks": 1,
+    "prompt_tokens": 7230,
+    "cached": 0,
+    "wall_s": 5.401,
+    "prefill_tok_s": 1338.6
+  },
+  {
+    "blocks": 3,
+    "prompt_tokens": 21690,
+    "cached": 0,
+    "wall_s": 9.261,
+    "prefill_tok_s": 2342.1
+  },
+  {
+    "blocks": 5,
+    "prompt_tokens": 36150,
+    "cached": 0,
+    "wall_s": 15.02,
+    "prefill_tok_s": 2406.8
+  }
+]

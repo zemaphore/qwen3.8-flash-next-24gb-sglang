@@ -1,0 +1,900 @@
+{
+  "rows": [
+    {
+      "turn": 0,
+      "prompt_tokens": 6553,
+      "cached_tokens": 0,
+      "uncached": 6553,
+      "expected_range": [
+        0,
+        0
+      ],
+      "hit_ok": true,
+      "wall_s": 3.878,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 1,
+      "prompt_tokens": 9916,
+      "cached_tokens": 6528,
+      "uncached": 3388,
+      "expected_range": [
+        6528,
+        6528
+      ],
+      "hit_ok": true,
+      "wall_s": 1.939,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 2,
+      "prompt_tokens": 13279,
+      "cached_tokens": 9856,
+      "uncached": 3423,
+      "expected_range": [
+        9856,
+        9920
+      ],
+      "hit_ok": true,
+      "wall_s": 1.911,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 3,
+      "prompt_tokens": 16643,
+      "cached_tokens": 13248,
+      "uncached": 3395,
+      "expected_range": [
+        13248,
+        13248
+      ],
+      "hit_ok": true,
+      "wall_s": 1.965,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 4,
+      "prompt_tokens": 20007,
+      "cached_tokens": 16640,
+      "uncached": 3367,
+      "expected_range": [
+        16640,
+        16640
+      ],
+      "hit_ok": true,
+      "wall_s": 1.975,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 5,
+      "prompt_tokens": 23371,
+      "cached_tokens": 19968,
+      "uncached": 3403,
+      "expected_range": [
+        19968,
+        19968
+      ],
+      "hit_ok": true,
+      "wall_s": 1.974,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 6,
+      "prompt_tokens": 26735,
+      "cached_tokens": 23360,
+      "uncached": 3375,
+      "expected_range": [
+        23360,
+        23360
+      ],
+      "hit_ok": true,
+      "wall_s": 1.975,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 7,
+      "prompt_tokens": 30099,
+      "cached_tokens": 26688,
+      "uncached": 3411,
+      "expected_range": [
+        26688,
+        26688
+      ],
+      "hit_ok": true,
+      "wall_s": 1.961,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 8,
+      "prompt_tokens": 33463,
+      "cached_tokens": 30080,
+      "uncached": 3383,
+      "expected_range": [
+        30080,
+        30080
+      ],
+      "hit_ok": true,
+      "wall_s": 1.99,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 9,
+      "prompt_tokens": 36827,
+      "cached_tokens": 33408,
+      "uncached": 3419,
+      "expected_range": [
+        33408,
+        33472
+      ],
+      "hit_ok": true,
+      "wall_s": 1.951,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 10,
+      "prompt_tokens": 40192,
+      "cached_tokens": 36800,
+      "uncached": 3392,
+      "expected_range": [
+        36800,
+        36800
+      ],
+      "hit_ok": true,
+      "wall_s": 1.987,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 11,
+      "prompt_tokens": 43798,
+      "cached_tokens": 40192,
+      "uncached": 3606,
+      "expected_range": [
+        40192,
+        40192
+      ],
+      "hit_ok": true,
+      "wall_s": 2.061,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 12,
+      "prompt_tokens": 47404,
+      "cached_tokens": 43776,
+      "uncached": 3628,
+      "expected_range": [
+        43776,
+        43776
+      ],
+      "hit_ok": true,
+      "wall_s": 2.104,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 13,
+      "prompt_tokens": 51010,
+      "cached_tokens": 47360,
+      "uncached": 3650,
+      "expected_range": [
+        47360,
+        47360
+      ],
+      "hit_ok": true,
+      "wall_s": 2.114,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 14,
+      "prompt_tokens": 54616,
+      "cached_tokens": 51008,
+      "uncached": 3608,
+      "expected_range": [
+        51008,
+        51008
+      ],
+      "hit_ok": true,
+      "wall_s": 2.063,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 15,
+      "prompt_tokens": 58222,
+      "cached_tokens": 54592,
+      "uncached": 3630,
+      "expected_range": [
+        54592,
+        54592
+      ],
+      "hit_ok": true,
+      "wall_s": 2.076,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 16,
+      "prompt_tokens": 61828,
+      "cached_tokens": 58176,
+      "uncached": 3652,
+      "expected_range": [
+        58176,
+        58176
+      ],
+      "hit_ok": true,
+      "wall_s": 2.102,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 17,
+      "prompt_tokens": 65434,
+      "cached_tokens": 61824,
+      "uncached": 3610,
+      "expected_range": [
+        61824,
+        61824
+      ],
+      "hit_ok": true,
+      "wall_s": 2.097,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 18,
+      "prompt_tokens": 69040,
+      "cached_tokens": 65408,
+      "uncached": 3632,
+      "expected_range": [
+        65408,
+        65408
+      ],
+      "hit_ok": true,
+      "wall_s": 2.089,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 19,
+      "prompt_tokens": 72646,
+      "cached_tokens": 68992,
+      "uncached": 3654,
+      "expected_range": [
+        68992,
+        69056
+      ],
+      "hit_ok": true,
+      "wall_s": 2.157,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 20,
+      "prompt_tokens": 76252,
+      "cached_tokens": 72640,
+      "uncached": 3612,
+      "expected_range": [
+        72640,
+        72640
+      ],
+      "hit_ok": true,
+      "wall_s": 2.115,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 21,
+      "prompt_tokens": 79858,
+      "cached_tokens": 76224,
+      "uncached": 3634,
+      "expected_range": [
+        76224,
+        76224
+      ],
+      "hit_ok": true,
+      "wall_s": 2.146,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 22,
+      "prompt_tokens": 83464,
+      "cached_tokens": 79872,
+      "uncached": 3592,
+      "expected_range": [
+        79808,
+        79872
+      ],
+      "hit_ok": true,
+      "wall_s": 2.139,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 23,
+      "prompt_tokens": 87070,
+      "cached_tokens": 83456,
+      "uncached": 3614,
+      "expected_range": [
+        83456,
+        83456
+      ],
+      "hit_ok": true,
+      "wall_s": 2.138,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 24,
+      "prompt_tokens": 90676,
+      "cached_tokens": 87040,
+      "uncached": 3636,
+      "expected_range": [
+        87040,
+        87040
+      ],
+      "hit_ok": true,
+      "wall_s": 2.12,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 25,
+      "prompt_tokens": 94282,
+      "cached_tokens": 90624,
+      "uncached": 3658,
+      "expected_range": [
+        90624,
+        90688
+      ],
+      "hit_ok": true,
+      "wall_s": 2.154,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 26,
+      "prompt_tokens": 97888,
+      "cached_tokens": 94272,
+      "uncached": 3616,
+      "expected_range": [
+        94272,
+        94272
+      ],
+      "hit_ok": true,
+      "wall_s": 2.166,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 27,
+      "prompt_tokens": 101494,
+      "cached_tokens": 97856,
+      "uncached": 3638,
+      "expected_range": [
+        97856,
+        97856
+      ],
+      "hit_ok": true,
+      "wall_s": 2.221,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 28,
+      "prompt_tokens": 105100,
+      "cached_tokens": 101440,
+      "uncached": 3660,
+      "expected_range": [
+        101440,
+        101504
+      ],
+      "hit_ok": true,
+      "wall_s": 2.223,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 29,
+      "prompt_tokens": 108706,
+      "cached_tokens": 105088,
+      "uncached": 3618,
+      "expected_range": [
+        105088,
+        105088
+      ],
+      "hit_ok": true,
+      "wall_s": 2.189,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 30,
+      "prompt_tokens": 112312,
+      "cached_tokens": 108672,
+      "uncached": 3640,
+      "expected_range": [
+        108672,
+        108672
+      ],
+      "hit_ok": true,
+      "wall_s": 2.2,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 31,
+      "prompt_tokens": 115918,
+      "cached_tokens": 112256,
+      "uncached": 3662,
+      "expected_range": [
+        112256,
+        112320
+      ],
+      "hit_ok": true,
+      "wall_s": 2.268,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 32,
+      "prompt_tokens": 119524,
+      "cached_tokens": 115904,
+      "uncached": 3620,
+      "expected_range": [
+        115904,
+        115904
+      ],
+      "hit_ok": true,
+      "wall_s": 2.237,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 33,
+      "prompt_tokens": 123130,
+      "cached_tokens": 119488,
+      "uncached": 3642,
+      "expected_range": [
+        119488,
+        119488
+      ],
+      "hit_ok": true,
+      "wall_s": 2.272,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 34,
+      "prompt_tokens": 126736,
+      "cached_tokens": 123136,
+      "uncached": 3600,
+      "expected_range": [
+        123072,
+        123136
+      ],
+      "hit_ok": true,
+      "wall_s": 2.281,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 35,
+      "prompt_tokens": 130342,
+      "cached_tokens": 126720,
+      "uncached": 3622,
+      "expected_range": [
+        126720,
+        126720
+      ],
+      "hit_ok": true,
+      "wall_s": 2.264,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 36,
+      "prompt_tokens": 133948,
+      "cached_tokens": 130304,
+      "uncached": 3644,
+      "expected_range": [
+        130304,
+        130304
+      ],
+      "hit_ok": true,
+      "wall_s": 2.31,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 37,
+      "prompt_tokens": 137554,
+      "cached_tokens": 133888,
+      "uncached": 3666,
+      "expected_range": [
+        133888,
+        133952
+      ],
+      "hit_ok": true,
+      "wall_s": 2.291,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 38,
+      "prompt_tokens": 141160,
+      "cached_tokens": 137536,
+      "uncached": 3624,
+      "expected_range": [
+        137536,
+        137536
+      ],
+      "hit_ok": true,
+      "wall_s": 2.269,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 39,
+      "prompt_tokens": 144766,
+      "cached_tokens": 141120,
+      "uncached": 3646,
+      "expected_range": [
+        141120,
+        141120
+      ],
+      "hit_ok": true,
+      "wall_s": 2.338,
+      "free_vram_mib": 352,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 40,
+      "prompt_tokens": 148372,
+      "cached_tokens": 144704,
+      "uncached": 3668,
+      "expected_range": [
+        144704,
+        144768
+      ],
+      "hit_ok": true,
+      "wall_s": 2.304,
+      "free_vram_mib": 206,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 41,
+      "prompt_tokens": 151978,
+      "cached_tokens": 148352,
+      "uncached": 3626,
+      "expected_range": [
+        148352,
+        148352
+      ],
+      "hit_ok": true,
+      "wall_s": 2.353,
+      "free_vram_mib": 56,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 42,
+      "prompt_tokens": 155584,
+      "cached_tokens": 151936,
+      "uncached": 3648,
+      "expected_range": [
+        151936,
+        151936
+      ],
+      "hit_ok": true,
+      "wall_s": 2.392,
+      "free_vram_mib": 846,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 43,
+      "prompt_tokens": 159190,
+      "cached_tokens": 155584,
+      "uncached": 3606,
+      "expected_range": [
+        155584,
+        155584
+      ],
+      "hit_ok": true,
+      "wall_s": 2.336,
+      "free_vram_mib": 618,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 44,
+      "prompt_tokens": 162796,
+      "cached_tokens": 159168,
+      "uncached": 3628,
+      "expected_range": [
+        159168,
+        159168
+      ],
+      "hit_ok": true,
+      "wall_s": 2.345,
+      "free_vram_mib": 458,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 45,
+      "prompt_tokens": 166402,
+      "cached_tokens": 162752,
+      "uncached": 3650,
+      "expected_range": [
+        162752,
+        162752
+      ],
+      "hit_ok": true,
+      "wall_s": 2.351,
+      "free_vram_mib": 294,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 46,
+      "prompt_tokens": 170008,
+      "cached_tokens": 166400,
+      "uncached": 3608,
+      "expected_range": [
+        166400,
+        166400
+      ],
+      "hit_ok": true,
+      "wall_s": 2.344,
+      "free_vram_mib": 126,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 47,
+      "prompt_tokens": 173614,
+      "cached_tokens": 169984,
+      "uncached": 3630,
+      "expected_range": [
+        169984,
+        169984
+      ],
+      "hit_ok": true,
+      "wall_s": 2.424,
+      "free_vram_mib": 1020,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 48,
+      "prompt_tokens": 177220,
+      "cached_tokens": 173568,
+      "uncached": 3652,
+      "expected_range": [
+        173568,
+        173568
+      ],
+      "hit_ok": true,
+      "wall_s": 2.447,
+      "free_vram_mib": 584,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 49,
+      "prompt_tokens": 180826,
+      "cached_tokens": 177216,
+      "uncached": 3610,
+      "expected_range": [
+        177216,
+        177216
+      ],
+      "hit_ok": true,
+      "wall_s": 2.424,
+      "free_vram_mib": 406,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 50,
+      "prompt_tokens": 184432,
+      "cached_tokens": 180800,
+      "uncached": 3632,
+      "expected_range": [
+        180800,
+        180800
+      ],
+      "hit_ok": true,
+      "wall_s": 2.443,
+      "free_vram_mib": 224,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 51,
+      "prompt_tokens": 188038,
+      "cached_tokens": 184384,
+      "uncached": 3654,
+      "expected_range": [
+        184384,
+        184448
+      ],
+      "hit_ok": true,
+      "wall_s": 2.441,
+      "free_vram_mib": 40,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 52,
+      "prompt_tokens": 191644,
+      "cached_tokens": 188032,
+      "uncached": 3612,
+      "expected_range": [
+        188032,
+        188032
+      ],
+      "hit_ok": true,
+      "wall_s": 2.491,
+      "free_vram_mib": 1028,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 53,
+      "prompt_tokens": 195250,
+      "cached_tokens": 191616,
+      "uncached": 3634,
+      "expected_range": [
+        191616,
+        191616
+      ],
+      "hit_ok": true,
+      "wall_s": 2.483,
+      "free_vram_mib": 620,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 54,
+      "prompt_tokens": 198856,
+      "cached_tokens": 195200,
+      "uncached": 3656,
+      "expected_range": [
+        195200,
+        195264
+      ],
+      "hit_ok": true,
+      "wall_s": 2.514,
+      "free_vram_mib": 424,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 55,
+      "prompt_tokens": 202462,
+      "cached_tokens": 198848,
+      "uncached": 3614,
+      "expected_range": [
+        198848,
+        198848
+      ],
+      "hit_ok": true,
+      "wall_s": 2.499,
+      "free_vram_mib": 226,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 56,
+      "prompt_tokens": 206068,
+      "cached_tokens": 202432,
+      "uncached": 3636,
+      "expected_range": [
+        202432,
+        202432
+      ],
+      "hit_ok": true,
+      "wall_s": 2.534,
+      "free_vram_mib": 24,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 57,
+      "prompt_tokens": 209674,
+      "cached_tokens": 206080,
+      "uncached": 3594,
+      "expected_range": [
+        206016,
+        206080
+      ],
+      "hit_ok": true,
+      "wall_s": 2.502,
+      "free_vram_mib": 1054,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 58,
+      "prompt_tokens": 213280,
+      "cached_tokens": 209664,
+      "uncached": 3616,
+      "expected_range": [
+        209664,
+        209664
+      ],
+      "hit_ok": true,
+      "wall_s": 2.469,
+      "free_vram_mib": 434,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 59,
+      "prompt_tokens": 216886,
+      "cached_tokens": 213248,
+      "uncached": 3638,
+      "expected_range": [
+        213248,
+        213248
+      ],
+      "hit_ok": true,
+      "wall_s": 2.506,
+      "free_vram_mib": 222,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 60,
+      "prompt_tokens": 220492,
+      "cached_tokens": 216832,
+      "uncached": 3660,
+      "expected_range": [
+        216832,
+        216896
+      ],
+      "hit_ok": true,
+      "wall_s": 2.664,
+      "free_vram_mib": 238,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 61,
+      "prompt_tokens": 224098,
+      "cached_tokens": 220480,
+      "uncached": 3618,
+      "expected_range": [
+        220480,
+        220480
+      ],
+      "hit_ok": true,
+      "wall_s": 2.65,
+      "free_vram_mib": 994,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 62,
+      "prompt_tokens": 227704,
+      "cached_tokens": 224064,
+      "uncached": 3640,
+      "expected_range": [
+        224064,
+        224064
+      ],
+      "hit_ok": true,
+      "wall_s": 2.613,
+      "free_vram_mib": 354,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 63,
+      "prompt_tokens": 231310,
+      "cached_tokens": 227648,
+      "uncached": 3662,
+      "expected_range": [
+        227648,
+        227712
+      ],
+      "hit_ok": true,
+      "wall_s": 2.631,
+      "free_vram_mib": 934,
+      "completion_tokens": 16
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+growing session: 64 turns, ~80 repo modules of tool result per turn, max_new=16
+  turn  0: prompt=6553 cached=0 uncached=6553 expected=[0,0] ok=True wall=3.878s free_vram=352MiB
+  turn  5: prompt=23371 cached=19968 uncached=3403 expected=[19968,19968] ok=True wall=1.974s free_vram=352MiB
+  turn 10: prompt=40192 cached=36800 uncached=3392 expected=[36800,36800] ok=True wall=1.987s free_vram=352MiB
+  turn 15: prompt=58222 cached=54592 uncached=3630 expected=[54592,54592] ok=True wall=2.076s free_vram=352MiB
+  turn 20: prompt=76252 cached=72640 uncached=3612 expected=[72640,72640] ok=True wall=2.115s free_vram=352MiB
+  turn 25: prompt=94282 cached=90624 uncached=3658 expected=[90624,90688] ok=True wall=2.154s free_vram=352MiB
+  turn 30: prompt=112312 cached=108672 uncached=3640 expected=[108672,108672] ok=True wall=2.2s free_vram=352MiB
+  turn 35: prompt=130342 cached=126720 uncached=3622 expected=[126720,126720] ok=True wall=2.264s free_vram=352MiB
+  turn 40: prompt=148372 cached=144704 uncached=3668 expected=[144704,144768] ok=True wall=2.304s free_vram=206MiB
+  turn 45: prompt=166402 cached=162752 uncached=3650 expected=[162752,162752] ok=True wall=2.351s free_vram=294MiB
+  turn 50: prompt=184432 cached=180800 uncached=3632 expected=[180800,180800] ok=True wall=2.443s free_vram=224MiB
+  turn 55: prompt=202462 cached=198848 uncached=3614 expected=[198848,198848] ok=True wall=2.499s free_vram=226MiB
+  turn 60: prompt=220492 cached=216832 uncached=3660 expected=[216832,216896] ok=True wall=2.664s free_vram=238MiB
+  turn 63: prompt=231310 cached=227648 uncached=3662 expected=[227648,227712] ok=True wall=2.631s free_vram=934MiB
+hits_ok=64/64 final_prompt=231310 min_free_vram=24MiB warm_wall_median=2.264s

@@ -1,0 +1,6 @@
+growing session: 12 turns, ~80 repo modules of tool result per turn, max_new=16
+  turn  0: prompt=6432 cached=0 uncached=6432 expected=[0,0] ok=True wall=3.845s free_vram=250MiB
+  turn  5: prompt=22850 cached=19520 uncached=3330 expected=[19520,19584] ok=True wall=1.949s free_vram=250MiB
+  turn 10: prompt=39261 cached=35968 uncached=3293 expected=[35968,35968] ok=True wall=1.96s free_vram=250MiB
+  turn 11: prompt=42787 cached=39232 uncached=3555 expected=[39232,39232] ok=True wall=2.047s free_vram=250MiB
+hits_ok=12/12 final_prompt=42787 min_free_vram=250MiB warm_wall_median=1.949s
