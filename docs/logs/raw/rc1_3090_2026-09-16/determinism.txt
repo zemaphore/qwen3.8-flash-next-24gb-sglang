@@ -1,0 +1,12 @@
+=== A: identical prompt determinism (cold/warm/warm2) ===
+trial 0: cached c=0 w=6976 w2=6976  c==w=True w==w2=True
+trial 1: cached c=0 w=6976 w2=6976  c==w=True w==w2=True
+trial 2: cached c=0 w=6976 w2=6976  c==w=True w==w2=True
+trial 3: cached c=0 w=6976 w2=6976  c==w=True w==w2=True
+trial 4: cached c=0 w=6912 w2=6912  c==w=True w==w2=True
+=== B: branch/return determinism (A/AR/AR2), 5 trials ===
+trial 0: cached A=6976 AR=7040 AR2=7040  A==AR=True AR==AR2=True A==AR2=True
+trial 1: cached A=6656 AR=6656 AR2=6656  A==AR=True AR==AR2=True A==AR2=True
+trial 2: cached A=6784 AR=6784 AR2=6784  A==AR=False AR==AR2=False A==AR2=False
+trial 3: cached A=6912 AR=6912 AR2=6912  A==AR=True AR==AR2=True A==AR2=True
+trial 4: cached A=6976 AR=7040 AR2=7040  A==AR=False AR==AR2=True A==AR2=False

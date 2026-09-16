@@ -1,0 +1,8 @@
+churn: 30 unique conversations, each sent twice; monitor free VRAM
+  i= 0 cold_cached=0 warm_cached=2432 free_vram=618MiB
+  i= 6 cold_cached=0 warm_cached=2432 free_vram=616MiB
+  i=12 cold_cached=0 warm_cached=2432 free_vram=616MiB
+  i=18 cold_cached=0 warm_cached=2624 free_vram=616MiB
+  i=24 cold_cached=0 warm_cached=2624 free_vram=616MiB
+cold_ok=30/30 warm_hits=30/30 min_free_vram=616MiB
+done

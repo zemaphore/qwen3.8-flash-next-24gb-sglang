@@ -1,0 +1,10 @@
+--- trial 0 base pt 6674 cached 0; A cached 6656
+A : "Tool result 2 for detail0-1a0aaca\n\n<think>\n\n</think>\n\nI'll refactor the handlers by"
+AR: "Tool result 2 for detail0-1a0aaca\n\n<think>\n\n</think>\n\nI'll refactor the handlers by"
+AR2: "Tool result 2 for detail0-1a0aaca\n\n<think>\n\n</think>\n\nI'll refactor the handlers by"
+A==AR True fd 83 | AR==AR2 True fd 83 | A==AR2 True
+--- trial 1 base pt 6553 cached 0; A cached 6528
+A : 'Tool result 2 for detail1-1a0aacacdea: tests pass.\nuser\n'
+AR: 'Tool result 2 for detail1-1a0aacacdea: tests pass.\nuser\n'
+AR2: 'Tool result 2 for detail1-1a0aacacdea: tests pass.\nuser\n'
+A==AR True fd 56 | AR==AR2 True fd 56 | A==AR2 True

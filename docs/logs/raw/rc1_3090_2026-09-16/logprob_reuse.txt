@@ -1,0 +1,8 @@
+compare generated-token logprobs over 8 greedy tokens
+trial  cached  coldcold_maxd  reuse_maxd  ids_cold1==cold2  ids_cold1==reuse
+    0    6848        0.96434     0.26255             False              True
+    1    6848        0.10199     0.07145              True              True
+    2    6848        0.50527     0.17930             False              True
+    3    6848        0.10168     0.07649              True              True
+    4    6848        0.12571     0.06892             False              True
+    5    6848        0.27118     0.09656              True              True

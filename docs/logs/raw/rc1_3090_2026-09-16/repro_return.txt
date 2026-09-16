@@ -1,0 +1,6 @@
+trial 0: cached A=6912 AR=6912 AR2=6912 A==AR==AR2=False
+trial 1: cached A=6656 AR=6656 AR2=6656 A==AR==AR2=False
+trial 2: cached A=6912 AR=6912 AR2=6912 A==AR==AR2=False
+trial 3: cached A=6784 AR=6784 AR2=6784 A==AR==AR2=True
+trial 4: cached A=6784 AR=6784 AR2=6784 A==AR==AR2=False
+mismatches: 4 /5

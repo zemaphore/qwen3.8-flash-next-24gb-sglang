@@ -1,0 +1,7 @@
+compare conv_a: cold1 vs cold2 (baseline) and cold1 vs [base->conv_a] (reuse)
+trial 0: cached c1=0 c2=0 h=6912 | cold1==cold2 False | cold1==reuse False
+trial 1: cached c1=0 c2=0 h=6656 | cold1==cold2 False | cold1==reuse False
+trial 2: cached c1=0 c2=0 h=6784 | cold1==cold2 False | cold1==reuse False
+trial 3: cached c1=0 c2=0 h=6912 | cold1==cold2 False | cold1==reuse False
+trial 4: cached c1=0 c2=0 h=6912 | cold1==cold2 True | cold1==reuse True
+trial 5: cached c1=0 c2=0 h=6912 | cold1==cold2 True | cold1==reuse False
