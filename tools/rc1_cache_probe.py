@@ -19,6 +19,7 @@ No server-side state is changed; the server must already be running.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import time
 import urllib.request
@@ -172,12 +173,8 @@ def main():
                         "cold_cached": first["cached_tokens"],
                         "reuse_cached": later["cached_tokens"],
                         "same_output": first["text"] == later["text"],
-                        "cold_text_sha": __import__("hashlib")
-                        .sha256(first["text"].encode())
-                        .hexdigest()[:16],
-                        "reuse_text_sha": __import__("hashlib")
-                        .sha256(later["text"].encode())
-                        .hexdigest()[:16],
+                        "cold_text_sha": hashlib.sha256(first["text"].encode()).hexdigest()[:16],
+                        "reuse_text_sha": hashlib.sha256(later["text"].encode()).hexdigest()[:16],
                     }
                 )
 

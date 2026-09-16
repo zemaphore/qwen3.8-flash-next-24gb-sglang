@@ -1413,3 +1413,13 @@ Running as unit: sglang-1789569284.scope; invocation ID: 9eb14b5a61de47f18dcc950
 [2026-09-16 14:41:53] INFO:     127.0.0.1:32884 - "POST /generate HTTP/1.1" 200 OK
 [2026-09-16 14:43:44] Prefill batch, #new-seq: 1, #new-token: 64, #cached-token: 0, full token usage: 0.00, mamba usage: 0.00, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 0.58
 [2026-09-16 14:43:44] INFO:     127.0.0.1:55102 - "GET /health HTTP/1.1" 200 OK
+[2026-09-16 14:55:44] Prefill batch, #new-seq: 1, #new-token: 64, #cached-token: 0, full token usage: 0.00, mamba usage: 0.00, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 0.09
+[2026-09-16 14:55:45] INFO:     127.0.0.1:60988 - "GET /health HTTP/1.1" 200 OK
+[2026-09-16 15:03:49] Prefill batch, #new-seq: 1, #new-token: 64, #cached-token: 0, full token usage: 0.00, mamba usage: 0.00, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 0.13
+[2026-09-16 15:03:50] INFO:     127.0.0.1:49242 - "GET /health HTTP/1.1" 200 OK
+[2026-09-16 15:03:50] SIGTERM received. signum=None frame=None. Draining requests and shutting down...
+[2026-09-16 15:03:50] Subprocess detokenizer (pid=368339) crashed with exit code -15. Triggering SIGQUIT for cleanup...
+[2026-09-16 15:03:50] SIGQUIT received. signum=None, frame=None. It usually means one child failed.
+[2026-09-16 15:03:50] Sleeping 5 seconds before crash diagnostics to let GPU activity settle.
+[2026-09-16 15:03:55] No live scheduler processes found; skipping py-spy and CUDA coredump.
+[2026-09-16 15:03:55] kill_process_tree called: parent_pid=368230, include_parent=True, pid=368230

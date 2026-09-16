@@ -1,9 +1,11 @@
 # RAM-backed hybrid prefix caching for agentic workflows
 
 Date: 2026-09-16
-Status: RC0 complete (see [RC0 report](logs/rc0_feasibility_3090_2026-09-16.md));
-no serving changes or cache benchmarks yet. Objective corrected before
-implementation (below).
+Status: RC0 and RC1 complete (see [RC0](logs/rc0_feasibility_3090_2026-09-16.md)
+and [RC1](logs/rc1_gpu_hybrid_3090_2026-09-16.md) reports). Serving source is
+unchanged; RC1 enabled the built-in hybrid tree via a separate launcher at a
+131,072-token capacity (reported tradeoff, not a promoted default). No RAM tier
+or agentic benchmark yet. Objective corrected before implementation (below).
 Starting point: accepted RTX 3090 stack; TG0 complete.
 
 ## Objective
@@ -200,7 +202,7 @@ request. Host spill must not create an unbounded queue while the user is idle.
 | Stage | Scope | Deliverable / exit gate |
 |---|---|---|
 | RC0 | DONE | Read-only inventory after TG0; measure memory budgets and state layouts | [RC0 report](logs/rc0_feasibility_3090_2026-09-16.md): compatibility matrix, snapshot schema, precision contract, explicit budgets and test protocol |
-| RC1 | DONE | Enable GPU-only hybrid cache on an isolated branch with enough state slots | [RC1 report](logs/rc1_gpu_hybrid_3090_2026-09-16.md): `UnifiedRadixCache` + Mamba extra-buffer; page-aligned hits for repeated/append/branch/A→B→A; reuse Δlogprob below the server's own cold-vs-cold drift; capacity capped 131,072 with 8 mamba slots; no RAM transfer yet |
+| RC1 | DONE | Enable GPU-only hybrid cache on an isolated branch with enough state slots | [RC1 report](logs/rc1_gpu_hybrid_3090_2026-09-16.md): `UnifiedRadixCache` + Mamba extra-buffer; page-aligned hits for repeated/append/branch/A→B→A; reuse Δlogprob below the server's own cold-vs-cold drift (same-slot hits only; not the RC2/RC3 bound); capacity capped 131,072 with 8 mamba slots; RC1-a OOM log not retained; eviction/re-hit untested; no RAM transfer yet |
 | RC2 | Implement quantized KV/QSA and recurrent/PLE host round trip | Bit-preserving component tests, remapping/ring tests and incremental continuation comparisons |
 | RC3 | Integrate RAM entries, restore, eviction and physical-memory accounting | A→B→A reuse works after GPU eviction; bounded RAM/VRAM and safe abort/failure behavior |
 | RC4 | Agentic workload benchmark and long-context validation | Evidence-based latency/capacity tradeoff and accept/reject decision |
