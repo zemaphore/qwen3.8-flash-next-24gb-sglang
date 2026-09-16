@@ -172,11 +172,13 @@ retraction, CUDA fault or request failure occurred in any accepted-stack run.
 
 ## Wrap-up addendum (2026-09-16)
 
-The campaign closed after a long-prompt validation pass. The M=4565 config is
-equivalent to the pre-PP15 configs within the fixed-server run-to-run envelope
-on 4,565/11,196/20,496-token prompts (max |dlogprob| 1.410 vs envelope 1.781),
-and the PP14 prefetch on/off delta also sits inside that envelope. Neither is
-bit-exact. Final accepted capture: canonical 2666.8 +/- 12.5 tok/s (n=5),
+The campaign closed after a long-prompt validation pass. The M=4565 config
+comparison on 4,565/11,196/20,496-token base prompts has a global maximum below
+the fixed-server observed maximum (max |dlogprob| 1.410 vs 1.781),
+but one PP14 prefetch on/off delta reaches 2.797, outside that envelope.
+Global maxima alone do not establish equivalence; see the wrap-up closure
+review for the remaining validation limitations. Neither is bit-exact.
+Final accepted capture: canonical 2666.8 +/- 12.5 tok/s (n=5),
 held-out 2590.0 +/- 6.9 / 2581.3 +/- 13.6, depth sweep to 257,456 tokens. The
 full-table gather, first-layer prefetch, and QSA host-lens patches show no
 demonstrated material benefit and stay default-off. See

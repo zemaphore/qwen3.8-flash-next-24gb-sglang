@@ -4,7 +4,8 @@ Last updated: 2026-09-16
 
 This is the resumability and status document for improving Qwen3.8-Flash-Next
 prompt-processing (PP) performance on the 24 GB RTX 3090 host.  Decode work has
-its own plan in [DECODE_PERF_PLAN.md](DECODE_PERF_PLAN.md).
+its own current plan in [TG_PERF_PLAN_3090.md](TG_PERF_PLAN_3090.md).
+The older [DECODE_PERF_PLAN.md](DECODE_PERF_PLAN.md) is historical.
 
 ## Current conclusion
 
@@ -18,15 +19,23 @@ ceiling. Wrap-up validation and final numbers:
 Long-prompt teacher-forced logprob validation now covers the 4,565-token
 canonical extend and 11k/20k-token prompts spanning multiple 4,608 chunks plus a
 tail, so it reaches the PP15 M=4565 MoE config and the PP14 prefetch floor. The
-accepted ran-to-run envelope on a fixed server is max |dlogprob| 1.78 / mean
-0.05, concentrated on the first few unlikely forced tokens. The PP15 MoE config
-and the PP14 prefetch path are equivalent to their controls within that envelope
-but are **not** bit-exact; only the short oracles are reproduced exactly. Final
+accepted run-to-run observations on a fixed server reach max |dlogprob| 1.78 /
+mean approximately 0.05, concentrated on the first few forced tokens. The PP15
+MoE comparison has a lower global maximum but lacks retained per-token control
+JSON. One PP14 prefetch comparison reaches 2.797, exceeding that observed
+envelope; a quieter repeat does not establish equivalence. Numerical validation
+remains qualified, not bit-exact or a proven regression. Only the short-oracle
+comparison results are reproduced exactly. See the wrap-up's review addendum.
+Final
 accepted capture: canonical **2666.8 +/- 12.5 tok/s** (n=5, actual 4,565 tokens),
 held-out code 2590.0 +/- 6.9 and 2581.3 +/- 13.6 tok/s; depth sweep accepted up
 to a **257,456-token** prompt at 1,543 tok/s prefill and 80 MiB minimum free
 VRAM. GPU-compute time coverage of 91.5% in the PP15 profile means a GPU engine
 was active for 91.5% of the span; it is **not** 91.5% hardware efficiency.
+
+Closure review at `52b2238`: PP optimization is closed with these limitations
+recorded, not with an unconditional correctness sign-off. No defaults change.
+Further validation belongs to TG0's baseline audit; no PP sweep is queued.
 
 The accepted post-PP14 stack measures **2583.4 +/- 65.4 tok/s** on the canonical
 4,565-token code prompt. PP14 overlaps next-layer cold-row HtoD with current

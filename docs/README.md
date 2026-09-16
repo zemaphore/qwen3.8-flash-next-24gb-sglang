@@ -11,6 +11,10 @@ notes live in [`../sglang/`](../sglang/). What was rejected, and why, is collect
 
 | File | What it is | Written at |
 |---|---|---|
+| [`PP_PERF_PLAN_3090.md`](PP_PERF_PLAN_3090.md) | Closed RTX 3090 PP campaign, frozen defaults and qualified validation status | 2026-09-16 |
+| [`logs/pp_wrapup_3090_2026-09-16.md`](logs/pp_wrapup_3090_2026-09-16.md) | Final PP characterization, retained evidence and closure review limitations | 2026-09-16 |
+| [`TG_PERF_PLAN_3090.md`](TG_PERF_PLAN_3090.md) | Current RTX 3090 single-stream TG plan; TG0 baseline through candidate acceptance | 2026-09-16 |
+| [`prompts/TG0_AGENT_PROMPT.md`](prompts/TG0_AGENT_PROMPT.md) | Standalone TG0 agent assignment, bounded to baseline/profile/validation work | 2026-09-16 |
 | [`WRITEUP.md`](WRITEUP.md) | The quantization recipe, the two AutoRound traps, the nine SGLang findings, the base patch, the first measurements (15.5 tok/s, 32k) | after the base patch, before the performance campaign |
 | [`ELASTIC_MEMORY.md`](ELASTIC_MEMORY.md) | The three memory mechanisms, the KV quality protocol and precision ladder, speculation, where long-prefill time goes | 2026-09-02, last updated after S21 |
 | [`HISTORY.md`](HISTORY.md) | The rejected steps with their reasons, the ERRATUM, the host-RAM facts, the benchmark status | 2026-09-03 |

@@ -1,5 +1,8 @@
 # Qwen3.8-Flash-Next decode: one ranked engineering plan
 
+For current RTX 3090 work, use [TG_PERF_PLAN_3090.md](TG_PERF_PLAN_3090.md).
+This document remains historical; many proposed steps below are already implemented.
+
 > **Status:** pre-campaign synthesis, kept verbatim including its first-person notes ("verified
 > this session" refers to 2026-09-01, "the owner" to the maintainer). What was done, and what each
 > step measured, is in [CAMPAIGN.md](CAMPAIGN.md) and [TIMELINE.md](TIMELINE.md).
