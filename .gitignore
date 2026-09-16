@@ -6,6 +6,7 @@ tools/greedy/*.json
 !tools/greedy/oa.json
 tools/logprob/*.json
 !tools/logprob/lp2.json
+tools/logprob_long/
 tools/spec_lossless/
 tools/needle_results.tsv
 tools/bench_final/

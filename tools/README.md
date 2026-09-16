@@ -3,7 +3,7 @@
 Measurement and benchmark tools. Most talk to a running server on `127.0.0.1:30000` over HTTP
 (`/generate`, `/v1/chat/completions`) and never start or stop one, except where noted; the RTX 3090
 PP capture tool targets that launcher's port 30001. State files
-(`nll/`, `greedy/`, `logprob/`, `spec_lossless/`, `needle_results.tsv`, `elastic.ctl`) are created next
+(`nll/`, `greedy/`, `logprob/`, `logprob_long/`, `spec_lossless/`, `needle_results.tsv`, `elastic.ctl`) are created next
 to the scripts and are git-ignored, except the two oracle inputs listed below.
 
 The current 3090 launcher serves the OpenAI API model ID `qwen38-flash-256K`
@@ -17,6 +17,9 @@ Historical benchmark logs retain the model ID used at measurement time.
 |---|---|
 | `bench_speed.py` | Streaming prefill/decode bench: one streamed generation per context (101 .. 10,001 tokens), decode = inter-token rate over 200 tokens, prefill = time to first token minus one step (CAMPAIGN.md:306). |
 | `logprob_diff.py` | Teacher-forced logprob oracle for exactness: `save NAME` / `check NAME`, prints `LOGPROB_MAX` / `LOGPROB_MEAN` (thresholds in `CONTRIBUTING.md`). Needs `greedy_diff.py` and `greedy/oa.json`. |
+| `long_logprob_oracle.py` | Long-prompt teacher-forced logprob oracle (`save`/`check`/`compare`): fixed 4,565/11,196/20,496-token prompts (canonical plus held-out code spanning multiple 4,608 chunks and a tail), same fixed suffix as `logprob_diff.py`. Tokenizes locally (full-prompt server logprobs OOM) and reports max/mean per prompt. These logprobs are not bit-exact; the accepted run-to-run envelope is max 1.78 / mean 0.05. Output dir `tools/logprob_long/` is git-ignored; retained evidence lives under `docs/logs/raw/`. |
+| `depth_sweep.py` | Reproducible prefill depth sweep: one streamed request per requested depth, records actual server token counts, TTFT, prefill/decode throughput, minimum free VRAM, and context/retraction failures. Fixed corpus and one-request-per-depth warmup policy. |
+| `snapshot_server.py` | Dump the live port-30001 server argv, `SGLANG_*` environment, launcher hash, repo revision, and per-file config hashes. Used for the non-promotion validation arms that `capture_pp5b_arm.py` would reject. |
 | `greedy_diff.py` | The three-prompt set (German prose, English reasoning, code; the German passage is a deliberate held-out domain, not a leftover) the oracle uses; on its own a greedy token diff, which is not an oracle (the server is not bitwise reproducible run to run, CAMPAIGN.md:244). |
 | `greedy/oa.json` | The fixed continuations the oracle scores: 3 x 200 greedy token ids, of which `logprob_diff.py` teacher-forces the first 150 per prompt (450 tokens). Tracked in git. |
 | `logprob/lp2.json` | The oracle reference saved on the accepted INT8-dense state (`logprob_diff.py check lp2`, CAMPAIGN.md:317). Tracked in git; other references are regenerated with `logprob_diff.py save NAME`. |
