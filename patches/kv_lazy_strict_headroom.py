@@ -11,12 +11,16 @@ block is skipped and the commit proceeds with no headroom check at all. That
 is how RC1-d's 3072 arm committed at ``driver free 0.03 GB`` and then hit a
 36 MiB activation OOM (docs/logs/rc1_gpu_hybrid_3090_2026-09-16.md section 3.1).
 
-This patch evaluates the half-headroom refusal outside the rate limit, so a
-commit that would leave < headroom/2 free is always refused. The refusal
-surfaces as the allocator's ``None``; with R1 applied that becomes tree
-eviction and a retry instead of a crash.
+This patch adds an unconditional refusal outside the rate limit against an
+absolute floor: a commit that would leave less than ``SGLANG_KV_LAZY_MIN_FREE_MB``
+(default 256) driver-free is always refused. (The half-headroom value, 768 MB,
+is not usable here: with 16 slots this box idles at ~750 MB free by design and
+would refuse its first request.) The refusal surfaces as the allocator's
+``None``; with R1 applied that becomes tree eviction and a retry, with R2 an
+aborted request, instead of a crash.
 
-Env: ``SGLANG_KV_LAZY_STRICT_HEADROOM`` (default ``0`` = original behaviour).
+Env: ``SGLANG_KV_LAZY_STRICT_HEADROOM`` (default ``0`` = original behaviour),
+``SGLANG_KV_LAZY_MIN_FREE_MB`` (default ``256``).
 
 Target: ``$SGLANG/python/sglang/srt/mem_cache/memory_pool.py``.
 Usage: ``apply`` / ``revert`` / ``--check``.
@@ -40,16 +44,18 @@ NEW = '''                if torch.cuda.mem_get_info()[0] - delta < headroom // 2
                     raise RuntimeError(f"KV lazy backing: no headroom for {want} tokens "
                                        f"(free {torch.cuda.mem_get_info()[0] >> 20} MB, need {(delta + headroom) >> 20} MB)")
             # R3 (kv_lazy_strict_headroom): the refusal above is skipped by the rate limit once the
-            # expert cache is at its floor; re-check unconditionally so a commit never leaves < headroom/2.
-            if self._STRICT_HEADROOM and torch.cuda.mem_get_info()[0] - delta < headroom // 2:
+            # expert cache is at its floor; re-check unconditionally against an absolute floor so a
+            # commit never leaves less than SGLANG_KV_LAZY_MIN_FREE_MB driver-free (activation margin).
+            if self._STRICT_HEADROOM and torch.cuda.mem_get_info()[0] - delta < self._STRICT_MIN_FREE:
                 raise RuntimeError(f"KV lazy backing: strict headroom refused {want} tokens "
-                                   f"(free {torch.cuda.mem_get_info()[0] >> 20} MB, need {(delta + headroom // 2) >> 20} MB)")
+                                   f"(free {torch.cuda.mem_get_info()[0] >> 20} MB, need {(delta + self._STRICT_MIN_FREE) >> 20} MB)")
         try:
 '''
 
 OLD_FLAG = "    def lazy_ensure(self, num_tokens: int) -> None:\n"
 NEW_FLAG = (
-    '    _STRICT_HEADROOM = os.environ.get("SGLANG_KV_LAZY_STRICT_HEADROOM", "0") == "1"\n\n'
+    '    _STRICT_HEADROOM = os.environ.get("SGLANG_KV_LAZY_STRICT_HEADROOM", "0") == "1"\n'
+    '    _STRICT_MIN_FREE = int(os.environ.get("SGLANG_KV_LAZY_MIN_FREE_MB", "256")) << 20\n\n'
     "    def lazy_ensure(self, num_tokens: int) -> None:\n"
 )
 

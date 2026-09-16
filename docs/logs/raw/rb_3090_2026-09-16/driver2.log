@@ -1,0 +1,29 @@
+=== arm chunk=2048 slots=16 pool=262144 2026-09-16T18:47:03Z ===
+vram_used_after_stop 0 MiB
+launcher: up after 201 s gc frozen 
+[2026-09-16 18:50:18] Mamba Cache is allocated. max_mamba_cache_size: 16, conv_state size: 0.04GB, ssm_state size: 1.79GB 
+[2026-09-16 18:50:18] Memory pool end. avail mem=2.84 GB
+[2026-09-16 18:50:20] max_total_num_tokens=187200, chunked_prefill_size=2048, max_prefill_tokens=32768, max_running_requests=1, context_len=262144, available_gpu_mem=2.75 GB
+[2026-09-16 18:50:20] Tree cache initialized: source=default impl=UnifiedRadixCache hybrid_swa=False hybrid_ssm=True hicache_attached=False streaming_wrapped=False
+{'disable_radix_cache': False, 'max_total_tokens': 262144, 'max_mamba_cache_size': 16, 'chunked_prefill_size': 2048}
+21339 MiB, 2786 MiB
+long cold {'blocks': 1, 'prompt_tokens': 7230, 'cached': 0, 'wall_s': 6.981, 'prefill_tok_s': 1035.7}
+long cold {'blocks': 3, 'prompt_tokens': 21690, 'cached': 0, 'wall_s': 12.959, 'prefill_tok_s': 1673.7}
+long cold {'blocks': 5, 'prompt_tokens': 36150, 'cached': 0, 'wall_s': 21.295, 'prefill_tok_s': 1697.6}
+churn: 30 unique ~6K conversations, each cold then warm; free VRAM sampled
+  i= 0 pt=6553 cold_cached=0 warm_cached=6528 free_vram=220MiB
+  i= 6 pt=6553 cold_cached=0 warm_cached=6528 free_vram=172MiB
+  i=12 pt=6674 cold_cached=0 warm_cached=6656 free_vram=174MiB
+  i=18 pt=6674 cold_cached=0 warm_cached=6656 free_vram=126MiB
+  i=24 pt=6674 cold_cached=0 warm_cached=6656 free_vram=126MiB
+cold_ok=30/30 warm_hits=30/30 retained_tokens~199490 min_free_vram=78MiB
+evict/rehit: A=6597 tokens (full hit would be 6592); pool=262144
+  a0 cold: cached=0 wall=5.009s
+  12 short fillers (8772 tokens) -> a1 cached=6592 wall=0.574s ids_match=True maxd=0.53177 text_eq=True
+  50 x ~6K fillers (333290 tokens, > pool) free_vram=138MiB -> a2 cached=0 wall=4.899s ids_match=True maxd=0.20812 text_eq=True
+  a3 rehit: cached=6592 wall=0.541s ids_match_a0=True text_eq_a2=True
+24095 MiB, 30 MiB
+errors_in_log 0
+=== arm chunk=2048 done 2026-09-16T18:58:38Z ===
+=== restoring control 2026-09-16T18:58:38Z ===
+vram_used_after_stop 0 MiB

@@ -13,9 +13,11 @@ no committed KV: ``req.kv is None``) — frees their mamba slot and ping-pong
 buffer, returns the request slot, drops the prefix lock taken by the
 ``PrefillAdder`` — sends each an ``AbortReq`` with HTTP 503, clears
 ``self.chunked_req`` if it was one of them, and returns "no prefill batch"
-so the scheduler keeps serving. A batch containing a request with already
-committed KV (a continuing chunked prefill) is not rolled back in this
-version: the original exception is re-raised.
+so the scheduler keeps serving. A request with already committed KV (a
+continuing chunked prefill — the common case, since chunk allocation is
+where physical pressure surfaces) is released through
+``release_kv_cache(req, tree_cache, is_insert=False)``, the path the
+scheduler already uses to abort queued requests that hold KV.
 
 Env: ``SGLANG_PREFILL_ALLOC_ABORT`` (default ``0`` = original behaviour).
 
@@ -42,19 +44,21 @@ NEW = '''        try:
             # R2 (prefill_alloc_abort): fail the request(s), not the server.
             if not _PREFILL_ALLOC_ABORT or "out of memory" not in str(_alloc_ex):
                 raise
-            if any(r.kv is not None for r in can_run_list):
-                logger.error("prefill allocation failed with committed KV in the batch; not recoverable here: %s", _alloc_ex)
-                raise
             logger.error("prefill allocation failed; aborting %d request(s) instead of exiting: %s",
                          len(can_run_list), str(_alloc_ex).splitlines()[0])
             for _req in can_run_list:
                 try:
-                    if _req.mamba_pool_idx is not None and _req.req_pool_idx is not None:
-                        self.req_to_token_pool.free_mamba_cache(_req)
-                    if _req.req_pool_idx is not None:
-                        self.req_to_token_pool.free(_req)
-                    if getattr(_req, "last_node", None) is not None:
-                        self.tree_cache.dec_lock_ref(_req.last_node)
+                    if _req.kv is not None:
+                        # continuing chunked prefill with committed KV: release through the
+                        # same path used to abort a queued request that already holds KV
+                        release_kv_cache(_req, self.tree_cache, is_insert=False)
+                    else:
+                        if _req.mamba_pool_idx is not None and _req.req_pool_idx is not None:
+                            self.req_to_token_pool.free_mamba_cache(_req)
+                        if _req.req_pool_idx is not None:
+                            self.req_to_token_pool.free(_req)
+                        if getattr(_req, "last_node", None) is not None:
+                            self.tree_cache.dec_lock_ref(_req.last_node)
                 except Exception as _rb:
                     logger.error("rollback failed for %s: %s", _req.rid, _rb)
                 _reason = FINISH_ABORT(

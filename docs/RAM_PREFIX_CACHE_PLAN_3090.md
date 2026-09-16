@@ -222,7 +222,7 @@ request. Host spill must not create an unbounded queue while the user is idle.
 | RC2 | PARKED | Implement quantized KV/QSA and recurrent/PLE host round trip | Only needed for forks/interleaved sessions (out of target workload) |
 | RC3 | PARKED | Integrate RAM entries, restore, eviction and physical-memory accounting | As RC2; if ever resumed, must first fix the RC1-d crash modes: allocator must evict on physical pressure and lazy backing must be reclaimable |
 | RC4′ | DONE | Linear-session benchmark on the 4-slot profile vs the frozen no-cache control | [RC4′ report](logs/rc4_linear_3090_2026-09-16.md): warm TTFT 0.5–1.0 s at 35K–249K vs 15–114 s cold; TG 34–36 vs 30–32 tok/s (replicate); 12-turn trace 24.1 s vs 123.7 s; 70/70 hits to 247K; new session after a near-limit one 20/20; recommendation: promote for the single-consumer linear workload with RB scheduled |
-| RB | PLANNED | Robustness: fail requests, not the server, under physical VRAM pressure (R1–R5 below) | The retained 16-slot churn logs (`rc1 chunk_arms/c2048`, `c3072`) replay as misses/aborts with the server alive; no regression on the RC4′ linear trace |
+| RB | R1+R3 VALIDATED | Robustness: fail requests, not the server, under physical VRAM pressure (R1–R5 below) | [RB report](logs/rb_robustness_3090_2026-09-16.md): the 16-slot chunk-2048 churn that crashed the server replays with 38 evict-and-retry events and 0 errors; R2 implemented but unexercised; flags still off in the promoted launcher pending a no-regression run |
 
 ## Robustness stage (RB): R1–R5
 
@@ -265,8 +265,19 @@ Investigation note for R3: the existing `lazy_ensure` watermark
 (`SGLANG_KV_LAZY_HEADROOM_MB`, default 1536) is skipped by its own 30 s
 rate limit once the expert cache sits at its floor — that is why the 3072
 arm committed at 0.03 GB free; R3 re-checks the half-headroom refusal
-outside the rate limit. R2 v1 rolls back only batches whose requests have
-no committed KV; a continuing chunked prefill still re-raises.
+outside the rate limit.
+
+First validation attempt (16 slots, chunk 2048, flags on,
+`raw/rb_3090_2026-09-16/r123_slots16_c2048/`) failed on the first request
+and taught two things, both fixed before the second attempt: (a) R3's
+half-headroom threshold (768 MB) is above this box's normal ~750 MB idle
+free at 16 slots, so it refused the very first commit — R3 now uses an
+absolute floor `SGLANG_KV_LAZY_MIN_FREE_MB` (default 256); (b) the failure
+landed on a *continuing 2048-token chunk* of a 10K prompt, i.e. a request
+with committed KV, which R2 v1 deliberately did not roll back — R2 v2 now
+releases such requests through `release_kv_cache(..., is_insert=False)`.
+R1 correctly did nothing there (empty tree). Serving diff after the rework:
+`b8b80a1a...`.
 
 Order: R1 → R2 → R3, each validated against the retained crash logs as
 regression cases and against the RC4′ linear trace for no-regression. R4 only

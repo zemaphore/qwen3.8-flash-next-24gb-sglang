@@ -1,0 +1,353 @@
+{
+  "pool_tokens": 262144,
+  "a_prompt_tokens": 6597,
+  "expected_full_hit": 6592,
+  "a0_cold": {
+    "cached_tokens": 0,
+    "wall_s": 5.009,
+    "text": "Tool result 2 for evict-6aaae525: tests"
+  },
+  "short_fillers": [
+    {
+      "prompt_tokens": 730,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 730,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 730,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 730,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 730,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 730,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 730,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 730,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 730,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 730,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 736,
+      "cached": 0
+    },
+    {
+      "prompt_tokens": 736,
+      "cached": 0
+    }
+  ],
+  "a1_after_mamba_pressure": {
+    "cached_tokens": 6592,
+    "wall_s": 0.574,
+    "vs_a0": {
+      "ids_match": true,
+      "first_divergence": null,
+      "max_abs_dlogprob_matched_prefix": 0.53177,
+      "compared": 16
+    },
+    "text_eq_a0": true
+  },
+  "kv_fillers": [
+    {
+      "prompt_tokens": 6553,
+      "cached": 0,
+      "wall_s": 4.944
+    },
+    {
+      "prompt_tokens": 6553,
+      "cached": 0,
+      "wall_s": 4.651
+    },
+    {
+      "prompt_tokens": 6553,
+      "cached": 0,
+      "wall_s": 4.697
+    },
+    {
+      "prompt_tokens": 6553,
+      "cached": 0,
+      "wall_s": 4.957
+    },
+    {
+      "prompt_tokens": 6553,
+      "cached": 0,
+      "wall_s": 4.909
+    },
+    {
+      "prompt_tokens": 6553,
+      "cached": 0,
+      "wall_s": 4.702
+    },
+    {
+      "prompt_tokens": 6553,
+      "cached": 0,
+      "wall_s": 4.689
+    },
+    {
+      "prompt_tokens": 6553,
+      "cached": 0,
+      "wall_s": 4.528
+    },
+    {
+      "prompt_tokens": 6553,
+      "cached": 0,
+      "wall_s": 4.8
+    },
+    {
+      "prompt_tokens": 6553,
+      "cached": 0,
+      "wall_s": 4.488
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.67
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 5.0
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 5.02
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 5.256
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.717
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.812
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 5.105
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.902
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.691
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 5.017
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 5.043
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.685
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.776
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 5.035
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.924
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.821
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.985
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 5.148
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.657
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.77
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 5.072
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.908
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.721
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.911
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.967
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.606
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.759
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.841
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 5.032
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.753
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.842
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.729
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.907
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.807
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 5.27
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.937
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.928
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.91
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 5.274
+    },
+    {
+      "prompt_tokens": 6674,
+      "cached": 0,
+      "wall_s": 4.85
+    }
+  ],
+  "kv_filler_tokens": 333290,
+  "free_vram_mib_after_fill": 138,
+  "a2_after_kv_pressure": {
+    "cached_tokens": 0,
+    "wall_s": 4.899,
+    "vs_a0": {
+      "ids_match": true,
+      "first_divergence": null,
+      "max_abs_dlogprob_matched_prefix": 0.20812,
+      "compared": 16
+    },
+    "text_eq_a0": true
+  },
+  "a3_rehit": {
+    "cached_tokens": 6592,
+    "wall_s": 0.541,
+    "vs_a0": {
+      "ids_match": true,
+      "first_divergence": null,
+      "max_abs_dlogprob_matched_prefix": 0.16426,
+      "compared": 16
+    },
+    "vs_a2": {
+      "ids_match": true,
+      "first_divergence": null,
+      "max_abs_dlogprob_matched_prefix": 0.04386,
+      "compared": 16
+    },
+    "text_eq_a2": true
+  }
+}
