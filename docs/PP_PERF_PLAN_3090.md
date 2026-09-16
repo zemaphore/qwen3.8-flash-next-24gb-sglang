@@ -23,7 +23,11 @@ not retained, so PP5c reran the bracket with raw capture and held-out code.
 PP5c measured presence **1247.2 +/- 26.6** versus pooled mass **1185.9 +/- 17.1
 tok/s (+5.17%)** on the canonical corpus, with held-out code at **-0.91%** and
 **+1.47%** (both non-material) and identical oracles. Presence is therefore the
-general launcher default, and routing mass remains explicitly selectable.
+general launcher default, and routing mass remains explicitly selectable. PP8
+then measured the shared-expert format path at ~44 ms/prompt (~1.2% of wall) and
+rejected it; that profile also corrected PP6's CPU-bound reading by showing the
+accepted post-PP11 stack is ~88% GPU-engine-active, leaving the tail-chunk fixed
+staging cost and the large PLE/linear-attention GEMMs as the remaining levers.
 
 The PLE work now has a bounded policy that covers both measured regimes:
 
@@ -125,7 +129,7 @@ must never be silently mixed into an exact A/B.
 | PP5c | **DONE** | Captured PP5b rerun plus held-out code | Establish auditability and determine whether presence placement generalizes beyond its training prompt | Three fresh-server captured arms via `tools/capture_pp5b_arm.py`; canonical presence 1247.2 +/- 26.6 vs pooled mass 1185.9 +/- 17.1 tok/s (**+5.17%**, t=4.68); held-out code -0.91% and +1.47% (non-material); oracles exact and error-free; presence promoted to the launcher default |
 | PP6 | REJECTED | RTX 3090 GDN pipeline tuning/fusion | 36 Triton GDN layers contain more untuned PP time than fused MoE | Profiled: GDN is 40.2 ms of a 1,773 ms chunk (2.3%) versus 238.0 ms fused MoE; 5% gate unreachable |
 | PP7 | **DONE** | Hybrid cold-expert execution | Full-row transfer is wasteful for experts assigned few tokens | Low-token direct GEMV rejected (SM host reads ~7.5-10 GB/s either way); the host-row DMA staging form is bit-exact and +74.8% warmed PP |
-| PP8 | RESEARCH | Dense/shared-expert format sweep | Ampere may prefer BF16 cuBLAS or W8A8 over W8A16 Marlin at M=1024 | Memory-neutral enough to retain S; quality gate if W8A8 |
+| PP8 | **REJECTED** | Dense/shared-expert format sweep | Ampere may prefer BF16 cuBLAS or W8A8 over W8A16 Marlin at M=1024 | Measured on real tensors: shared-expert GEMMs are ~44 ms/prompt (~1.2% of wall) and the best hybrid (Marlin gate/up + BF16 down) saves 0.16%, so the 5% gate is unreachable; the 172 ms/chunk Marlin is the other PLE/linear-attention GEMMs |
 | PP9 | RESEARCH | Fused QSA score/mask/top-k | Avoid full FP32 logits materialization at long prefixes | Prioritize only after 4.5k code PP work |
 | PP10 | RESEARCH | Host/PCIe operational audit | Link downgrade, IOMMU, VM scheduling, or CPU affinity may cap transfers | Narrowed: 23 GB/s H2D confirmed (Gen4 x16); remaining item is whether a PCIe or memory topology change unlocks more, and the decode GEMV's 10 GB/s SM host reads |
 | PP11 | **DONE** | Batched host-row DMA submission | Replace ~50k Python/Tensor row-copy submissions per chunk with four CUDA batch calls while resident gathers overlap on the current stream | Exact; 1183.4 vs 1110.9 pooled control, +6.53%; default on |
@@ -342,6 +346,32 @@ raw arms [mass-a](logs/raw/pp5c_3090_2026-09-15/mass-a/),
 [mass-c](logs/raw/pp5c_3090_2026-09-15/mass-c/) (see also the
 [raw-evidence checkpoint](logs/raw/pp5c_3090_2026-09-15/README.md)).
 
+## PP8 — shared-expert format sweep (closed)
+
+Rejected on a measured ceiling, without an A/B. The shared expert is INT8
+(`*shared_expert.` bits 8) and runs as a separate `Qwen2MoeMLP` through W8A16
+GPTQ-Marlin (CUDA shared-expert fusion is off for this model). A fresh profile
+of the accepted PP5c stack plus a model-free sweep on the real layer-0 tensors
+(`tools/pp8_shared_expert_format_bench.py`, production Marlin packing validated
+to 2.1-2.6e-3 relative error) showed:
+
+- The accepted stack is now ~88% GPU-engine-active (SM ~44%, DMA ~45%, largely
+  serialized), not the CPU-bound 37% SM-busy PP6 measured; Marlin is ~179
+  ms/chunk = ~12% of wall.
+- Gate/up prefer Marlin (~1.6x BF16, ~1.3x W8A8); down_proj prefers BF16
+  (~1.2-1.3x Marlin); at the 469-token tail BF16 wins all three. W8A8 is worst
+  and is unsupported by `torch._int_mm` at the odd tail M.
+- The shared-expert GEMMs total **44.3 ms/prompt**; the best format hybrid
+  saves **5.9 ms = 0.16%**, and even a free shared expert is only ~1.2% of the
+  ~3.8 s prompt. The 5% gate is unreachable.
+
+The ~172 ms/chunk of Marlin is therefore the PLE and linear-attention `in_proj`
+GEMMs, not the shared expert. PP8 does not target those; a future format sweep
+there is a separate, unrequested item.
+
+Evidence: [PP8 shared-expert format](logs/pp8_shared_expert_format_3090_2026-09-15.md);
+raw artifact dir [pp8_3090_2026-09-15](logs/raw/pp8_3090_2026-09-15/).
+
 ## PP7 — hybrid cold-expert execution
 
 Completed in two halves.  The planned low-token direct-GEMV variant was
@@ -444,8 +474,9 @@ Evidence: [PP11 batched host-row DMA](logs/pp11_dma_batch_3090_2026-09-15.md).
 
 ## Later research
 
-- Benchmark shared-expert W8A16 Marlin against selectively materialized BF16.
-  Only then consider calibrated W8A8.
+- Shared-expert format sweep: rejected in PP8 (measured ceiling ~1.2% of wall).
+  A format sweep for the larger PLE/linear-attention Marlin GEMMs is a separate
+  item.
 - At long prefixes, profile QSA's full FP32 score tensor and consider fusing
   score, mask, and hierarchical top-k.  The previously rejected paged-prefix KV
   kernel should not be repeated unchanged.
@@ -485,9 +516,10 @@ Evidence: [PP11 batched host-row DMA](logs/pp11_dma_batch_3090_2026-09-15.md).
 
 5. PP11 and PP5c are accepted; the launcher default is PP5c prefill-presence
    placement (`assets/expert_presence_code.pt`), selectable back to routing mass
-   with `SGLANG_MOE_PLACEMENT`. PP5b remains the canonical-only result. The
-   remaining defined experiments are the research items PP8, PP9, PP10 and the
-   later-research list; start one only when the owner continues the PP campaign.
+   with `SGLANG_MOE_PLACEMENT`. PP5b remains the canonical-only result. PP8 was
+   rejected on a measured ceiling. The remaining defined experiments are the
+   research items PP9, PP10 and the later-research list; start one only when the
+   owner continues the PP campaign.
 6. After every experiment, update the status table, append a dated result under
    the relevant section, and link the raw log/artifact.
 

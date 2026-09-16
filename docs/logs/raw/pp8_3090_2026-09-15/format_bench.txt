@@ -1,0 +1,16 @@
+device: NVIDIA GeForce RTX 3090
+  [gate_proj] N=640 K=2560 probe_rel_err=2.6313e-03
+  [gate_proj] M=469 w8a8 unsupported: CUDA error: CUBLAS_STATUS_NOT_SUPPORTED when calling cublasLtMatmul wi
+  [gate_proj] M=  469  marlin=    55.8us (  27.5 TF)  bf16=    29.6us (  52.0 TF)  w8a8=     nanus (   nan TF)
+  [gate_proj] M= 1024  marlin=    63.0us (  53.3 TF)  bf16=   101.7us (  33.0 TF)  w8a8=    83.2us (  40.3 TF)
+  [gate_proj] M= 2048  marlin=   124.7us (  53.8 TF)  bf16=   198.7us (  33.8 TF)  w8a8=   154.3us (  43.5 TF)
+  [up_proj] N=640 K=2560 probe_rel_err=2.6095e-03
+  [up_proj] M=469 w8a8 unsupported: CUDA error: CUBLAS_STATUS_NOT_SUPPORTED when calling cublasLtMatmul wi
+  [up_proj] M=  469  marlin=    55.6us (  27.6 TF)  bf16=    29.5us (  52.1 TF)  w8a8=     nanus (   nan TF)
+  [up_proj] M= 1024  marlin=    62.8us (  53.5 TF)  bf16=   101.4us (  33.1 TF)  w8a8=    83.2us (  40.3 TF)
+  [up_proj] M= 2048  marlin=   124.5us (  53.9 TF)  bf16=   198.6us (  33.8 TF)  w8a8=   154.2us (  43.5 TF)
+  [down_proj] N=2560 K=640 probe_rel_err=2.1353e-03
+  [down_proj] M=469 w8a8 unsupported: CUDA error: CUBLAS_STATUS_NOT_SUPPORTED when calling cublasLtMatmul wi
+  [down_proj] M=  469  marlin=    46.9us (  32.8 TF)  bf16=    30.3us (  50.8 TF)  w8a8=     nanus (   nan TF)
+  [down_proj] M= 1024  marlin=    66.9us (  50.1 TF)  bf16=    56.5us (  59.4 TF)  w8a8=   127.1us (  26.4 TF)
+  [down_proj] M= 2048  marlin=   133.3us (  50.3 TF)  bf16=   105.8us (  63.4 TF)  w8a8=   232.1us (  28.9 TF)

@@ -1,0 +1,3 @@
+span 0: wall= 1507.0  gpu_union= 1326.4 (88.0%)  sm=  650.8 (43.2%)  dma=  686.6 (45.6%)  marlin= 178.7 (11.9%)  step[EXTEND bs=1 toks=2048]
+span 1: wall= 1527.4  gpu_union= 1348.0 (88.3%)  sm=  678.5 (44.4%)  dma=  680.5 (44.6%)  marlin= 178.9 (11.7%)  step[EXTEND bs=1 toks=2048]
+span 2: wall=  758.7  gpu_union=  626.6 (82.6%)  sm=  225.1 (29.7%)  dma=  416.0 (54.8%)  marlin=  46.3 ( 6.1%)  step[EXTEND bs=1 toks=469]
