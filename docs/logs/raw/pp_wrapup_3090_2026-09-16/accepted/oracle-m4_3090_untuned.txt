@@ -1,0 +1,6 @@
+  prompt 0: max |dlogprob| 0.0000   mean 0.00000   over 150 forced tokens
+  prompt 1: max |dlogprob| 0.0000   mean 0.00000   over 150 forced tokens
+  prompt 2: max |dlogprob| 0.0000   mean 0.00000   over 150 forced tokens
+
+  MAX 0.0000  MEAN 0.00000
+  LOGPROB_MAX=0.000000 LOGPROB_MEAN=0.000000

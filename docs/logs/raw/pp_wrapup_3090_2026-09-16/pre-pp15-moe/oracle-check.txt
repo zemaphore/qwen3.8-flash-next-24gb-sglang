@@ -1,0 +1,5 @@
+  comparison accepted-run1 vs fresh run
+    canonical      prompt=  4565  max |dlogprob| 1.410457  mean 0.045531  over 150 forced tokens
+    long-2chunk    prompt= 11196  max |dlogprob| 0.482621  mean 0.043278  over 150 forced tokens
+    long-4chunk    prompt= 20496  max |dlogprob| 0.730201  mean 0.049191  over 150 forced tokens
+    OVERALL        max 1.410457  mean 0.046000

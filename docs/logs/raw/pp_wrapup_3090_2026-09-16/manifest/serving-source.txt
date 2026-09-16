@@ -1,0 +1,33 @@
+== sglang serving source diff hash ==
+05f91d4240fa0baee01c851c20de3c5a6204b53fc032326f381749f3c01cc0cf  -
+== untracked serving files sha256 ==
+29c00e3952a0a612d721b19ff8ec5e1f318a37130b89c876b5dceda5a563a798  /root/sglang/python/sglang/srt/layers/moe/expert_elastic.py
+f0850a1a68bed84d07e3458ad5e7296f5277586e632486d95c970d27635cc694  /root/sglang/python/sglang/srt/layers/moe/expert_gemv.py
+45fad94baea708d6daae3b318addae6bde943dae7aa8b131d78e07df80130eb5  /root/sglang/python/sglang/srt/layers/moe/expert_stream.py
+8cdc740392d3d208d97e3f83edecbb268169b95b04ddbd371a1be4ed661ca52b  /root/sglang/python/sglang/srt/layers/moe/row_arena.py
+adec73d971050853c81ef49cb0676f57f02693742258f2afc2c35ec5e1b09c57  /root/sglang/python/sglang/srt/mem_cache/int4_kv_pool.py
+83649aa071b1e9a125151bf406deea11676a3ce228e66bf1aaca4630ed1e93a4  /root/sglang/python/sglang/srt/mem_cache/int8_kv_pool.py
+cf0c96eddb3ef635764596d84369b61f190618673b3022cd6202003a9cd7a6d9  /root/sglang/python/sglang/srt/mem_cache/tiered_kv_pool.py
+
+== patch check states ==
+ple_bulk_pread                     APPLIED  srt/models/qwen4_exp.py: bulk PLE pread
+ple_recent_row_cache               APPLIED  srt/models/qwen4_exp.py: recent PLE row cache
+moe_gather_block                   APPLIED  srt/layers/moe/expert_stream.py: configurable gather tile
+moe_eager_shared_overlap           APPLIED  srt/models/qwen2_moe.py: eager shared/router overlap
+moe_host_dma_gather                APPLIED  python/sglang/srt/layers/moe/expert_elastic.py: layer._placed = {"addr": addr, "proto": proto, "E": E, "S": 
+moe_host_dma_batch                 APPLIED  python/sglang/srt/layers/moe/expert_elastic.py:         st.layer._placed["S"] = S_new
+moe_cross_layer_prefetch           APPLIED  python/sglang/srt/layers/quantization/moe_wna16.py:         return self.runner.run(dispatch_output, quant_info)
+moe_prefetch_full_table            APPLIED  python/sglang/srt/layers/moe/expert_stream.py:         if use_batch:
+moe_first_layer_prefetch           APPLIED  python/sglang/srt/models/qwen4_exp.py: from sglang.srt.layers.moe import get_moe_a2a_backend, shoul
+qsa_prefill_host_lens              APPLIED  python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py:             block_topk=self.token_to_kv_pool.qsa_block_topk,
+prefill_route_dump                 APPLIED  srt/layers/quantization/moe_wna16.py: prefill route dump
+moe_config_buckets                 1 APPLIED  srt/layers/moe/moe_runner/triton_utils/fused_moe_triton_config.py
+
+== launcher hash ==
+11013fb6bd3959164b17aa769579deb25c5cd82f2f810bda88f2f44ef02c99cd  /root/quant/serve-3090.sh
+
+== assets hashes ==
+73d8f0df1875f6b61124b4835173dccf56d57792fa91bee8d270fc65b42ddfd8  assets/expert_presence_code.pt
+96697b3c5e4f847f42c4321b440b44a26da552e97a58fe9672549bb3ef5052cf  assets/expert_freq.pt
+a68795d2686aae380109e0be156c0b185cff582b480d0f3df90ec25bad23f8f4  assets/moe_configs/configs/triton_3_7_1/E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16.json
+ce0a1b3689aba627f327f118cb262ec6e5bff4031d51a5fbf5a120c9edf24ea0  assets/moe_configs/configs/triton_3_7_1/E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json

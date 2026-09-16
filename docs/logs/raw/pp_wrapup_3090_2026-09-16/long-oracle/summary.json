@@ -1,0 +1,163 @@
+{
+  "tool": "tools/long_logprob_oracle.py",
+  "continuation": "tools/greedy/oa.json[2][:150]",
+  "prompts": {
+    "canonical": {
+      "prompt_tokens": 4565,
+      "server_prompt_tokens": 4565,
+      "forced_tokens": 150,
+      "continuation_tokens": 150
+    },
+    "long-2chunk": {
+      "prompt_tokens": 11196,
+      "server_prompt_tokens": 11196,
+      "forced_tokens": 150,
+      "continuation_tokens": 150
+    },
+    "long-4chunk": {
+      "prompt_tokens": 20496,
+      "server_prompt_tokens": 20496,
+      "forced_tokens": 150,
+      "continuation_tokens": 150
+    }
+  },
+  "comparisons": {
+    "accepted-run1_vs_accepted-run2": {
+      "canonical": {
+        "max": 0.8274965286254883,
+        "mean": 0.040284417184984704,
+        "max_index": 5,
+        "logprob_range": [
+          -11.029443740844727,
+          -7.867782187531702e-06
+        ]
+      },
+      "long-2chunk": {
+        "max": 0.7161440849304199,
+        "mean": 0.04750137417663382,
+        "max_index": 6,
+        "logprob_range": [
+          -7.914640426635742,
+          0.0
+        ]
+      },
+      "long-4chunk": {
+        "max": 0.9692642688751221,
+        "mean": 0.05938810965772632,
+        "max_index": 6,
+        "logprob_range": [
+          -6.8980512619018555,
+          -2.3841855067985307e-07
+        ]
+      },
+      "_overall": {
+        "max": 0.9692642688751221,
+        "mean": 0.04905796700644829
+      }
+    },
+    "accepted-run1_vs_accepted-run3": {
+      "canonical": {
+        "max": 0.8118476867675781,
+        "mean": 0.04054543511872301,
+        "max_index": 6,
+        "logprob_range": [
+          -11.029443740844727,
+          -7.867782187531702e-06
+        ]
+      },
+      "long-2chunk": {
+        "max": 1.374281406402588,
+        "mean": 0.05464818069406491,
+        "max_index": 6,
+        "logprob_range": [
+          -7.914640426635742,
+          0.0
+        ]
+      },
+      "long-4chunk": {
+        "max": 1.7807707786560059,
+        "mean": 0.055106062138231285,
+        "max_index": 5,
+        "logprob_range": [
+          -6.8980512619018555,
+          -2.3841855067985307e-07
+        ]
+      },
+      "_overall": {
+        "max": 1.7807707786560059,
+        "mean": 0.050099892650339733
+      }
+    },
+    "accepted-run1_vs_prefetch-off-run1": {
+      "canonical": {
+        "max": 0.9798803329467773,
+        "mean": 0.0419976560007611,
+        "max_index": 6,
+        "logprob_range": [
+          -11.029443740844727,
+          -7.867782187531702e-06
+        ]
+      },
+      "long-2chunk": {
+        "max": 2.7973108291625977,
+        "mean": 0.05890496695018399,
+        "max_index": 6,
+        "logprob_range": [
+          -7.914640426635742,
+          0.0
+        ]
+      },
+      "long-4chunk": {
+        "max": 0.84604811668396,
+        "mean": 0.049163043678186684,
+        "max_index": 6,
+        "logprob_range": [
+          -6.8980512619018555,
+          -2.3841855067985307e-07
+        ]
+      },
+      "_overall": {
+        "max": 2.7973108291625977,
+        "mean": 0.05002188887637726
+      }
+    },
+    "accepted-run1_vs_prefetch-off-run2": {
+      "canonical": {
+        "max": 0.8894662857055664,
+        "mean": 0.04625372212006672,
+        "max_index": 6,
+        "logprob_range": [
+          -11.029443740844727,
+          -7.867782187531702e-06
+        ]
+      },
+      "long-2chunk": {
+        "max": 0.7590980529785156,
+        "mean": 0.04764017990142136,
+        "max_index": 6,
+        "logprob_range": [
+          -7.914640426635742,
+          0.0
+        ]
+      },
+      "long-4chunk": {
+        "max": 0.9574289321899414,
+        "mean": 0.05399634134100462,
+        "max_index": 0,
+        "logprob_range": [
+          -6.8980512619018555,
+          -2.3841855067985307e-07
+        ]
+      },
+      "_overall": {
+        "max": 0.9574289321899414,
+        "mean": 0.04929674778749756
+      }
+    }
+  },
+  "pre_pp15_moe": {
+    "source": "pre-pp15-moe/oracle-check.txt",
+    "note": "raw check text retained; JSON not retained"
+  },
+  "interpretation": "Repeat runs on one unchanged accepted server already differ by max ~1.8 at the first few forced tokens (very unlikely suffix tokens, logprob -6..-8); per-prompt means are ~0.04-0.06. The pre-PP15 MoE config and prefetch-off deltas fall inside that envelope, so the changed paths are numerically equivalent within observed run-to-run variability, not bit-exact."
+}

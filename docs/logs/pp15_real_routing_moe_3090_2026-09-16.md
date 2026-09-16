@@ -152,8 +152,9 @@ falling back automatically when the host copy is absent. It is exact
 move end-to-end PP: a 10-sample arm measured 2704.9 +/- 15.7 versus M64-only
 2679.8 +/- 23.5 (t~2.5), yet pooling every QSA sample (22 -> 2685.1) against
 every M64-only sample (21 -> 2687.0) shows no effect. The sync was already
-hidden behind queued GPU work, consistent with the span's 91.5% GPU-compute
-occupancy. Kept opt-in for audit; the remaining QSA cost would need a genuine
+hidden behind queued GPU work, consistent with the span's 91.5% GPU-compute time
+coverage (a GPU engine active for 91.5% of the span, not 91.5% hardware
+efficiency). Kept opt-in for audit; the remaining QSA cost would need a genuine
 sparse-kernel change, which was not attempted.
 
 The largest remaining compute blocks after fused MoE (536.0 ms) and this are
@@ -168,3 +169,15 @@ only for the two capture servers and the feature is off by default. The raw
 routing captures are in
 [route_dump](raw/pp15_prefill_retune_3090_2026-09-16/route_dump/). No OOM,
 retraction, CUDA fault or request failure occurred in any accepted-stack run.
+
+## Wrap-up addendum (2026-09-16)
+
+The campaign closed after a long-prompt validation pass. The M=4565 config is
+equivalent to the pre-PP15 configs within the fixed-server run-to-run envelope
+on 4,565/11,196/20,496-token prompts (max |dlogprob| 1.410 vs envelope 1.781),
+and the PP14 prefetch on/off delta also sits inside that envelope. Neither is
+bit-exact. Final accepted capture: canonical 2666.8 +/- 12.5 tok/s (n=5),
+held-out 2590.0 +/- 6.9 / 2581.3 +/- 13.6, depth sweep to 257,456 tokens. The
+full-table gather, first-layer prefetch, and QSA host-lens patches show no
+demonstrated material benefit and stay default-off. See
+[the wrap-up result](pp_wrapup_3090_2026-09-16.md).

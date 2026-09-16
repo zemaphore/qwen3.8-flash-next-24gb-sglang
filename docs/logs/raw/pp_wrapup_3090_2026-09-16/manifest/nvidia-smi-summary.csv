@@ -1,0 +1,2 @@
+timestamp, name, driver_version, pstate, clocks.current.sm [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], power.default_limit [W], temperature.gpu, memory.total [MiB], memory.used [MiB], memory.free [MiB], utilization.gpu [%]
+2026/09/16 12:19:19.734, NVIDIA GeForce RTX 3090, 580.178.04, P8, 210 MHz, 405 MHz, 24.50 W, 280.00 W, 350.00 W, 64, 24576 MiB, 21933 MiB, 2192 MiB, 0 %

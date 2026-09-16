@@ -1,0 +1,28 @@
+# Accepted-stack path-activation evidence
+server log: /root/quant/logs/server-wrapup-accepted.log
+captured: 2026-09-16T12:19:11Z
+
+== PP14 cross-layer cold-row prefetch ==
+[2026-09-16 12:03:43] MoE cold-prefetch cache w13_qweight: (512, 160, 1280), 419 MB
+[2026-09-16 12:03:43] MoE cross-layer cold-row prefetch active at >=2048 tokens
+[2026-09-16 12:03:43] MoE cold-prefetch cache w2_qweight: (512, 40, 2560), 210 MB
+[2026-09-16 12:03:43] MoE cold-prefetch cache w13_scales: (512, 20, 1280), 26 MB
+[2026-09-16 12:03:43] MoE cold-prefetch cache w2_scales: (512, 5, 2560), 13 MB
+
+== PP15 nearest-E MoE config selection (canonical 4565-token extend) ==
+[2026-09-16 12:03:43] Using nearest MoE expert-count config E=432 for requested E=486 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16.json.
+[2026-09-16 12:03:43] Using nearest MoE expert-count config E=432 for requested E=486 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json.
+[2026-09-16 12:03:44] Using nearest MoE expert-count config E=432 for requested E=494 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16.json.
+[2026-09-16 12:03:44] Using nearest MoE expert-count config E=432 for requested E=494 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json.
+...
+count of E=432 selections: 5628
+
+== MoE config file keys (accepted vs pre-PP15) ==
+accepted: E=384, keys=[128, 512, 1024, 4565]
+accepted: E=432, keys=[128, 512, 1024, 4565]
+pre-pp15: E=384, keys=[128, 512, 1024]
+pre-pp15: E=432, keys=[128, 512, 1024]
+
+== config-selection rule (source) ==
+348:            config = configs[min(configs.keys(), key=lambda x: abs(x - M))]
+M=4565/4608 -> nearest key 4565; M=2784 tail -> nearest key 1024

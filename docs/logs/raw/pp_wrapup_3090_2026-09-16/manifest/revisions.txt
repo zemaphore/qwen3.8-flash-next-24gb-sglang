@@ -1,0 +1,46 @@
+== repo ==
+branch=pp-perf-3090
+head=a50c32a3b802fd125f5e3577340687864853dd00
+?? docs/logs/raw/pp_wrapup_3090_2026-09-16/
+?? tools/depth_sweep.py
+?? tools/logprob_long/
+?? tools/long_logprob_oracle.py
+
+== sglang serving source (/root/sglang) ==
+73a255206f916366c8d26d4022f82ddfb0ab558d
+ M python/sglang/kernels/ops/moe/fused_moe_triton_kernels.py
+ M python/sglang/srt/configs/qwen4_exp.py
+ M python/sglang/srt/layers/attention/linear/gdn_backend.py
+ M python/sglang/srt/layers/attention/qsa/metadata.py
+ M python/sglang/srt/layers/attention/qsa/qsa_indexer.py
+ M python/sglang/srt/layers/attention/qsa/sparse_attn.py
+ M python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py
+ M python/sglang/srt/layers/layernorm.py
+ M python/sglang/srt/layers/moe/moe_runner/triton.py
+ M python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe.py
+ M python/sglang/srt/layers/moe/moe_runner/triton_utils/fused_moe_triton_config.py
+ M python/sglang/srt/layers/quantization/moe_wna16.py
+ M python/sglang/srt/layers/radix_linear_attention.py
+ M python/sglang/srt/mem_cache/allocator/paged.py
+ M python/sglang/srt/mem_cache/allocator/token.py
+ M python/sglang/srt/mem_cache/kv_cache_configurator.py
+ M python/sglang/srt/mem_cache/kv_cache_dtype.py
+ M python/sglang/srt/mem_cache/kv_vmm_backing.py
+ M python/sglang/srt/mem_cache/memory_pool.py
+ M python/sglang/srt/model_executor/pool_configurator.py
+ M python/sglang/srt/model_executor/runner_backend/breakable_cuda_graph_backend.py
+ M python/sglang/srt/models/qwen2_moe.py
+ M python/sglang/srt/models/qwen3_5.py
+ M python/sglang/srt/models/qwen4_exp.py
+ M python/sglang/srt/server_args.py
+ M python/sglang/srt/speculative/ngram_worker.py
+ M python/sglang/srt/speculative/spec_utils.py
+ M python/sglang/srt/utils/offloader.py
+ M test/manual/test_triton_moe_wna16.py
+?? python/sglang/srt/layers/moe/expert_elastic.py
+?? python/sglang/srt/layers/moe/expert_gemv.py
+?? python/sglang/srt/layers/moe/expert_stream.py
+?? python/sglang/srt/layers/moe/row_arena.py
+?? python/sglang/srt/mem_cache/int4_kv_pool.py
+?? python/sglang/srt/mem_cache/int8_kv_pool.py
+?? python/sglang/srt/mem_cache/tiered_kv_pool.py

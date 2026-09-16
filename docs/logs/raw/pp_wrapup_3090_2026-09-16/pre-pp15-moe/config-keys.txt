@@ -1,0 +1,3 @@
+--- pre-pp15 config keys used ---
+E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16.json [128, 512, 1024]
+E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json [128, 512, 1024]
