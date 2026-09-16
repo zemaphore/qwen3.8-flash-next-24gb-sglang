@@ -1,0 +1,52 @@
+{
+  "rows": [
+    {
+      "target_depth": 32000,
+      "prime": null,
+      "run": {
+        "prompt_tokens": 35550,
+        "cached_tokens": 0,
+        "completion_tokens": 256,
+        "wall_s": 22.652,
+        "ttft_s": 14.664,
+        "tg_tok_s": 31.92,
+        "itl_median_ms": 31.2,
+        "itl_p95_ms": 38.21,
+        "chunks": 256
+      },
+      "free_vram_mib": 1654
+    },
+    {
+      "target_depth": 128000,
+      "prime": null,
+      "run": {
+        "prompt_tokens": 131100,
+        "cached_tokens": 0,
+        "completion_tokens": 256,
+        "wall_s": 64.556,
+        "ttft_s": 56.343,
+        "tg_tok_s": 31.05,
+        "itl_median_ms": 32.01,
+        "itl_p95_ms": 39.17,
+        "chunks": 256
+      },
+      "free_vram_mib": 986
+    },
+    {
+      "target_depth": 240000,
+      "prime": null,
+      "run": {
+        "prompt_tokens": 248700,
+        "cached_tokens": 0,
+        "completion_tokens": 256,
+        "wall_s": 122.279,
+        "ttft_s": 113.681,
+        "tg_tok_s": 29.66,
+        "itl_median_ms": 33.79,
+        "itl_p95_ms": 39.07,
+        "chunks": 256
+      },
+      "free_vram_mib": 938
+    }
+  ]
+}

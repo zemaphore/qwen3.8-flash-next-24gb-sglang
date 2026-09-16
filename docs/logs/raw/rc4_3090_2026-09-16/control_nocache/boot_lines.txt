@@ -1,0 +1,4 @@
+[2026-09-16 18:13:23] Mamba Cache is allocated. max_mamba_cache_size: 1, conv_state size: 0.00GB, ssm_state size: 0.21GB 
+[2026-09-16 18:13:24] Memory pool end. avail mem=4.64 GB
+[2026-09-16 18:13:26] max_total_num_tokens=262144, chunked_prefill_size=4608, max_prefill_tokens=32768, max_running_requests=1, context_len=262144, available_gpu_mem=4.54 GB
+[2026-09-16 18:13:26] Tree cache initialized: source=default impl=ChunkCache hybrid_swa=False hybrid_ssm=True hicache_attached=False streaming_wrapped=False

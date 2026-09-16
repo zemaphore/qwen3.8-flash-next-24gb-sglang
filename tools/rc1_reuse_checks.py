@@ -17,6 +17,7 @@ import os
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -58,7 +59,11 @@ def gen(url: str, text: str, max_new: int, logprob: bool = False) -> dict:
 
 
 def flush(url: str) -> None:
-    post(url, "/flush_cache", None, timeout=120)
+    try:
+        post(url, "/flush_cache", None, timeout=120)
+    except urllib.error.HTTPError as e:
+        if e.code != 400:  # 400 = no radix cache on this server (control arm)
+            raise
     time.sleep(0.5)
 
 
@@ -272,6 +277,87 @@ def check_growing_session(url, out_dir, nonce, max_new, turns, turn_modules):
     write(out_dir, "growing_session", {"rows": rows}, lines)
 
 
+def gen_stream(url: str, text: str, max_new: int, timeout: float = 1800.0) -> dict:
+    """Streamed generation: TTFT and per-token intervals from chunk arrival times."""
+    body = {"text": text, "stream": True,
+            "sampling_params": {"max_new_tokens": max_new, "temperature": 0, "ignore_eos": True}}
+    req = urllib.request.Request(url + "/generate", data=json.dumps(body).encode(),
+                                 headers={"Content-Type": "application/json"})
+    t0 = time.perf_counter()
+    stamps, meta = [], {}
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        for raw in r:
+            line = raw.decode().strip()
+            if not line.startswith("data:"):
+                continue
+            payload = line[5:].strip()
+            if payload == "[DONE]":
+                break
+            d = json.loads(payload)
+            meta = d.get("meta_info", meta)
+            n = meta.get("completion_tokens")
+            if n is not None and (not stamps or n > stamps[-1][0]):
+                stamps.append((n, time.perf_counter() - t0))
+    wall = time.perf_counter() - t0
+    ttft = stamps[0][1] if stamps else None
+    itl = [(stamps[i][1] - stamps[i - 1][1]) / (stamps[i][0] - stamps[i - 1][0]) for i in range(1, len(stamps))]
+    itl_sorted = sorted(itl)
+    return {"prompt_tokens": meta.get("prompt_tokens"), "cached_tokens": meta.get("cached_tokens", 0),
+            "completion_tokens": meta.get("completion_tokens"), "wall_s": round(wall, 3),
+            "ttft_s": round(ttft, 3) if ttft else None,
+            "tg_tok_s": round((stamps[-1][0] - stamps[0][0]) / (stamps[-1][1] - stamps[0][1]), 2) if len(stamps) > 1 else None,
+            "itl_median_ms": round(itl_sorted[len(itl_sorted) // 2] * 1000, 2) if itl else None,
+            "itl_p95_ms": round(itl_sorted[int(len(itl_sorted) * 0.95)] * 1000, 2) if itl else None,
+            "chunks": len(stamps)}
+
+
+def check_tg_probe(url, out_dir, nonce, depths, gen_tokens, warm):
+    """TTFT/TG at fixed context depths. warm=True primes the cache with a 16-token call first."""
+    rows, lines = [], [f"tg probe: depths={depths} gen={gen_tokens} warm_prime={warm}; streamed, ITL from chunk arrival"]
+    for depth in depths:
+        blocks = max(1, depth // 7200 + 1)
+        text = "".join(repo_block(f"tg{depth}-{i}-{nonce}") for i in range(blocks))
+        flush(url)
+        prime = gen(url, text, 16) if warm else None
+        r = gen_stream(url, text, gen_tokens)
+        fv = free_vram_mib()
+        row = {"target_depth": depth, "prime": prime and {k: prime[k] for k in ("prompt_tokens", "wall_s")}, "run": r, "free_vram_mib": fv}
+        rows.append(row)
+        lines.append(f"  depth {r['prompt_tokens']}: cached={r['cached_tokens']} TTFT={r['ttft_s']}s TG={r['tg_tok_s']} tok/s "
+                     f"ITL med/p95={r['itl_median_ms']}/{r['itl_p95_ms']} ms wall={r['wall_s']}s chunks={r['chunks']} free_vram={fv}MiB"
+                     + (f" (prime cold {prime['wall_s']}s)" if prime else ""))
+    write(out_dir, "tg_probe", {"rows": rows}, lines)
+
+
+def check_two_sessions(url, out_dir, nonce, max_new, turns_a, turns_b, turn_modules):
+    """Session A grows to near-limit, then a fresh session B must grow with hits while A is evicted."""
+    check_growing_session(url, out_dir, nonce + "A", max_new, turns_a, turn_modules)
+    os.replace(os.path.join(out_dir, "growing_session.json"), os.path.join(out_dir, "two_sessions_A.json"))
+    os.replace(os.path.join(out_dir, "growing_session.txt"), os.path.join(out_dir, "two_sessions_A.txt"))
+    # no flush: B must displace A's retained pages
+    text = base_prefix(f"sessionB-{nonce}")
+    rows, lines = [], [f"two sessions: B ({turns_b} turns) after A, no flush; A pages must be evicted"]
+    prev_prompt = prev_total = None
+    for t in range(turns_b):
+        r = gen(url, text, max_new)
+        exp_lo = 0 if prev_prompt is None else floor_page(prev_prompt)
+        exp_hi = 0 if prev_total is None else floor_page(prev_total)
+        ok = exp_lo <= r["cached_tokens"] <= exp_hi if t else r["cached_tokens"] == 0
+        fv = free_vram_mib()
+        rows.append({"turn": t, "prompt_tokens": r["prompt_tokens"], "cached_tokens": r["cached_tokens"],
+                     "hit_ok": ok, "wall_s": r["wall_s"], "free_vram_mib": fv})
+        if t % 5 == 0 or t == turns_b - 1 or not ok:
+            lines.append(f"  B turn {t:2d}: prompt={r['prompt_tokens']} cached={r['cached_tokens']} ok={ok} wall={r['wall_s']}s free_vram={fv}MiB")
+        prev_prompt = r["prompt_tokens"]
+        prev_total = (r["prompt_tokens"] or 0) + (r["completion_tokens"] or 0)
+        tool = "".join(f"# {nonce} B{t} module {i}\ndef b_{t}_{i}(request):\n    return {{'turn': {t}, 'id': {i}}}\n\n"
+                       for i in range(turn_modules))
+        text = text + r["text"] + f"\n\nTool result for turn {t}:\n" + tool + f"\nUser: continue with turn {t + 1}.\n"
+    lines.append(f"B hits_ok={sum(r['hit_ok'] for r in rows)}/{turns_b} final_prompt={rows[-1]['prompt_tokens']} "
+                 f"min_free_vram={min(r['free_vram_mib'] or 0 for r in rows)}MiB")
+    write(out_dir, "two_sessions_B", {"rows": rows}, lines)
+
+
 def check_evict_rehit(url, out_dir, nonce, max_new, pool_tokens, filler_tokens_target):
     """A cold -> enough unique fillers to exceed the pool -> A again -> A again."""
     tx = texts(f"evict-{nonce}")
@@ -330,6 +416,10 @@ def main():
     ap.add_argument("--capacity-max-k", type=int, default=10)
     ap.add_argument("--session-turns", type=int, default=40)
     ap.add_argument("--session-turn-modules", type=int, default=80)
+    ap.add_argument("--tg-depths", default="32000,128000,240000")
+    ap.add_argument("--tg-gen", type=int, default=256)
+    ap.add_argument("--tg-cold", action="store_true", help="do not prime the cache before the TG probe (control arm)")
+    ap.add_argument("--two-sessions-turns", default="70,20")
     ap.add_argument("--checks", default="determinism,logprob_reuse,suffix_logprob,mamba_capacity,churn,evict_rehit")
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
@@ -345,6 +435,11 @@ def main():
         check_suffix_logprob(args.url, args.out_dir, nonce, args.trials, args.max_new)
     if "mamba_capacity" in checks:
         check_mamba_capacity(args.url, args.out_dir, nonce, args.max_new, args.capacity_max_k)
+    if "tg_probe" in checks:
+        check_tg_probe(args.url, args.out_dir, nonce, [int(x) for x in args.tg_depths.split(",")], args.tg_gen, not args.tg_cold)
+    if "two_sessions" in checks:
+        ta, tb = (int(x) for x in args.two_sessions_turns.split(","))
+        check_two_sessions(args.url, args.out_dir, nonce, args.max_new, ta, tb, args.session_turn_modules)
     if "growing_session" in checks:
         check_growing_session(args.url, args.out_dir, nonce, args.max_new, args.session_turns, args.session_turn_modules)
     if "churn" in checks:

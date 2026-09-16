@@ -1,0 +1,60 @@
+=== arm profile_slots4 2026-09-16T17:59:15Z ===
+vram_used_after_stop 0 MiB
+launcher: up after 201 s gc frozen 
+[2026-09-16 18:02:37] Mamba Cache is allocated. max_mamba_cache_size: 4, conv_state size: 0.01GB, ssm_state size: 0.53GB 
+[2026-09-16 18:02:37] Memory pool end. avail mem=4.45 GB
+[2026-09-16 18:02:39] max_total_num_tokens=262144, chunked_prefill_size=4608, max_prefill_tokens=32768, max_running_requests=1, context_len=262144, available_gpu_mem=4.35 GB
+[2026-09-16 18:02:39] Tree cache initialized: source=default impl=UnifiedRadixCache hybrid_swa=False hybrid_ssm=True hicache_attached=False streaming_wrapped=False
+{'disable_radix_cache': False, 'max_total_tokens': 262144, 'max_mamba_cache_size': 4, 'chunked_prefill_size': 4608}
+tg probe: depths=[32000, 128000, 240000] gen=256 warm_prime=True; streamed, ITL from chunk arrival
+  depth 35550: cached=35520 TTFT=1.038s TG=35.66 tok/s ITL med/p95=28.53/32.3 ms wall=8.19s chunks=256 free_vram=1268MiB (prime cold 16.298s)
+  depth 131100: cached=131072 TTFT=0.501s TG=35.04 tok/s ITL med/p95=28.57/32.09 ms wall=7.779s chunks=256 free_vram=476MiB (prime cold 55.317s)
+  depth 248700: cached=248640 TTFT=0.711s TG=34.32 tok/s ITL med/p95=29.15/32.88 ms wall=8.142s chunks=256 free_vram=338MiB (prime cold 112.252s)
+growing session: 12 turns, ~80 repo modules of tool result per turn, max_new=16
+  turn  0: prompt=6311 cached=0 uncached=6311 expected=[0,0] ok=True wall=3.655s free_vram=336MiB
+  turn  5: prompt=22331 cached=19072 uncached=3259 expected=[19072,19136] ok=True wall=1.854s free_vram=336MiB
+  turn 10: prompt=38352 cached=35136 uncached=3216 expected=[35136,35136] ok=True wall=1.876s free_vram=336MiB
+  turn 11: prompt=41798 cached=38336 uncached=3462 expected=[38336,38336] ok=True wall=1.976s free_vram=336MiB
+hits_ok=12/12 final_prompt=41798 min_free_vram=336MiB warm_wall_median=1.863s
+  turn 55: prompt=197878 cached=194304 uncached=3574 expected=[194304,194368] ok=True wall=2.398s free_vram=670MiB
+  turn 60: prompt=215503 cached=211968 uncached=3535 expected=[211968,211968] ok=True wall=2.465s free_vram=140MiB
+  turn 65: prompt=233128 cached=229568 uncached=3560 expected=[229568,229568] ok=True wall=2.548s free_vram=152MiB
+  turn 69: prompt=247228 cached=243712 uncached=3516 expected=[243648,243712] ok=True wall=2.585s free_vram=100MiB
+hits_ok=70/70 final_prompt=247228 min_free_vram=50MiB warm_wall_median=2.15s
+two sessions: B (20 turns) after A, no flush; A pages must be evicted
+  B turn  0: prompt=6432 cached=0 ok=True wall=3.765s free_vram=356MiB
+  B turn  5: prompt=22452 cached=19200 ok=True wall=1.877s free_vram=308MiB
+  B turn 10: prompt=38473 cached=35264 ok=True wall=1.892s free_vram=212MiB
+  B turn 15: prompt=55703 cached=52224 ok=True wall=2.002s free_vram=212MiB
+  B turn 19: prompt=69487 cached=66048 ok=True wall=2.088s free_vram=212MiB
+B hits_ok=20/20 final_prompt=69487 min_free_vram=212MiB
+errors_in_log 0
+23913 MiB, 212 MiB
+=== arm profile_slots4 done 2026-09-16T18:10:01Z ===
+=== arm control_nocache 2026-09-16T18:10:01Z ===
+vram_used_after_stop 0 MiB
+launcher: up after 211 s gc frozen 
+[2026-09-16 18:13:23] Mamba Cache is allocated. max_mamba_cache_size: 1, conv_state size: 0.00GB, ssm_state size: 0.21GB 
+[2026-09-16 18:13:24] Memory pool end. avail mem=4.64 GB
+[2026-09-16 18:13:26] max_total_num_tokens=262144, chunked_prefill_size=4608, max_prefill_tokens=32768, max_running_requests=1, context_len=262144, available_gpu_mem=4.54 GB
+[2026-09-16 18:13:26] Tree cache initialized: source=default impl=ChunkCache hybrid_swa=False hybrid_ssm=True hicache_attached=False streaming_wrapped=False
+{'disable_radix_cache': True, 'max_total_tokens': 262144, 'max_mamba_cache_size': 1, 'chunked_prefill_size': 4608}
+    return self._call_chain(*args)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 492, in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 639, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 400: Bad Request
+  turn  7: prompt=28715 cached=0 uncached=28715 expected=[25472,25472] ok=False wall=12.4s free_vram=1654MiB
+  turn  8: prompt=31919 cached=0 uncached=31919 expected=[28672,28672] ok=False wall=12.945s free_vram=1654MiB
+  turn  9: prompt=35121 cached=0 uncached=35121 expected=[31872,31872] ok=False wall=14.474s free_vram=1654MiB
+  turn 10: prompt=38326 cached=0 uncached=38326 expected=[35072,35136] ok=False wall=16.296s free_vram=1654MiB
+  turn 11: prompt=41772 cached=0 uncached=41772 expected=[38272,38336] ok=False wall=17.598s free_vram=1654MiB
+hits_ok=1/12 final_prompt=41772 min_free_vram=1648MiB warm_wall_median=12.4s
+errors_in_log 0
+22471 MiB, 1654 MiB
+{'disable_radix_cache': True, 'max_total_tokens': 262144, 'max_mamba_cache_size': 1, 'chunked_prefill_size': 4608}
+control left running (accepted default)
+ALL DONE 2026-09-16T18:17:17Z

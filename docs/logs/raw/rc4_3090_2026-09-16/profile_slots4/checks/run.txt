@@ -1,0 +1,4 @@
+utc 2026-09-16T18:06:44Z
+nonce 6aaadab4
+args {'url': 'http://127.0.0.1:30001', 'out_dir': '/root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/rc4_3090_2026-09-16/profile_slots4/checks', 'max_new': 16, 'trials': 6, 'churn_n': 30, 'pool_tokens': 131072, 'capacity_max_k': 10, 'session_turns': 40, 'session_turn_modules': 80, 'tg_depths': '32000,128000,240000', 'tg_gen': 256, 'tg_cold': False, 'two_sessions_turns': '70,20', 'checks': 'two_sessions'}
+page 64

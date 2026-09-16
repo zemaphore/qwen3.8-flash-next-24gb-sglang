@@ -9,9 +9,12 @@ linear conversation with growing context and no forks. For that workload RC1
 §5.2 shows a 4-mamba-slot GPU-only profile keeps the full 262,144 pool and
 hits on every turn of a 70-turn session to 241,666 tokens (warm turns
 1.8–2.5 s vs ~157 s cold re-prefill), so the RAM tier (RC2/RC3) is **parked**
-as out of scope;
-the remaining stage is a linear-session benchmark and promotion decision
-(RC4′). The multi-conversation design below is retained for reference.
+as out of scope.
+RC4′ (done) measured the profile against the control and recommends
+promotion for that workload, conditional on a TG replication and on
+scheduling the robustness stage RB (R1–R5) before any second client or
+forking agent uses the server. The multi-conversation design below is
+retained for reference.
 Starting point: accepted RTX 3090 stack; TG0 complete.
 
 ## Objective
@@ -211,7 +214,43 @@ request. Host spill must not create an unbounded queue while the user is idle.
 | RC1 | DONE | Enable GPU-only hybrid cache on an isolated branch with enough state slots | [RC1 report](logs/rc1_gpu_hybrid_3090_2026-09-16.md): `UnifiedRadixCache` + Mamba extra-buffer; page-aligned hits for repeated/append/branch/A→B→A; GPU hit indistinguishable from recompute under the stack's own drift (teacher-forced suffix; same-slot hits only, not the RC2/RC3 bound); capacity capped 131,072 with 8 mamba slots (16 slots boots at 187,200 with ~46 MiB headroom; original OOM not reproduced); hot tier = 6 conversations, whole-prefix miss on slot eviction; re-hit after eviction works; free VRAM → 4 MiB under retention (lazy backing never released); no RAM transfer yet |
 | RC2 | PARKED | Implement quantized KV/QSA and recurrent/PLE host round trip | Only needed for forks/interleaved sessions (out of target workload) |
 | RC3 | PARKED | Integrate RAM entries, restore, eviction and physical-memory accounting | As RC2; if ever resumed, must first fix the RC1-d crash modes: allocator must evict on physical pressure and lazy backing must be reclaimable |
-| RC4′ | NEXT | Linear-session benchmark on the 4-slot profile vs the frozen no-cache control | Full-trace wall time for growing sessions at ~32K/128K/near-limit, near-limit capacity with hits, TG/cold-PP reported, accept/reject and rollback |
+| RC4′ | DONE | Linear-session benchmark on the 4-slot profile vs the frozen no-cache control | [RC4′ report](logs/rc4_linear_3090_2026-09-16.md): warm TTFT 0.5–1.0 s at 35K–249K vs 15–114 s cold; TG 34–36 vs 30–32 tok/s (replicate); 12-turn trace 24.1 s vs 123.7 s; 70/70 hits to 247K; new session after a near-limit one 20/20; recommendation: promote for the single-consumer linear workload with RB scheduled |
+| RB | PLANNED | Robustness: fail requests, not the server, under physical VRAM pressure (R1–R5 below) | The retained 16-slot churn logs (`rc1 chunk_arms/c2048`, `c3072`) replay as misses/aborts with the server alive; no regression on the RC4′ linear trace |
+
+## Robustness stage (RB): R1–R5
+
+Measured in RC1-d: with retained prefixes, the server does not degrade, it
+dies. Two mechanisms, both in the serving tree, both default-off patches:
+
+- Lazy KV backing is prefix/high-water-mark based (`allocator/paged.py:149-158`
+  backs `(max page + 1) × page_size` via `kv_vmm_backing.py:360 ensure_prefix`).
+  `allocation.py:188` evicts only for the *logical* shortfall, so logically
+  free but never-backed high-index pages are handed out, the commit fails
+  against the driver, the hook returns `None`, and `allocation.py:214-227`
+  raises `RuntimeError` inside the scheduler loop → SIGQUIT → whole process
+  tree exits (2048 arm: 136K evictable, backed pages were sitting in the tree).
+- Backing is released only when the pool is fully idle (`paged.py:163`), so
+  under retention free VRAM drifts to ~0 and any activation can OOM (3072 arm).
+
+Crash consequences: VRAM returns to 0 MiB and the port frees (no host reboot),
+but the server is gone; recovery is the launcher (~3.5–4 min) with an empty
+cache. It is manual today because the server is a transient `systemd-run
+--scope`.
+
+| Item | Change | Where | Exit test |
+|---|---|---|---|
+| **R1** evict on physical pressure | When `_lazy_hook` fails: evict `num_new_pages` from the tree, `merge_and_sort_free`, retry with the lowest-index (already backed) pages once, then return `None` | `allocator/paged.py` `alloc_extend`/`alloc_decode` | replay `c2048` churn: 30/30 without crash; hits after eviction |
+| **R2** fail the request, not the server | Catch the prefill allocation failure in the scheduler and abort only that request with an error response (decode already retracts, `scheduler.py:3495-3527`; prefill has no equivalent) | `managers/scheduler.py` prefill path, `allocation.py` | oversized request → HTTP error, server healthy, next request served |
+| **R3** backing headroom watermark | Refuse a lazy commit that would leave less than a configured free-VRAM floor (e.g. 512 MiB) and evict instead; env `SGLANG_KV_LAZY_MIN_FREE_MB`, default off | `kv_vmm_backing.py` / `_lazy_hook` | replay `c3072` churn: no activation OOM; free VRAM never below floor |
+| **R4** release backing on trim | Wire `release_beyond`/`uncommit_beyond` (`kv_vmm_backing.py:367`) to tree eviction so backing above the live+retained high-water mark is unmapped; never unmap a granule with a live/in-flight page; keep graph addresses stable | `kv_vmm_backing.py`, tree eviction hook | free VRAM recovers after a large session ends; no CUDA-graph faults across 100 mixed requests |
+| **R5** operational restart | Proper systemd unit with `Restart=on-failure` and a health probe instead of `systemd-run --scope`; alert on restart | launcher / unit file | kill -9 the scheduler → service back within one boot, alert emitted |
+
+Order: R1 → R2 → R3, each validated against the retained crash logs as
+regression cases and against the RC4′ linear trace for no-regression. R4 only
+if R1–R3 leave measurable pressure (it is the riskiest: address stability and
+in-flight pages). R5 is independent and can go first. With R1–R3, forks and
+extra clients degrade to cache misses (hot tier stays `slots − 2`), which is
+the intended behaviour for the linear-session profile.
 
 Each stage should produce a scoped commit and raw evidence before proceeding.
 RC0 can conclude a design is blocked; do not build on an unresolved snapshot
