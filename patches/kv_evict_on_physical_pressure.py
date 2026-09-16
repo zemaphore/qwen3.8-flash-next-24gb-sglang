@@ -63,16 +63,32 @@ NEW = '''    if is_dsv4:
         )
         logger.warning("KV physical pressure: re-sorted free pages and retried allocation of %d tokens -> %s",
                        extend_num_tokens, "ok" if out_cache_loc is not None else "still refused")
-        if out_cache_loc is None and not tree_cache.is_chunk_cache() and tree_cache.evictable_size() > 0:
-            evictable = tree_cache.evictable_size()
-            evict_n = min(evictable, max(num_tokens, 4 * num_tokens))
-            tree_cache.evict(EvictParams(num_tokens=evict_n))
-            allocator.merge_and_sort_free()
-            out_cache_loc = allocator.alloc_extend(
-                prefix_lens, prefix_lens_cpu, seq_lens, seq_lens_cpu, last_loc, extend_num_tokens, **extra_alloc_kwargs,
-            )
-            logger.warning("KV physical pressure: evicted up to %d retained tokens and retried allocation of %d tokens -> %s",
-                           evict_n, extend_num_tokens, "ok" if out_cache_loc is not None else "still refused")
+        if out_cache_loc is None:
+            evictable = 0 if tree_cache.is_chunk_cache() else tree_cache.evictable_size()
+            if evictable > 0:
+                evict_n = min(evictable, max(num_tokens, 4 * num_tokens))
+                tree_cache.evict(EvictParams(num_tokens=evict_n))
+                allocator.merge_and_sort_free()
+                out_cache_loc = allocator.alloc_extend(
+                    prefix_lens, prefix_lens_cpu, seq_lens, seq_lens_cpu, last_loc, extend_num_tokens, **extra_alloc_kwargs,
+                )
+                logger.warning("KV physical pressure: evicted up to %d retained tokens and retried allocation of %d tokens -> %s",
+                               evict_n, extend_num_tokens, "ok" if out_cache_loc is not None else "still refused")
+            else:
+                # Sole owner of the pool: nothing to evict, so the strict floor (R3) would only
+                # fail this request. Bypass it for one retry = the unpatched profile's behaviour.
+                _kv = getattr(allocator, "_kvcache", None)
+                _kv = getattr(_kv, "full_kv_pool", _kv)
+                if _kv is not None and hasattr(_kv, "lazy_ensure"):
+                    _kv._strict_bypass = True
+                    try:
+                        out_cache_loc = allocator.alloc_extend(
+                            prefix_lens, prefix_lens_cpu, seq_lens, seq_lens_cpu, last_loc, extend_num_tokens, **extra_alloc_kwargs,
+                        )
+                    finally:
+                        _kv._strict_bypass = False
+                    logger.warning("KV physical pressure: nothing evictable, strict floor bypassed for %d tokens -> %s",
+                                   extend_num_tokens, "ok" if out_cache_loc is not None else "still refused")
 
     if out_cache_loc is None:
         error_msg = (

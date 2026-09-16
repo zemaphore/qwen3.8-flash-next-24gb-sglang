@@ -1,0 +1,4 @@
+utc 2026-09-16T19:30:42Z
+nonce 6aaaee62
+args {'url': 'http://127.0.0.1:30001', 'out_dir': '/root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/rb_3090_2026-09-16/r123_on_promoted_profile_v3/c4608/reuse_checks', 'max_new': 16, 'trials': 6, 'churn_n': 30, 'pool_tokens': 235520, 'capacity_max_k': 6, 'session_turns': 12, 'session_turn_modules': 80, 'tg_depths': '32000,128000,215000', 'tg_gen': 256, 'tg_cold': False, 'two_sessions_turns': '64,20', 'checks': 'tg_probe,growing_session,two_sessions'}
+page 64

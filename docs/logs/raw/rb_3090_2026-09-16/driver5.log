@@ -1,0 +1,47 @@
+=== arm chunk=4608 slots=4 pool=235520 2026-09-16T19:26:37Z ===
+vram_used_after_stop 0 MiB
+launcher: up after 201 s gc frozen 
+[2026-09-16 19:29:57] Mamba Cache is allocated. max_mamba_cache_size: 4, conv_state size: 0.01GB, ssm_state size: 0.53GB 
+[2026-09-16 19:29:57] Memory pool end. avail mem=4.64 GB
+[2026-09-16 19:29:59] max_total_num_tokens=235520, chunked_prefill_size=4608, max_prefill_tokens=32768, max_running_requests=1, context_len=235520, available_gpu_mem=4.54 GB
+[2026-09-16 19:29:59] Tree cache initialized: source=default impl=UnifiedRadixCache hybrid_swa=False hybrid_ssm=True hicache_attached=False streaming_wrapped=False
+{'disable_radix_cache': False, 'max_total_tokens': 235520, 'max_mamba_cache_size': 4, 'chunked_prefill_size': 4608}
+19503 MiB, 4622 MiB
+long cold {'blocks': 1, 'prompt_tokens': 7230, 'cached': 0, 'wall_s': 5.537, 'prefill_tok_s': 1305.8}
+long cold {'blocks': 3, 'prompt_tokens': 21690, 'cached': 0, 'wall_s': 9.241, 'prefill_tok_s': 2347.1}
+long cold {'blocks': 5, 'prompt_tokens': 36150, 'cached': 0, 'wall_s': 15.139, 'prefill_tok_s': 2387.9}
+tg probe: depths=[32000, 128000, 215000] gen=256 warm_prime=True; streamed, ITL from chunk arrival
+  depth 28440: cached=28416 TTFT=0.414s TG=30.53 tok/s ITL med/p95=32.39/39.76 ms wall=8.767s chunks=256 free_vram=1404MiB (prime cold 12.662s)
+  depth 123750: cached=123712 TTFT=0.543s TG=30.07 tok/s ITL med/p95=33.26/39.51 ms wall=9.024s chunks=256 free_vram=762MiB (prime cold 52.614s)
+  depth ~215000: rejected at admission (HTTP 503); server alive
+growing session: 64 turns, ~80 repo modules of tool result per turn, max_new=16
+  turn  0: prompt=6432 cached=0 uncached=6432 expected=[0,0] ok=True wall=3.891s free_vram=646MiB
+  turn  5: prompt=22852 cached=19520 uncached=3332 expected=[19520,19584] ok=True wall=1.898s free_vram=646MiB
+  turn 10: prompt=39267 cached=35968 uncached=3299 expected=[35968,35968] ok=True wall=1.979s free_vram=646MiB
+  turn 15: prompt=56897 cached=53312 uncached=3585 expected=[53312,53376] ok=True wall=2.08s free_vram=646MiB
+  turn 20: prompt=74527 cached=70976 uncached=3551 expected=[70976,70976] ok=True wall=2.08s free_vram=646MiB
+  turn 25: prompt=92157 cached=88576 uncached=3581 expected=[88576,88640] ok=True wall=2.216s free_vram=646MiB
+  turn 30: prompt=109787 cached=106240 uncached=3547 expected=[106240,106240] ok=True wall=2.158s free_vram=646MiB
+  turn 35: prompt=127417 cached=123904 uncached=3513 expected=[123840,123904] ok=True wall=2.24s free_vram=646MiB
+  turn 40: prompt=145047 cached=141504 uncached=3543 expected=[141504,141504] ok=True wall=2.327s free_vram=646MiB
+  turn 45: prompt=162677 cached=159104 uncached=3573 expected=[159104,159104] ok=True wall=2.465s free_vram=874MiB
+  turn 50: HTTP 503 (request refused; server alive) -> stopping session
+hits_ok=50/64 final_prompt=None min_free_vram=42MiB warm_wall_median=2.158s
+two sessions: B (20 turns) after A, no flush; A pages must be evicted
+  B turn  0: prompt=6432 cached=0 ok=True wall=3.855s free_vram=778MiB
+  B turn  5: prompt=22427 cached=19200 ok=True wall=1.873s free_vram=778MiB
+  B turn 10: prompt=38410 cached=35200 ok=True wall=1.949s free_vram=994MiB
+  B turn 15: prompt=55619 cached=52160 ok=True wall=2.032s free_vram=142MiB
+  B turn 19: prompt=69399 cached=65920 ok=True wall=2.146s free_vram=94MiB
+B hits_ok=20/20 final_prompt=69399 min_free_vram=94MiB
+growing session: 12 turns, ~80 repo modules of tool result per turn, max_new=16
+  turn  0: prompt=6311 cached=0 uncached=6311 expected=[0,0] ok=True wall=3.784s free_vram=302MiB
+  turn  5: prompt=22331 cached=19072 uncached=3259 expected=[19072,19136] ok=True wall=1.964s free_vram=302MiB
+  turn 10: prompt=38352 cached=35136 uncached=3216 expected=[35136,35136] ok=True wall=1.897s free_vram=302MiB
+  turn 11: prompt=41798 cached=38336 uncached=3462 expected=[38336,38336] ok=True wall=2.038s free_vram=302MiB
+hits_ok=12/12 final_prompt=41798 min_free_vram=302MiB warm_wall_median=1.945s
+23823 MiB, 302 MiB
+errors_in_log 4
+=== arm chunk=4608 done 2026-09-16T19:36:16Z ===
+=== restoring control 2026-09-16T19:36:16Z ===
+vram_used_after_stop 0 MiB

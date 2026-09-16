@@ -19,6 +19,14 @@ would refuse its first request.) The refusal surfaces as the allocator's
 ``None``; with R1 applied that becomes tree eviction and a retry, with R2 an
 aborted request, instead of a crash.
 
+The floor exists to stop *retention-driven* growth (other conversations'
+pages) from consuming the activation margin. A request that is the sole owner
+of the pool (nothing evictable) must still be allowed to grow into the margin
+exactly as the unpatched profile does, otherwise a single linear session is
+capped ~60K tokens short of its measured limit. R1 therefore sets
+``_strict_bypass`` on the pool for one retry when the tree has nothing to
+evict, which restores the original behaviour for that commit.
+
 Env: ``SGLANG_KV_LAZY_STRICT_HEADROOM`` (default ``0`` = original behaviour),
 ``SGLANG_KV_LAZY_MIN_FREE_MB`` (default ``256``).
 
@@ -46,7 +54,8 @@ NEW = '''                if torch.cuda.mem_get_info()[0] - delta < headroom // 2
             # R3 (kv_lazy_strict_headroom): the refusal above is skipped by the rate limit once the
             # expert cache is at its floor; re-check unconditionally against an absolute floor so a
             # commit never leaves less than SGLANG_KV_LAZY_MIN_FREE_MB driver-free (activation margin).
-            if self._STRICT_HEADROOM and torch.cuda.mem_get_info()[0] - delta < self._STRICT_MIN_FREE:
+            if (self._STRICT_HEADROOM and not getattr(self, "_strict_bypass", False)
+                    and torch.cuda.mem_get_info()[0] - delta < self._STRICT_MIN_FREE):
                 raise RuntimeError(f"KV lazy backing: strict headroom refused {want} tokens "
                                    f"(free {torch.cuda.mem_get_info()[0] >> 20} MB, need {(delta + self._STRICT_MIN_FREE) >> 20} MB)")
         try:
