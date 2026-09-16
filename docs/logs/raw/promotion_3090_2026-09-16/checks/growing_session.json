@@ -1,0 +1,116 @@
+{
+  "rows": [
+    {
+      "turn": 0,
+      "prompt_tokens": 6432,
+      "cached_tokens": 0,
+      "uncached": 6432,
+      "expected_range": [
+        0,
+        0
+      ],
+      "hit_ok": true,
+      "wall_s": 5.644,
+      "free_vram_mib": 1790,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 1,
+      "prompt_tokens": 9716,
+      "cached_tokens": 6400,
+      "uncached": 3316,
+      "expected_range": [
+        6400,
+        6400
+      ],
+      "hit_ok": true,
+      "wall_s": 2.115,
+      "free_vram_mib": 1790,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 2,
+      "prompt_tokens": 13000,
+      "cached_tokens": 9728,
+      "uncached": 3272,
+      "expected_range": [
+        9664,
+        9728
+      ],
+      "hit_ok": true,
+      "wall_s": 1.858,
+      "free_vram_mib": 1790,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 3,
+      "prompt_tokens": 16284,
+      "cached_tokens": 12992,
+      "uncached": 3292,
+      "expected_range": [
+        12992,
+        12992
+      ],
+      "hit_ok": true,
+      "wall_s": 1.867,
+      "free_vram_mib": 1742,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 4,
+      "prompt_tokens": 19568,
+      "cached_tokens": 16256,
+      "uncached": 3312,
+      "expected_range": [
+        16256,
+        16256
+      ],
+      "hit_ok": true,
+      "wall_s": 1.974,
+      "free_vram_mib": 1742,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 5,
+      "prompt_tokens": 22852,
+      "cached_tokens": 19520,
+      "uncached": 3332,
+      "expected_range": [
+        19520,
+        19584
+      ],
+      "hit_ok": true,
+      "wall_s": 1.969,
+      "free_vram_mib": 1694,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 6,
+      "prompt_tokens": 26136,
+      "cached_tokens": 22848,
+      "uncached": 3288,
+      "expected_range": [
+        22848,
+        22848
+      ],
+      "hit_ok": true,
+      "wall_s": 1.942,
+      "free_vram_mib": 1694,
+      "completion_tokens": 16
+    },
+    {
+      "turn": 7,
+      "prompt_tokens": 29420,
+      "cached_tokens": 26112,
+      "uncached": 3308,
+      "expected_range": [
+        26112,
+        26112
+      ],
+      "hit_ok": true,
+      "wall_s": 1.953,
+      "free_vram_mib": 1694,
+      "completion_tokens": 16
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "rows": [
+    {
+      "target_depth": 32000,
+      "prime": {
+        "prompt_tokens": 36150,
+        "wall_s": 15.081
+      },
+      "run": {
+        "prompt_tokens": 36150,
+        "cached_tokens": 36096,
+        "completion_tokens": 256,
+        "wall_s": 8.841,
+        "ttft_s": 0.56,
+        "tg_tok_s": 30.79,
+        "itl_median_ms": 32.33,
+        "itl_p95_ms": 39.73,
+        "chunks": 256
+      },
+      "free_vram_mib": 1686
+    }
+  ]
+}

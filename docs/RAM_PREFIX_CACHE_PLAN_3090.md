@@ -10,11 +10,18 @@ linear conversation with growing context and no forks. For that workload RC1
 hits on every turn of a 70-turn session to 241,666 tokens (warm turns
 1.8–2.5 s vs ~157 s cold re-prefill), so the RAM tier (RC2/RC3) is **parked**
 as out of scope.
-RC4′ (done) measured the profile against the control and recommends
-promotion for that workload, conditional on a TG replication and on
-scheduling the robustness stage RB (R1–R5) before any second client or
-forking agent uses the server. The multi-conversation design below is
-retained for reference.
+RC4′ (done) measured the profile against the control.
+**Promoted 2026-09-16:** `/root/quant/serve-3090.sh` is now the radix
+profile — 4 mamba slots, no `--disable-radix-cache`, pool and context
+235,520 (230K), served model name `qwen38-flash-230K` (SHA-256
+`e09c4561...`). The previous accepted no-cache 256K launcher is kept verbatim
+as the rollback at `/root/quant/serve-3090-nocache-256K.sh` (`11013fb6...`).
+Copies and checksums: `logs/raw/promotion_3090_2026-09-16/`. The context was
+set to 230K deliberately: RC1-e/RC4′ reached 247–249K with 30–100 MiB free,
+so 230K leaves ~15K tokens of margin for generation and activations. The
+profile is validated for one linear session per server; stage RB (R1–R5)
+is required before a second client or a forking agent uses it. The
+multi-conversation design below is retained for reference.
 Starting point: accepted RTX 3090 stack; TG0 complete.
 
 ## Objective
