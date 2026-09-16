@@ -6,6 +6,13 @@ PP capture tool targets that launcher's port 30001. State files
 (`nll/`, `greedy/`, `logprob/`, `spec_lossless/`, `needle_results.tsv`, `elastic.ctl`) are created next
 to the scripts and are git-ignored, except the two oracle inputs listed below.
 
+The current 3090 launcher serves the OpenAI API model ID `qwen38-flash-256K`
+at `http://127.0.0.1:30001/v1`. Use `--model qwen38-flash-256K` with
+llama-benchy and the same ID in chat clients. `SERVED_MODEL_NAME` overrides it
+at launch; the checkpoint path and context settings are unchanged. Reproduce
+this launcher setting with `python3 patches/enable_served_model_name.py apply`.
+Historical benchmark logs retain the model ID used at measurement time.
+
 | Tool | Purpose |
 |---|---|
 | `bench_speed.py` | Streaming prefill/decode bench: one streamed generation per context (101 .. 10,001 tokens), decode = inter-token rate over 200 tokens, prefill = time to first token minus one step (CAMPAIGN.md:306). |
