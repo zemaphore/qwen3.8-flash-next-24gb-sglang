@@ -120,6 +120,21 @@ steady-state is 2599.6 vs 2577.2 control (**+0.9%**, within noise); combined
 with the MoE config it is indistinguishable from the MoE config alone
 (2694.4 vs 2693.9). Default off; retained as a research path.
 
+## First-layer prefetch (inconclusive, opt-in)
+
+PP14 leaves layer 0 on the old serial selected-row path; its trace attributes
+18.4 ms of pinned HtoD to layer 0 alone. `patches/moe_first_layer_prefetch.py`
+starts layer 0's routing-independent cold-row copy at the top of the model
+forward, before its attention, via the same shared cache (no extra memory).
+
+A 10-sample bracketed A/B with the same assets and source, one env flag apart,
+measured **2703.1 +/- 17.1** (on) versus **2679.8 +/- 23.5** (off), +0.87%
+(t=2.26), matching the ~1.05% upper bound from the hidden 18.4 ms. However,
+pooling the 5-sample capture with the 10-sample arms gives M64+L0 **2694.9**
+versus M64-only **2687.0**, only **+0.3%**, inside the capture noise band. It is
+therefore opt-in (`SGLANG_MOE_PREFETCH_FIRST_LAYER=1`) and not a default. Oracles
+on the on-arm are exact (`m4` 0/0, `lp2` 0.168757/0.011632).
+
 ## Direction 4 note (not pursued)
 
 After PP14 the extend span is GPU-compute-bound, so the long-context plan's

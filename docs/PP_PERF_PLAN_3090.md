@@ -633,6 +633,9 @@ threshold regresses small tails. Chunk 4,608 / threshold 2,048 stay the defaults
 The full-table gather (remove the `torch.unique` sync on prefetched layers,
 `patches/moe_prefetch_full_table.py`) is exact but only +0.9% alone and
 indistinguishable from the MoE config when stacked, so it is opt-in default-off.
+A first-layer prefetch for layer 0's 18.4 ms serial HtoD
+(`patches/moe_first_layer_prefetch.py`) measured +0.87% (t=2.26) in a 10-sample
+bracket but only +0.3% pooled, inside the noise band; it is opt-in default-off.
 
 Evidence: [PP15 result](logs/pp15_real_routing_moe_3090_2026-09-16.md); raw arms
 and captures in `logs/raw/pp15_prefill_retune_3090_2026-09-16/` and
@@ -678,6 +681,7 @@ and captures in `logs/raw/pp15_prefill_retune_3090_2026-09-16/` and
    python3 patches/enable_moe_host_dma_batch.py --check
    SGLANG=/root/sglang python3 patches/moe_cross_layer_prefetch.py --check
    SGLANG=/root/sglang python3 patches/moe_prefetch_full_table.py --check
+   SGLANG=/root/sglang python3 patches/moe_first_layer_prefetch.py --check
    python3 patches/enable_moe_cross_layer_prefetch.py --check
    python3 patches/enable_prefill_presence_placement.py --check
    SGLANG=/root/sglang python3 patches/prefill_route_dump.py --check
