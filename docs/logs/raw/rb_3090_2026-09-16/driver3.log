@@ -1,0 +1,52 @@
+=== arm chunk=4608 slots=4 pool=235520 2026-09-16T19:05:12Z ===
+vram_used_after_stop 0 MiB
+launcher: up after 201 s gc frozen 
+[2026-09-16 19:08:34] Mamba Cache is allocated. max_mamba_cache_size: 4, conv_state size: 0.01GB, ssm_state size: 0.53GB 
+[2026-09-16 19:08:35] Memory pool end. avail mem=4.64 GB
+[2026-09-16 19:08:36] max_total_num_tokens=235520, chunked_prefill_size=4608, max_prefill_tokens=32768, max_running_requests=1, context_len=235520, available_gpu_mem=4.54 GB
+[2026-09-16 19:08:36] Tree cache initialized: source=default impl=UnifiedRadixCache hybrid_swa=False hybrid_ssm=True hicache_attached=False streaming_wrapped=False
+{'disable_radix_cache': False, 'max_total_tokens': 235520, 'max_mamba_cache_size': 4, 'chunked_prefill_size': 4608}
+19503 MiB, 4622 MiB
+long cold {'blocks': 1, 'prompt_tokens': 7230, 'cached': 0, 'wall_s': 5.358, 'prefill_tok_s': 1349.4}
+long cold {'blocks': 3, 'prompt_tokens': 21690, 'cached': 0, 'wall_s': 9.208, 'prefill_tok_s': 2355.6}
+long cold {'blocks': 5, 'prompt_tokens': 36150, 'cached': 0, 'wall_s': 14.988, 'prefill_tok_s': 2411.9}
+Traceback (most recent call last):
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 453, in <module>
+    main()
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 439, in main
+    check_tg_probe(args.url, args.out_dir, nonce, [int(x) for x in args.tg_depths.split(",")], args.tg_gen, not args.tg_cold)
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 321, in check_tg_probe
+    prime = gen(url, text, 16) if warm else None
+            ^^^^^^^^^^^^^^^^^^
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 45, in gen
+    out = post(url, "/generate", body)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 32, in post
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 215, in urlopen
+    return opener.open(url, data, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 521, in open
+    response = meth(req, response)
+               ^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 630, in http_response
+    response = self.parent.error(
+               ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 559, in error
+    return self._call_chain(*args)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 492, in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 639, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 400: Bad Request
+21659 MiB, 2466 MiB
+errors_in_log 0
+=== arm chunk=4608 done 2026-09-16T19:10:49Z ===
+=== restoring control 2026-09-16T19:10:49Z ===
+vram_used_after_stop 0 MiB
+control: up after 201 s gc frozen 
+{'disable_radix_cache': False, 'max_total_tokens': 235520, 'max_mamba_cache_size': 4, 'chunked_prefill_size': 4608}
+ALL DONE 2026-09-16T19:14:25Z

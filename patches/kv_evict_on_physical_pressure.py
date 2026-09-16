@@ -51,37 +51,28 @@ NEW = '''    if is_dsv4:
     else:
         out_cache_loc = out
 
-    # R1 (kv_evict_on_physical_pressure): a None here with evictable pages in
-    # the tree means the lazy backing refused to commit never-backed high-index
-    # pages. Evict LRU prefixes (their pages are already backed), sort the free
-    # list so they are handed out first, and retry once.
-    if (
-        out_cache_loc is None
-        and not is_dsv4
-        and _EVICT_ON_PRESSURE
-        and tree_cache is not None
-        and not tree_cache.is_chunk_cache()
-        and tree_cache.evictable_size() > 0
-    ):
-        evictable = tree_cache.evictable_size()
-        tree_cache.evict(EvictParams(num_tokens=min(evictable, max(num_tokens, 4 * num_tokens))))
+    # R1 (kv_evict_on_physical_pressure): a None here means the lazy backing
+    # refused to commit never-backed high-index pages. First re-sort the free
+    # list so already-backed low-index pages are handed out (they need no
+    # commit); if that is not enough, evict LRU prefixes (their pages are
+    # backed too), re-sort, and retry once more.
+    if out_cache_loc is None and not is_dsv4 and _EVICT_ON_PRESSURE and tree_cache is not None:
         allocator.merge_and_sort_free()
         out_cache_loc = allocator.alloc_extend(
-            prefix_lens,
-            prefix_lens_cpu,
-            seq_lens,
-            seq_lens_cpu,
-            last_loc,
-            extend_num_tokens,
-            **extra_alloc_kwargs,
+            prefix_lens, prefix_lens_cpu, seq_lens, seq_lens_cpu, last_loc, extend_num_tokens, **extra_alloc_kwargs,
         )
-        logger.warning(
-            "KV physical pressure: evicted up to %d retained tokens and retried "
-            "allocation of %d tokens -> %s",
-            min(evictable, max(num_tokens, 4 * num_tokens)),
-            extend_num_tokens,
-            "ok" if out_cache_loc is not None else "still refused",
-        )
+        logger.warning("KV physical pressure: re-sorted free pages and retried allocation of %d tokens -> %s",
+                       extend_num_tokens, "ok" if out_cache_loc is not None else "still refused")
+        if out_cache_loc is None and not tree_cache.is_chunk_cache() and tree_cache.evictable_size() > 0:
+            evictable = tree_cache.evictable_size()
+            evict_n = min(evictable, max(num_tokens, 4 * num_tokens))
+            tree_cache.evict(EvictParams(num_tokens=evict_n))
+            allocator.merge_and_sort_free()
+            out_cache_loc = allocator.alloc_extend(
+                prefix_lens, prefix_lens_cpu, seq_lens, seq_lens_cpu, last_loc, extend_num_tokens, **extra_alloc_kwargs,
+            )
+            logger.warning("KV physical pressure: evicted up to %d retained tokens and retried allocation of %d tokens -> %s",
+                           evict_n, extend_num_tokens, "ok" if out_cache_loc is not None else "still refused")
 
     if out_cache_loc is None:
         error_msg = (

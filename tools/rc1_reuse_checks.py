@@ -253,7 +253,13 @@ def check_growing_session(url, out_dir, nonce, max_new, turns, turn_modules):
     rows, lines = [], [f"growing session: {turns} turns, ~{turn_modules} repo modules of tool result per turn, max_new={max_new}"]
     prev_prompt = prev_total = None
     for t in range(turns):
-        r = gen(url, text, max_new)
+        try:
+            r = gen(url, text, max_new)
+        except urllib.error.HTTPError as e:
+            rows.append({"turn": t, "http_error": e.code, "hit_ok": False, "wall_s": 0.0, "free_vram_mib": free_vram_mib(),
+                         "prompt_tokens": None})
+            lines.append(f"  turn {t:2d}: HTTP {e.code} (request refused; server alive) -> stopping session")
+            break
         exp_lo = 0 if prev_prompt is None else floor_page(prev_prompt)
         exp_hi = 0 if prev_total is None else floor_page(prev_total)
         ok = exp_lo <= r["cached_tokens"] <= exp_hi if t else r["cached_tokens"] == 0
@@ -272,8 +278,9 @@ def check_growing_session(url, out_dir, nonce, max_new, turns, turn_modules):
         )
         text = text + r["text"] + f"\n\nTool result for turn {t}:\n" + tool + f"\nUser: continue with turn {t + 1}.\n"
     hits = sum(r["hit_ok"] for r in rows)
+    warm = sorted(r["wall_s"] for r in rows[1:] if r.get("prompt_tokens"))
     lines.append(f"hits_ok={hits}/{turns} final_prompt={rows[-1]['prompt_tokens']} min_free_vram={min(r['free_vram_mib'] or 0 for r in rows)}MiB "
-                 f"warm_wall_median={sorted(r['wall_s'] for r in rows[1:])[len(rows) // 2]}s")
+                 f"warm_wall_median={warm[len(warm) // 2] if warm else None}s")
     write(out_dir, "growing_session", {"rows": rows}, lines)
 
 
@@ -315,11 +322,16 @@ def check_tg_probe(url, out_dir, nonce, depths, gen_tokens, warm):
     """TTFT/TG at fixed context depths. warm=True primes the cache with a 16-token call first."""
     rows, lines = [], [f"tg probe: depths={depths} gen={gen_tokens} warm_prime={warm}; streamed, ITL from chunk arrival"]
     for depth in depths:
-        blocks = max(1, depth // 7200 + 1)
+        blocks = max(1, depth // 7400)
         text = "".join(repo_block(f"tg{depth}-{i}-{nonce}") for i in range(blocks))
         flush(url)
-        prime = gen(url, text, 16) if warm else None
-        r = gen_stream(url, text, gen_tokens)
+        try:
+            prime = gen(url, text, 16) if warm else None
+            r = gen_stream(url, text, gen_tokens)
+        except urllib.error.HTTPError as e:
+            rows.append({"target_depth": depth, "rejected": f"HTTP {e.code}"})
+            lines.append(f"  depth ~{depth}: rejected at admission (HTTP {e.code}); server alive")
+            continue
         fv = free_vram_mib()
         row = {"target_depth": depth, "prime": prime and {k: prime[k] for k in ("prompt_tokens", "wall_s")}, "run": r, "free_vram_mib": fv}
         rows.append(row)
@@ -339,7 +351,13 @@ def check_two_sessions(url, out_dir, nonce, max_new, turns_a, turns_b, turn_modu
     rows, lines = [], [f"two sessions: B ({turns_b} turns) after A, no flush; A pages must be evicted"]
     prev_prompt = prev_total = None
     for t in range(turns_b):
-        r = gen(url, text, max_new)
+        try:
+            r = gen(url, text, max_new)
+        except urllib.error.HTTPError as e:
+            rows.append({"turn": t, "http_error": e.code, "hit_ok": False, "wall_s": 0.0, "free_vram_mib": free_vram_mib(),
+                         "prompt_tokens": None})
+            lines.append(f"  B turn {t:2d}: HTTP {e.code} (request refused; server alive) -> stopping")
+            break
         exp_lo = 0 if prev_prompt is None else floor_page(prev_prompt)
         exp_hi = 0 if prev_total is None else floor_page(prev_total)
         ok = exp_lo <= r["cached_tokens"] <= exp_hi if t else r["cached_tokens"] == 0

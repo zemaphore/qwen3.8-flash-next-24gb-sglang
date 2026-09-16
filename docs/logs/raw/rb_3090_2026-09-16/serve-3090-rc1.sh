@@ -54,6 +54,7 @@ setsid systemd-run --user --scope --unit="sglang-$(date +%s)" -p MemoryMax=56G \
       SGLANG_KV_TIERS_W=8192 \
       SGLANG_KV_EVICT_ON_PRESSURE="${SGLANG_KV_EVICT_ON_PRESSURE:-0}" \
       SGLANG_KV_LAZY_STRICT_HEADROOM="${SGLANG_KV_LAZY_STRICT_HEADROOM:-0}" \
+      SGLANG_KV_LAZY_MIN_FREE_MB="${SGLANG_KV_LAZY_MIN_FREE_MB:-256}" \
       SGLANG_PREFILL_ALLOC_ABORT="${SGLANG_PREFILL_ALLOC_ABORT:-0}" \
   "$VENV/bin/python3" -m sglang.launch_server \
     --host "${HOST:-0.0.0.0}" --port 30001 --tp-size 1 --cpu-offload-gb 19 --no-ple-offload-embedding \

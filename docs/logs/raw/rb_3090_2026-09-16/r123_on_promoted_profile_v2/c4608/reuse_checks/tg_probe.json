@@ -1,0 +1,46 @@
+{
+  "rows": [
+    {
+      "target_depth": 32000,
+      "prime": {
+        "prompt_tokens": 28440,
+        "wall_s": 12.656
+      },
+      "run": {
+        "prompt_tokens": 28440,
+        "cached_tokens": 28416,
+        "completion_tokens": 256,
+        "wall_s": 9.463,
+        "ttft_s": 1.031,
+        "tg_tok_s": 30.24,
+        "itl_median_ms": 33.18,
+        "itl_p95_ms": 39.74,
+        "chunks": 256
+      },
+      "free_vram_mib": 1404
+    },
+    {
+      "target_depth": 128000,
+      "prime": {
+        "prompt_tokens": 123750,
+        "wall_s": 52.969
+      },
+      "run": {
+        "prompt_tokens": 123750,
+        "cached_tokens": 123712,
+        "completion_tokens": 256,
+        "wall_s": 8.937,
+        "ttft_s": 0.548,
+        "tg_tok_s": 30.4,
+        "itl_median_ms": 32.5,
+        "itl_p95_ms": 39.17,
+        "chunks": 256
+      },
+      "free_vram_mib": 762
+    },
+    {
+      "target_depth": 215000,
+      "rejected": "HTTP 503"
+    }
+  ]
+}

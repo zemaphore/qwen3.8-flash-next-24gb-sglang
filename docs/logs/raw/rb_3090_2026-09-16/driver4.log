@@ -1,0 +1,55 @@
+=== arm chunk=4608 slots=4 pool=235520 2026-09-16T19:14:28Z ===
+vram_used_after_stop 0 MiB
+launcher: up after 211 s gc frozen 
+[2026-09-16 19:17:55] Mamba Cache is allocated. max_mamba_cache_size: 4, conv_state size: 0.01GB, ssm_state size: 0.53GB 
+[2026-09-16 19:17:56] Memory pool end. avail mem=4.64 GB
+[2026-09-16 19:17:58] max_total_num_tokens=235520, chunked_prefill_size=4608, max_prefill_tokens=32768, max_running_requests=1, context_len=235520, available_gpu_mem=4.54 GB
+[2026-09-16 19:17:58] Tree cache initialized: source=default impl=UnifiedRadixCache hybrid_swa=False hybrid_ssm=True hicache_attached=False streaming_wrapped=False
+{'disable_radix_cache': False, 'max_total_tokens': 235520, 'max_mamba_cache_size': 4, 'chunked_prefill_size': 4608}
+19503 MiB, 4622 MiB
+long cold {'blocks': 1, 'prompt_tokens': 7230, 'cached': 0, 'wall_s': 5.485, 'prefill_tok_s': 1318.1}
+long cold {'blocks': 3, 'prompt_tokens': 21690, 'cached': 0, 'wall_s': 9.243, 'prefill_tok_s': 2346.6}
+long cold {'blocks': 5, 'prompt_tokens': 36150, 'cached': 0, 'wall_s': 15.06, 'prefill_tok_s': 2400.4}
+tg probe: depths=[32000, 128000, 215000] gen=256 warm_prime=True; streamed, ITL from chunk arrival
+  depth 28440: cached=28416 TTFT=1.031s TG=30.24 tok/s ITL med/p95=33.18/39.74 ms wall=9.463s chunks=256 free_vram=1404MiB (prime cold 12.656s)
+  depth 123750: cached=123712 TTFT=0.548s TG=30.4 tok/s ITL med/p95=32.5/39.17 ms wall=8.937s chunks=256 free_vram=762MiB (prime cold 52.969s)
+  depth ~215000: rejected at admission (HTTP 503); server alive
+Traceback (most recent call last):
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 458, in <module>
+    main()
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 447, in main
+    check_two_sessions(args.url, args.out_dir, nonce, args.max_new, ta, tb, args.session_turn_modules)
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 339, in check_two_sessions
+    check_growing_session(url, out_dir, nonce + "A", max_new, turns_a, turn_modules)
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 256, in check_growing_session
+    r = gen(url, text, max_new)
+        ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 45, in gen
+    out = post(url, "/generate", body)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/qwen3.8-flash-next-24gb-sglang/tools/rc1_reuse_checks.py", line 32, in post
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 215, in urlopen
+    return opener.open(url, data, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 521, in open
+    response = meth(req, response)
+               ^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 630, in http_response
+    response = self.parent.error(
+               ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 559, in error
+    return self._call_chain(*args)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 492, in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 639, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 503: Service Unavailable
+24029 MiB, 96 MiB
+errors_in_log 4
+=== arm chunk=4608 done 2026-09-16T19:23:05Z ===
+=== restoring control 2026-09-16T19:23:05Z ===
+vram_used_after_stop 0 MiB

@@ -1,0 +1,4 @@
+tg probe: depths=[32000, 128000, 215000] gen=256 warm_prime=True; streamed, ITL from chunk arrival
+  depth 28440: cached=28416 TTFT=1.031s TG=30.24 tok/s ITL med/p95=33.18/39.74 ms wall=9.463s chunks=256 free_vram=1404MiB (prime cold 12.656s)
+  depth 123750: cached=123712 TTFT=0.548s TG=30.4 tok/s ITL med/p95=32.5/39.17 ms wall=8.937s chunks=256 free_vram=762MiB (prime cold 52.969s)
+  depth ~215000: rejected at admission (HTTP 503); server alive
