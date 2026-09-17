@@ -1,0 +1,226 @@
+[2026-09-16T22:14:17Z] driver start; candidate profile = TG0 control (256K no-radix), port 30011
+443a5f88a53b34b8dc47d0d11cef25fcbb4d3191a4deffe31c32dca3b05c10a3  /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/tg0_3090_2026-09-16/prompts/prompts.json
+[2026-09-16T22:14:34Z] boot tg0_boot1 (attempt 1) placement=expert_presence_code.pt
+[2026-09-16T22:18:13Z] boot tg0_boot1 healthy
+  tg0_boot1 prose        2048 #0 warmup  ok               tg=38.16 events=512 ptok=2048 free_min=2540.0
+  tg0_boot1 prose        2048 #1 measure ok               tg=38.19 events=512 ptok=2048 free_min=2540.0
+  tg0_boot1 prose        2048 #2 measure ok               tg=38.01 events=512 ptok=2048 free_min=2540.0
+  tg0_boot1 prose        2048 #3 measure ok               tg=37.72 events=512 ptok=2048 free_min=2540.0
+  tg0_boot1 prose        2048 #4 measure ok               tg=37.5 events=512 ptok=2048 free_min=2540.0
+  tg0_boot1 prose        2048 #5 measure ok               tg=37.13 events=512 ptok=2048 free_min=2540.0
+  tg0_boot1 reasoning    2048 #0 warmup  ok               tg=39.09 events=512 ptok=2048 free_min=2540.0
+  tg0_boot1 reasoning    2048 #1 measure ok               tg=40.23 events=512 ptok=2048 free_min=2540.0
+  tg0_boot1 reasoning    2048 #2 measure ok               tg=39.88 events=512 ptok=2048 free_min=2540.0
+  tg0_boot1 reasoning    2048 #3 measure ok               tg=39.14 events=512 ptok=2048 free_min=2540.0
+  tg0_boot1 reasoning    2048 #4 measure ok               tg=39.28 events=512 ptok=2048 free_min=2540.0
+  tg0_boot1 reasoning    2048 #5 measure ok               tg=39.12 events=512 ptok=2048 free_min=2540.0
+  tg0_boot1 code         2048 #0 warmup  ok               tg=35.23 events=512 ptok=2048 free_min=2540.0
+  tg0_boot1 code         2048 #1 measure ok               tg=36.98 events=512 ptok=2048 free_min=2540.0
+  tg0_boot1 code         2048 #2 measure ok               tg=34.27 events=512 ptok=2048 free_min=2540.0
+  tg0_boot1 code         2048 #3 measure ok               tg=35.62 events=512 ptok=2048 free_min=2540.0
+  tg0_boot1 code         2048 #4 measure ok               tg=36.29 events=512 ptok=2048 free_min=2540.0
+  tg0_boot1 code         2048 #5 measure ok               tg=34.68 events=512 ptok=2048 free_min=2540.0
+  tg0_boot1 code        32768 #0 warmup  ok               tg=30.98 events=512 ptok=32768 free_min=1390.0
+  tg0_boot1 code        32768 #1 measure ok               tg=30.46 events=512 ptok=32768 free_min=1526.0
+  tg0_boot1 code        32768 #2 measure ok               tg=30.83 events=512 ptok=32768 free_min=1448.0
+  tg0_boot1 code        32768 #3 measure ok               tg=30.83 events=512 ptok=32768 free_min=1448.0
+  tg0_boot1 code        32768 #4 measure ok               tg=30.65 events=512 ptok=32768 free_min=1528.0
+  tg0_boot1 code        32768 #5 measure ok               tg=31.55 events=512 ptok=32768 free_min=1526.0
+  tg0_boot1 prose       32768 #0 warmup  ok               tg=36.02 events=512 ptok=32768 free_min=1496.0
+  tg0_boot1 prose       32768 #1 measure ok               tg=36.15 events=512 ptok=32768 free_min=1526.0
+  tg0_boot1 prose       32768 #2 measure ok               tg=35.82 events=512 ptok=32768 free_min=1448.0
+  tg0_boot1 prose       32768 #3 measure ok               tg=35.74 events=512 ptok=32768 free_min=1526.0
+  tg0_boot1 prose       32768 #4 measure ok               tg=35.62 events=512 ptok=32768 free_min=1526.0
+  tg0_boot1 prose       32768 #5 measure ok               tg=36.68 events=512 ptok=32768 free_min=1448.0
+  tg0_boot1 reasoning   32768 #0 warmup  ok               tg=38.11 events=512 ptok=32768 free_min=1526.0
+  tg0_boot1 reasoning   32768 #1 measure ok               tg=36.32 events=512 ptok=32768 free_min=1526.0
+  tg0_boot1 reasoning   32768 #2 measure ok               tg=38.01 events=512 ptok=32768 free_min=1448.0
+  tg0_boot1 reasoning   32768 #3 measure ok               tg=37.99 events=512 ptok=32768 free_min=1526.0
+  tg0_boot1 reasoning   32768 #4 measure ok               tg=37.64 events=512 ptok=32768 free_min=1526.0
+  tg0_boot1 reasoning   32768 #5 measure ok               tg=38.05 events=512 ptok=32768 free_min=1448.0
+  tg0_boot1 reasoning  131072 #0 warmup  ok               tg=30.24 events=512 ptok=131072 free_min=736.0
+  tg0_boot1 reasoning  131072 #1 measure ok               tg=30.31 events=512 ptok=131072 free_min=736.0
+  tg0_boot1 reasoning  131072 #2 measure ok               tg=30.56 events=512 ptok=131072 free_min=736.0
+  tg0_boot1 reasoning  131072 #3 measure ok               tg=30.44 events=512 ptok=131072 free_min=736.0
+  tg0_boot1 reasoning  131072 #4 measure ok               tg=30.28 events=512 ptok=131072 free_min=736.0
+  tg0_boot1 reasoning  131072 #5 measure ok               tg=30.27 events=512 ptok=131072 free_min=736.0
+  tg0_boot1 code       131072 #0 warmup  ok               tg=31.29 events=512 ptok=131072 free_min=736.0
+  tg0_boot1 code       131072 #1 measure ok               tg=29.18 events=512 ptok=131072 free_min=736.0
+  tg0_boot1 code       131072 #2 measure ok               tg=31.1 events=512 ptok=131072 free_min=736.0
+  tg0_boot1 code       131072 #3 measure ok               tg=30.2 events=512 ptok=131072 free_min=736.0
+  tg0_boot1 code       131072 #4 measure ok               tg=30.79 events=512 ptok=131072 free_min=736.0
+  tg0_boot1 code       131072 #5 measure ok               tg=31.48 events=512 ptok=131072 free_min=736.0
+  tg0_boot1 prose      131072 #0 warmup  ok               tg=29.99 events=512 ptok=131072 free_min=736.0
+  tg0_boot1 prose      131072 #1 measure ok               tg=30.14 events=512 ptok=131072 free_min=736.0
+  tg0_boot1 prose      131072 #2 measure ok               tg=29.99 events=512 ptok=131072 free_min=736.0
+  tg0_boot1 prose      131072 #3 measure ok               tg=29.82 events=512 ptok=131072 free_min=736.0
+  tg0_boot1 prose      131072 #4 measure ok               tg=28.06 events=512 ptok=131072 free_min=736.0
+  tg0_boot1 prose      131072 #5 measure ok               tg=23.77 events=512 ptok=131072 free_min=736.0
+  tg0_boot1 capacity 257456 status=ok tg=25.119294075134196 prompt_tokens=257456 free_min=8.0
+  wrote /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/migration_3090_2026-09-16/tg_candidate/tg0_boot1/summary.json
+[2026-09-16T23:05:55Z] run_tg tg0_boot1 exit=0
+[2026-09-16T23:05:55Z] boot tg0_boot2 (attempt 1) placement=expert_presence_code.pt
+[2026-09-16T23:09:57Z] boot tg0_boot2 healthy
+  tg0_boot2 prose        2048 #0 warmup  ok               tg=37.46 events=512 ptok=2048 free_min=2540.0
+  tg0_boot2 prose        2048 #1 measure ok               tg=36.49 events=512 ptok=2048 free_min=2540.0
+  tg0_boot2 prose        2048 #2 measure ok               tg=37.62 events=512 ptok=2048 free_min=2540.0
+  tg0_boot2 prose        2048 #3 measure ok               tg=38.09 events=512 ptok=2048 free_min=2540.0
+  tg0_boot2 reasoning    2048 #0 warmup  ok               tg=39.4 events=512 ptok=2048 free_min=2540.0
+  tg0_boot2 reasoning    2048 #1 measure ok               tg=39.85 events=512 ptok=2048 free_min=2540.0
+  tg0_boot2 reasoning    2048 #2 measure ok               tg=40.67 events=512 ptok=2048 free_min=2540.0
+  tg0_boot2 reasoning    2048 #3 measure ok               tg=39.48 events=512 ptok=2048 free_min=2540.0
+  tg0_boot2 code         2048 #0 warmup  ok               tg=35.87 events=512 ptok=2048 free_min=2540.0
+  tg0_boot2 code         2048 #1 measure ok               tg=36.54 events=512 ptok=2048 free_min=2540.0
+  tg0_boot2 code         2048 #2 measure ok               tg=35.0 events=512 ptok=2048 free_min=2540.0
+  tg0_boot2 code         2048 #3 measure ok               tg=34.97 events=512 ptok=2048 free_min=2540.0
+  wrote /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/migration_3090_2026-09-16/tg_candidate/tg0_boot2/summary.json
+[2026-09-16T23:12:57Z] run_tg tg0_boot2 exit=0
+[2026-09-16T23:12:57Z] boot tg1_pres_b1 (attempt 1) placement=expert_presence_code.pt
+[2026-09-16T23:16:59Z] boot tg1_pres_b1 healthy
+  tg1_pres_b1 prose        2048 #0 warmup  ok               tg=38.24 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b1 prose        2048 #1 measure ok               tg=37.96 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b1 prose        2048 #2 measure ok               tg=38.48 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b1 prose        2048 #3 measure ok               tg=38.1 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b1 prose        2048 #4 measure ok               tg=37.76 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b1 prose        2048 #5 measure ok               tg=38.26 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b1 reasoning    2048 #0 warmup  ok               tg=39.63 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b1 reasoning    2048 #1 measure ok               tg=39.7 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b1 reasoning    2048 #2 measure ok               tg=38.42 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b1 reasoning    2048 #3 measure ok               tg=40.19 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b1 reasoning    2048 #4 measure ok               tg=40.33 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b1 reasoning    2048 #5 measure ok               tg=32.5 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b1 code         2048 #0 warmup  ok               tg=29.03 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b1 code         2048 #1 measure ok               tg=32.82 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b1 code         2048 #2 measure ok               tg=35.01 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b1 code         2048 #3 measure ok               tg=36.26 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b1 code         2048 #4 measure ok               tg=37.75 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b1 code         2048 #5 measure ok               tg=35.47 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b1 code        32768 #0 warmup  ok               tg=30.99 events=512 ptok=32768 free_min=1390.0
+  tg1_pres_b1 code        32768 #1 measure ok               tg=31.8 events=512 ptok=32768 free_min=1526.0
+  tg1_pres_b1 code        32768 #2 measure ok               tg=31.95 events=512 ptok=32768 free_min=1448.0
+  tg1_pres_b1 code        32768 #3 measure ok               tg=32.15 events=512 ptok=32768 free_min=1526.0
+  tg1_pres_b1 code        32768 #4 measure ok               tg=31.77 events=512 ptok=32768 free_min=1526.0
+  tg1_pres_b1 code        32768 #5 measure ok               tg=31.06 events=512 ptok=32768 free_min=1448.0
+  tg1_pres_b1 prose       32768 #0 warmup  ok               tg=37.4 events=512 ptok=32768 free_min=1526.0
+  tg1_pres_b1 prose       32768 #1 measure ok               tg=37.26 events=512 ptok=32768 free_min=1526.0
+  tg1_pres_b1 prose       32768 #2 measure ok               tg=36.27 events=512 ptok=32768 free_min=1448.0
+  tg1_pres_b1 prose       32768 #3 measure ok               tg=36.37 events=512 ptok=32768 free_min=1526.0
+  tg1_pres_b1 prose       32768 #4 measure ok               tg=37.09 events=512 ptok=32768 free_min=1526.0
+  tg1_pres_b1 prose       32768 #5 measure ok               tg=35.77 events=512 ptok=32768 free_min=1448.0
+  tg1_pres_b1 reasoning   32768 #0 warmup  ok               tg=38.1 events=512 ptok=32768 free_min=1526.0
+  tg1_pres_b1 reasoning   32768 #1 measure ok               tg=37.9 events=512 ptok=32768 free_min=1526.0
+  tg1_pres_b1 reasoning   32768 #2 measure ok               tg=37.3 events=512 ptok=32768 free_min=1448.0
+  tg1_pres_b1 reasoning   32768 #3 measure ok               tg=38.29 events=512 ptok=32768 free_min=1526.0
+  tg1_pres_b1 reasoning   32768 #4 measure ok               tg=37.14 events=512 ptok=32768 free_min=1526.0
+  tg1_pres_b1 reasoning   32768 #5 measure ok               tg=36.75 events=512 ptok=32768 free_min=1448.0
+  tg1_pres_b1 reasoning  131072 #0 warmup  ok               tg=30.14 events=512 ptok=131072 free_min=736.0
+  tg1_pres_b1 reasoning  131072 #1 measure ok               tg=30.1 events=512 ptok=131072 free_min=736.0
+  tg1_pres_b1 reasoning  131072 #2 measure ok               tg=31.01 events=512 ptok=131072 free_min=736.0
+  tg1_pres_b1 reasoning  131072 #3 measure ok               tg=29.84 events=512 ptok=131072 free_min=736.0
+  tg1_pres_b1 reasoning  131072 #4 measure ok               tg=29.65 events=512 ptok=131072 free_min=736.0
+  tg1_pres_b1 reasoning  131072 #5 measure ok               tg=27.15 events=512 ptok=131072 free_min=736.0
+  tg1_pres_b1 code       131072 #0 warmup  ok               tg=30.4 events=512 ptok=131072 free_min=736.0
+  tg1_pres_b1 code       131072 #1 measure ok               tg=28.3 events=512 ptok=131072 free_min=736.0
+  tg1_pres_b1 code       131072 #2 measure ok               tg=29.64 events=512 ptok=131072 free_min=736.0
+  tg1_pres_b1 code       131072 #3 measure ok               tg=29.39 events=512 ptok=131072 free_min=736.0
+  tg1_pres_b1 code       131072 #4 measure ok               tg=29.76 events=512 ptok=131072 free_min=736.0
+  tg1_pres_b1 code       131072 #5 measure ok               tg=29.57 events=512 ptok=131072 free_min=736.0
+  tg1_pres_b1 prose      131072 #0 warmup  ok               tg=30.44 events=512 ptok=131072 free_min=736.0
+  tg1_pres_b1 prose      131072 #1 measure ok               tg=29.48 events=512 ptok=131072 free_min=736.0
+  tg1_pres_b1 prose      131072 #2 measure ok               tg=28.25 events=512 ptok=131072 free_min=736.0
+  tg1_pres_b1 prose      131072 #3 measure ok               tg=29.78 events=512 ptok=131072 free_min=736.0
+  tg1_pres_b1 prose      131072 #4 measure ok               tg=29.73 events=512 ptok=131072 free_min=736.0
+  tg1_pres_b1 prose      131072 #5 measure ok               tg=22.24 events=512 ptok=131072 free_min=736.0
+  wrote /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/migration_3090_2026-09-16/tg_candidate/tg1_pres_b1/summary.json
+[2026-09-17T00:00:39Z] run_tg tg1_pres_b1 exit=0
+[2026-09-17T00:00:39Z] boot tg1_mass_b1 (attempt 1) placement=expert_freq.pt
+[2026-09-17T00:04:34Z] boot tg1_mass_b1 healthy
+  tg1_mass_b1 prose        2048 #0 warmup  ok               tg=36.81 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b1 prose        2048 #1 measure ok               tg=32.49 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b1 prose        2048 #2 measure ok               tg=25.11 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b1 prose        2048 #3 measure ok               tg=28.75 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b1 prose        2048 #4 measure ok               tg=30.12 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b1 prose        2048 #5 measure ok               tg=32.43 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b1 reasoning    2048 #0 warmup  ok               tg=28.22 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b1 reasoning    2048 #1 measure ok               tg=24.87 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b1 reasoning    2048 #2 measure ok               tg=28.73 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b1 reasoning    2048 #3 measure ok               tg=26.95 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b1 reasoning    2048 #4 measure ok               tg=27.79 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b1 reasoning    2048 #5 measure ok               tg=26.46 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b1 code         2048 #0 warmup  ok               tg=21.71 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b1 code         2048 #1 measure ok               tg=19.89 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b1 code         2048 #2 measure ok               tg=19.3 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b1 code         2048 #3 measure ok               tg=18.21 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b1 code         2048 #4 measure ok               tg=20.08 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b1 code         2048 #5 measure ok               tg=28.61 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b1 code        32768 #0 warmup  ok               tg=27.35 events=512 ptok=32768 free_min=1390.0
+  tg1_mass_b1 code        32768 #1 measure ok               tg=27.62 events=512 ptok=32768 free_min=1526.0
+  tg1_mass_b1 code        32768 #2 measure ok               tg=28.8 events=512 ptok=32768 free_min=1496.0
+  tg1_mass_b1 code        32768 #3 measure ok               tg=27.19 events=512 ptok=32768 free_min=1526.0
+  tg1_mass_b1 code        32768 #4 measure ok               tg=27.88 events=512 ptok=32768 free_min=1496.0
+  tg1_mass_b1 code        32768 #5 measure ok               tg=26.38 events=512 ptok=32768 free_min=1526.0
+  tg1_mass_b1 prose       32768 #0 warmup  ok               tg=31.32 events=512 ptok=32768 free_min=1526.0
+  tg1_mass_b1 prose       32768 #1 measure ok               tg=33.25 events=512 ptok=32768 free_min=1526.0
+  tg1_mass_b1 prose       32768 #2 measure ok               tg=34.71 events=512 ptok=32768 free_min=1448.0
+  tg1_mass_b1 prose       32768 #3 measure ok               tg=31.41 events=512 ptok=32768 free_min=1526.0
+  tg1_mass_b1 prose       32768 #4 measure ok               tg=32.77 events=512 ptok=32768 free_min=1526.0
+  tg1_mass_b1 prose       32768 #5 measure ok               tg=32.73 events=512 ptok=32768 free_min=1448.0
+  tg1_mass_b1 reasoning   32768 #0 warmup  ok               tg=32.96 events=512 ptok=32768 free_min=1526.0
+  tg1_mass_b1 reasoning   32768 #1 measure ok               tg=33.49 events=512 ptok=32768 free_min=1526.0
+  tg1_mass_b1 reasoning   32768 #2 measure ok               tg=33.72 events=512 ptok=32768 free_min=1448.0
+  tg1_mass_b1 reasoning   32768 #3 measure ok               tg=32.63 events=512 ptok=32768 free_min=1526.0
+  tg1_mass_b1 reasoning   32768 #4 measure ok               tg=32.69 events=512 ptok=32768 free_min=1526.0
+  tg1_mass_b1 reasoning   32768 #5 measure ok               tg=26.91 events=512 ptok=32768 free_min=1448.0
+  tg1_mass_b1 reasoning  131072 #0 warmup  ok               tg=25.8 events=512 ptok=131072 free_min=736.0
+  tg1_mass_b1 reasoning  131072 #1 measure ok               tg=25.94 events=512 ptok=131072 free_min=736.0
+  tg1_mass_b1 reasoning  131072 #2 measure ok               tg=26.14 events=512 ptok=131072 free_min=736.0
+  tg1_mass_b1 reasoning  131072 #3 measure ok               tg=26.09 events=512 ptok=131072 free_min=736.0
+  tg1_mass_b1 reasoning  131072 #4 measure ok               tg=26.06 events=512 ptok=131072 free_min=736.0
+  tg1_mass_b1 reasoning  131072 #5 measure ok               tg=25.98 events=512 ptok=131072 free_min=736.0
+  tg1_mass_b1 code       131072 #0 warmup  ok               tg=29.53 events=512 ptok=131072 free_min=736.0
+  tg1_mass_b1 code       131072 #1 measure ok               tg=26.29 events=512 ptok=131072 free_min=736.0
+  tg1_mass_b1 code       131072 #2 measure ok               tg=29.33 events=512 ptok=131072 free_min=736.0
+  tg1_mass_b1 code       131072 #3 measure ok               tg=29.18 events=512 ptok=131072 free_min=736.0
+  tg1_mass_b1 code       131072 #4 measure ok               tg=26.45 events=512 ptok=131072 free_min=736.0
+  tg1_mass_b1 code       131072 #5 measure ok               tg=23.19 events=512 ptok=131072 free_min=736.0
+  tg1_mass_b1 prose      131072 #0 warmup  ok               tg=27.74 events=512 ptok=131072 free_min=736.0
+  tg1_mass_b1 prose      131072 #1 measure ok               tg=27.87 events=512 ptok=131072 free_min=736.0
+  tg1_mass_b1 prose      131072 #2 measure ok               tg=26.83 events=512 ptok=131072 free_min=736.0
+  tg1_mass_b1 prose      131072 #3 measure ok               tg=27.19 events=512 ptok=131072 free_min=736.0
+  tg1_mass_b1 prose      131072 #4 measure ok               tg=26.93 events=512 ptok=131072 free_min=736.0
+  tg1_mass_b1 prose      131072 #5 measure ok               tg=26.95 events=512 ptok=131072 free_min=736.0
+  wrote /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/migration_3090_2026-09-16/tg_candidate/tg1_mass_b1/summary.json
+[2026-09-17T00:51:28Z] run_tg tg1_mass_b1 exit=0
+[2026-09-17T00:51:28Z] boot tg1_mass_b2 (attempt 1) placement=expert_freq.pt
+[2026-09-17T00:55:22Z] boot tg1_mass_b2 healthy
+  tg1_mass_b2 prose        2048 #0 warmup  ok               tg=36.56 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b2 prose        2048 #1 measure ok               tg=37.32 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b2 prose        2048 #2 measure ok               tg=35.86 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b2 prose        2048 #3 measure ok               tg=35.88 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b2 reasoning    2048 #0 warmup  ok               tg=34.51 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b2 reasoning    2048 #1 measure ok               tg=34.11 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b2 reasoning    2048 #2 measure ok               tg=34.47 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b2 reasoning    2048 #3 measure ok               tg=35.05 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b2 code         2048 #0 warmup  ok               tg=28.77 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b2 code         2048 #1 measure ok               tg=27.59 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b2 code         2048 #2 measure ok               tg=29.17 events=512 ptok=2048 free_min=2540.0
+  tg1_mass_b2 code         2048 #3 measure ok               tg=29.0 events=512 ptok=2048 free_min=2540.0
+  wrote /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/migration_3090_2026-09-16/tg_candidate/tg1_mass_b2/summary.json
+[2026-09-17T00:58:45Z] run_tg tg1_mass_b2 exit=0
+[2026-09-17T00:58:45Z] boot tg1_pres_b2 (attempt 1) placement=expert_presence_code.pt
+[2026-09-17T01:02:44Z] boot tg1_pres_b2 healthy
+  tg1_pres_b2 prose        2048 #0 warmup  ok               tg=37.03 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b2 prose        2048 #1 measure ok               tg=38.92 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b2 prose        2048 #2 measure ok               tg=37.36 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b2 prose        2048 #3 measure ok               tg=36.49 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b2 reasoning    2048 #0 warmup  ok               tg=38.52 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b2 reasoning    2048 #1 measure ok               tg=39.5 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b2 reasoning    2048 #2 measure ok               tg=41.09 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b2 reasoning    2048 #3 measure ok               tg=37.36 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b2 code         2048 #0 warmup  ok               tg=35.72 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b2 code         2048 #1 measure ok               tg=34.98 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b2 code         2048 #2 measure ok               tg=35.68 events=512 ptok=2048 free_min=2540.0
+  tg1_pres_b2 code         2048 #3 measure ok               tg=35.24 events=512 ptok=2048 free_min=2540.0
+  wrote /root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/migration_3090_2026-09-16/tg_candidate/tg1_pres_b2/summary.json
+[2026-09-17T01:05:46Z] run_tg tg1_pres_b2 exit=0
+[2026-09-17T01:05:57Z] driver complete; server stopped

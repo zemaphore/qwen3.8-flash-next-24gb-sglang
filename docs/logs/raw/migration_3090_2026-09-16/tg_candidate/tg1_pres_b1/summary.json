@@ -1,0 +1,555 @@
+{
+  "boot_label": "tg1_pres_b1",
+  "cells": {
+    "prose-2048": {
+      "class": "prose",
+      "requested_input_tokens": 2048,
+      "actual_prompt_tokens": 2048,
+      "n_measured_ok": 5,
+      "n_samples": 6,
+      "tg_tokens_per_s": {
+        "values": [
+          37.96496799028235,
+          38.48166934773618,
+          38.102353727373746,
+          37.75588277437799,
+          38.25635843038241
+        ],
+        "mean": 38.11224645403054,
+        "sd": 0.24739661283943734
+      },
+      "per_request_throughput_tokens_per_s": [
+        37.96496799028235,
+        38.48166934773618,
+        38.102353727373746,
+        37.75588277437799,
+        38.25635843038241
+      ],
+      "median_token_latency_ms": {
+        "values": [
+          26.322817997424863,
+          25.75111700571142,
+          25.78027998970356,
+          26.049940002849326,
+          25.668571994174272
+        ],
+        "median_of_medians": 25.78027998970356
+      },
+      "p95_token_latency_ms": {
+        "values": [
+          32.257514001685195,
+          32.336727002984844,
+          33.25807099463418,
+          32.90339199884329,
+          32.87784499116242
+        ],
+        "median_of_p95": 32.87784499116242
+      },
+      "individual_token_timing": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "ttft_seconds": [
+        1.4293728269985877,
+        1.1565335009945557,
+        1.2075115549960174,
+        1.2185893720015883,
+        1.2134127939934842
+      ]
+    },
+    "reasoning-2048": {
+      "class": "reasoning",
+      "requested_input_tokens": 2048,
+      "actual_prompt_tokens": 2048,
+      "n_measured_ok": 5,
+      "n_samples": 6,
+      "tg_tokens_per_s": {
+        "values": [
+          39.699276674012474,
+          38.41855350176864,
+          40.18830845844223,
+          40.32839956846537,
+          32.49584813490283
+        ],
+        "mean": 38.226077267518306,
+        "sd": 2.943229512220043
+      },
+      "per_request_throughput_tokens_per_s": [
+        39.699276674012474,
+        38.41855350176864,
+        40.18830845844223,
+        40.32839956846537,
+        32.49584813490283
+      ],
+      "median_token_latency_ms": {
+        "values": [
+          24.66289400763344,
+          25.37531800044235,
+          24.35276299365796,
+          24.05250200536102,
+          29.81696999631822
+        ],
+        "median_of_medians": 24.66289400763344
+      },
+      "p95_token_latency_ms": {
+        "values": [
+          32.7671580016613,
+          33.522352008731104,
+          32.83614000247326,
+          32.35113399568945,
+          43.01123300683685
+        ],
+        "median_of_p95": 32.83614000247326
+      },
+      "individual_token_timing": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "ttft_seconds": [
+        1.087387353007216,
+        1.0503561799996532,
+        1.0934842419956112,
+        1.0467717459978303,
+        1.0310100299975602
+      ]
+    },
+    "code-2048": {
+      "class": "code",
+      "requested_input_tokens": 2048,
+      "actual_prompt_tokens": 2048,
+      "n_measured_ok": 5,
+      "n_samples": 6,
+      "tg_tokens_per_s": {
+        "values": [
+          32.821474900256185,
+          35.01117210096761,
+          36.25607582662249,
+          37.749721615812284,
+          35.46927182305612
+        ],
+        "mean": 35.46154325334294,
+        "sd": 1.6149239637287585
+      },
+      "per_request_throughput_tokens_per_s": [
+        32.821474900256185,
+        35.01117210096761,
+        36.25607582662249,
+        37.749721615812284,
+        35.46927182305612
+      ],
+      "median_token_latency_ms": {
+        "values": [
+          30.053584996494465,
+          28.304849998676218,
+          27.55255499505438,
+          26.271422000718303,
+          27.572402002988383
+        ],
+        "median_of_medians": 27.572402002988383
+      },
+      "p95_token_latency_ms": {
+        "values": [
+          38.40875100286212,
+          36.48952199728228,
+          34.63576399371959,
+          33.4344470029464,
+          36.53696700348519
+        ],
+        "median_of_p95": 36.48952199728228
+      },
+      "individual_token_timing": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "ttft_seconds": [
+        1.3620033680053893,
+        1.121667693994823,
+        1.1062444809940644,
+        1.0823497909877915,
+        1.0729701679956634
+      ]
+    },
+    "code-32768": {
+      "class": "code",
+      "requested_input_tokens": 32768,
+      "actual_prompt_tokens": 32768,
+      "n_measured_ok": 5,
+      "n_samples": 6,
+      "tg_tokens_per_s": {
+        "values": [
+          31.802626125984908,
+          31.951004918951284,
+          32.149646521505005,
+          31.77028157671766,
+          31.060153735909502
+        ],
+        "mean": 31.74674257581367,
+        "sd": 0.36854741488768183
+      },
+      "per_request_throughput_tokens_per_s": [
+        31.802626125984908,
+        31.951004918951284,
+        32.149646521505005,
+        31.77028157671766,
+        31.060153735909502
+      ],
+      "median_token_latency_ms": {
+        "values": [
+          31.201197009067982,
+          31.008207006379962,
+          31.110523996176198,
+          31.17732900136616,
+          32.24489999411162
+        ],
+        "median_of_medians": 31.17732900136616
+      },
+      "p95_token_latency_ms": {
+        "values": [
+          40.24455200124066,
+          39.769429989974014,
+          38.62292200210504,
+          41.31399300240446,
+          39.53216900117695
+        ],
+        "median_of_p95": 39.769429989974014
+      },
+      "individual_token_timing": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "ttft_seconds": [
+        13.215595360990847,
+        13.218212996987859,
+        13.290010356999119,
+        13.19860749700456,
+        13.280987171005108
+      ]
+    },
+    "prose-32768": {
+      "class": "prose",
+      "requested_input_tokens": 32768,
+      "actual_prompt_tokens": 32768,
+      "n_measured_ok": 5,
+      "n_samples": 6,
+      "tg_tokens_per_s": {
+        "values": [
+          37.260646815199536,
+          36.27133514002807,
+          36.37079985441456,
+          37.086110471337946,
+          35.767729566820464
+        ],
+        "mean": 36.55132436956011,
+        "sd": 0.5502978085810805
+      },
+      "per_request_throughput_tokens_per_s": [
+        37.260646815199536,
+        36.27133514002807,
+        36.37079985441456,
+        37.086110471337946,
+        35.767729566820464
+      ],
+      "median_token_latency_ms": {
+        "values": [
+          26.41081900219433,
+          27.213994995690882,
+          27.121475999592803,
+          26.92695400037337,
+          27.536352004972287
+        ],
+        "median_of_medians": 27.121475999592803
+      },
+      "p95_token_latency_ms": {
+        "values": [
+          34.10177199111786,
+          35.458226993796416,
+          34.4783769978676,
+          33.86225599388126,
+          35.255563008831814
+        ],
+        "median_of_p95": 34.4783769978676
+      },
+      "individual_token_timing": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "ttft_seconds": [
+        13.200192670003162,
+        13.14036121898971,
+        13.191405025005224,
+        13.297380802003318,
+        13.162763630985864
+      ]
+    },
+    "reasoning-32768": {
+      "class": "reasoning",
+      "requested_input_tokens": 32768,
+      "actual_prompt_tokens": 32768,
+      "n_measured_ok": 5,
+      "n_samples": 6,
+      "tg_tokens_per_s": {
+        "values": [
+          37.90410132184336,
+          37.29719071921454,
+          38.285847775076135,
+          37.13533877364387,
+          36.752720638011425
+        ],
+        "mean": 37.475039845557866,
+        "sd": 0.5495953814567788
+      },
+      "per_request_throughput_tokens_per_s": [
+        37.90410132184336,
+        37.29719071921454,
+        38.285847775076135,
+        37.13533877364387,
+        36.752720638011425
+      ],
+      "median_token_latency_ms": {
+        "values": [
+          25.977632991271093,
+          26.443310009199195,
+          25.6606280017877,
+          26.433904000441544,
+          26.61666600033641
+        ],
+        "median_of_medians": 26.433904000441544
+      },
+      "p95_token_latency_ms": {
+        "values": [
+          32.531132994336076,
+          33.75245799543336,
+          32.812221004860476,
+          33.49569901183713,
+          35.23787400627043
+        ],
+        "median_of_p95": 33.49569901183713
+      },
+      "individual_token_timing": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "ttft_seconds": [
+        13.038206154989894,
+        12.977962480988936,
+        13.062618462005048,
+        13.054904909004108,
+        13.057783975003986
+      ]
+    },
+    "reasoning-131072": {
+      "class": "reasoning",
+      "requested_input_tokens": 131072,
+      "actual_prompt_tokens": 131072,
+      "n_measured_ok": 5,
+      "n_samples": 6,
+      "tg_tokens_per_s": {
+        "values": [
+          30.103455865773785,
+          31.00628007687959,
+          29.844089405788285,
+          29.64540218512846,
+          27.15361422233226
+        ],
+        "mean": 29.550568351180477,
+        "sd": 1.2857152401284613
+      },
+      "per_request_throughput_tokens_per_s": [
+        30.103455865773785,
+        31.00628007687959,
+        29.844089405788285,
+        29.64540218512846,
+        27.15361422233226
+      ],
+      "median_token_latency_ms": {
+        "values": [
+          32.981515003484674,
+          32.34862499812152,
+          33.31930500280578,
+          33.64821299328469,
+          36.08122699370142
+        ],
+        "median_of_medians": 33.31930500280578
+      },
+      "p95_token_latency_ms": {
+        "values": [
+          40.15217900450807,
+          38.450888998340815,
+          40.330596995772794,
+          40.48561000672635,
+          48.0745700042462
+        ],
+        "median_of_p95": 40.330596995772794
+      },
+      "individual_token_timing": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "ttft_seconds": [
+        86.99206399300601,
+        86.94337152200751,
+        89.18742508400464,
+        87.04271977799363,
+        90.76831361900258
+      ]
+    },
+    "code-131072": {
+      "class": "code",
+      "requested_input_tokens": 131072,
+      "actual_prompt_tokens": 131072,
+      "n_measured_ok": 5,
+      "n_samples": 6,
+      "tg_tokens_per_s": {
+        "values": [
+          28.29832203821898,
+          29.638184681215105,
+          29.38720967261426,
+          29.75832779170931,
+          29.5671408958203
+        ],
+        "mean": 29.329837015915594,
+        "sd": 0.5295867313297974
+      },
+      "per_request_throughput_tokens_per_s": [
+        28.29832203821898,
+        29.638184681215105,
+        29.38720967261426,
+        29.75832779170931,
+        29.5671408958203
+      ],
+      "median_token_latency_ms": {
+        "values": [
+          34.982598008355126,
+          33.75396699993871,
+          34.164676995715126,
+          33.54986599879339,
+          33.361163004883565
+        ],
+        "median_of_medians": 33.75396699993871
+      },
+      "p95_token_latency_ms": {
+        "values": [
+          45.205143993371166,
+          42.11131201009266,
+          42.41820600873325,
+          42.21908299950883,
+          43.26251699239947
+        ],
+        "median_of_p95": 42.41820600873325
+      },
+      "individual_token_timing": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "ttft_seconds": [
+        79.1817066270014,
+        83.3733653119998,
+        79.27677321698866,
+        78.17264097300358,
+        78.49875795700063
+      ]
+    },
+    "prose-131072": {
+      "class": "prose",
+      "requested_input_tokens": 131072,
+      "actual_prompt_tokens": 131072,
+      "n_measured_ok": 5,
+      "n_samples": 6,
+      "tg_tokens_per_s": {
+        "values": [
+          29.479020288110632,
+          28.253396709690627,
+          29.78200869495653,
+          29.725439115479226,
+          22.244792652706906
+        ],
+        "mean": 27.896931492188788,
+        "sd": 2.8800590986670938
+      },
+      "per_request_throughput_tokens_per_s": [
+        29.479020288110632,
+        28.253396709690627,
+        29.78200869495653,
+        29.725439115479226,
+        22.244792652706906
+      ],
+      "median_token_latency_ms": {
+        "values": [
+          33.6006389989052,
+          34.57707099732943,
+          33.590285005629994,
+          33.734858996467665,
+          45.122841009288095
+        ],
+        "median_of_medians": 33.734858996467665
+      },
+      "p95_token_latency_ms": {
+        "values": [
+          41.63873300421983,
+          46.58513799950015,
+          40.475250003510155,
+          40.463053999701515,
+          57.814357001916505
+        ],
+        "median_of_p95": 41.63873300421983
+      },
+      "individual_token_timing": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "ttft_seconds": [
+        82.93028876899916,
+        83.79555413000344,
+        82.9421941920009,
+        82.81733805399563,
+        86.24253304899321
+      ]
+    }
+  },
+  "capacity": null,
+  "ended_utc": "2026-09-17T00:00:38.958833+00:00",
+  "frozen_input_state_after": {
+    "label": "after",
+    "captured_utc": "2026-09-17T00:00:38.958860+00:00",
+    "gpu": {
+      "pstate": "P2",
+      "temperature_c": 76.0,
+      "power_w": 227.68,
+      "memory_used_mib": 23161.0,
+      "memory_free_mib": 964.0,
+      "util_pct": 87.0,
+      "clock_sm_mhz": 1905.0,
+      "clock_mem_mhz": 9501.0,
+      "clock_gr_mhz": 1905.0
+    },
+    "elastic_status": "time 23:16:53\nS_min 184 S_max 184 floor 184\narena_GB 11.062\nvram_free_GB 4.515\nmass_covered 0.4665\npool [128, 0, 0, 0] pin_used_MB 178\nS [184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184]\n",
+    "server_log_tail": "[2026-09-17 00:00:15] Using nearest MoE expert-count config E=432 for requested E=447 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16.json.\n[2026-09-17 00:00:15] Using nearest MoE expert-count config E=432 for requested E=447 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json.\n[2026-09-17 00:00:15] Using nearest MoE expert-count config E=432 for requested E=411 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16.json.\n[2026-09-17 00:00:15] Using nearest MoE expert-count config E=432 for requested E=411 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json.\n[2026-09-17 00:00:15] Using nearest MoE expert-count config E=432 for requested E=409 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16.json.\n[2026-09-17 00:00:15] Using nearest MoE expert-count config E=432 for requested E=409 from /root/qwen3.8-flash-next-24gb-sglang/assets/moe_configs/configs/triton_3_7_1/E=432,N=160,device_name=NVIDIA_GeForce_RTX_3090,dtype=int2_w2a16_down.json.\n[2026-09-17 00:00:15] Prefill batch, #new-seq: 1, #new-token: 2048, #cached-token: 0, full token usage: 0.50, mamba usage: 1.00, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 763.69\n[2026-09-17 00:00:17] Decode batch, #running-req: 1, #full token: 131136, full token usage: 0.50, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 0.45, #queue-req: 0\n[2026-09-17 00:00:19] Decode batch, #running-req: 1, #full token: 131200, full token usage: 0.50, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 19.78, #queue-req: 0\n[2026-09-17 00:00:21] Decode batch, #running-req: 1, #full token: 131200, full token usage: 0.50, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 22.11, #queue-req: 0\n[2026-09-17 00:00:23] Decode batch, #running-req: 1, #full token: 131264, full token usage: 0.50, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 22.70, #queue-req: 0\n[2026-09-17 00:00:24] Decode batch, #running-req: 1, #full token: 131264, full token usage: 0.50, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 22.11, #queue-req: 0\n[2026-09-17 00:00:26] Decode batch, #running-req: 1, #full token: 131328, full token usage: 0.50, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 22.66, #queue-req: 0\n[2026-09-17 00:00:28] Decode batch, #running-req: 1, #full token: 131392, full token usage: 0.50, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 22.65, #queue-req: 0\n[2026-09-17 00:00:30] Decode batch, #running-req: 1, #full token: 131392, full token usage: 0.50, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 22.29, #queue-req: 0\n[2026-09-17 00:00:31] Decode batch, #running-req: 1, #full token: 131456, full token usage: 0.50, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 25.02, #queue-req: 0\n[2026-09-17 00:00:33] Decode batch, #running-req: 1, #full token: 131520, full token usage: 0.50, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 23.64, #queue-req: 0\n[2026-09-17 00:00:35] Decode batch, #running-req: 1, #full token: 131520, full token usage: 0.50, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 24.36, #queue-req: 0\n[2026-09-17 00:00:36] Decode batch, #running-req: 1, #full token: 131584, full token usage: 0.50, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 22.64, #queue-req: 0\n[2026-09-17 00:00:38] Decode batch, #running-req: 1, #full token: 131584, full token usage: 0.50, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 21.02, #queue-req: 0"
+  }
+}

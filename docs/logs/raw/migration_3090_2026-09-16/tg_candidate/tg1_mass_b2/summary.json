@@ -1,0 +1,165 @@
+{
+  "boot_label": "tg1_mass_b2",
+  "cells": {
+    "prose-2048": {
+      "class": "prose",
+      "requested_input_tokens": 2048,
+      "actual_prompt_tokens": 2048,
+      "n_measured_ok": 3,
+      "n_samples": 4,
+      "tg_tokens_per_s": {
+        "values": [
+          37.32401801925543,
+          35.856745556768836,
+          35.88339212592063
+        ],
+        "mean": 36.35471856731497,
+        "sd": 0.6854845393641679
+      },
+      "per_request_throughput_tokens_per_s": [
+        37.32401801925543,
+        35.856745556768836,
+        35.88339212592063
+      ],
+      "median_token_latency_ms": {
+        "values": [
+          26.036052004201338,
+          27.789226995082572,
+          27.3669379967032
+        ],
+        "median_of_medians": 27.3669379967032
+      },
+      "p95_token_latency_ms": {
+        "values": [
+          36.05999999854248,
+          35.13590000511613,
+          36.16888799297158
+        ],
+        "median_of_p95": 36.05999999854248
+      },
+      "individual_token_timing": [
+        true,
+        true,
+        true
+      ],
+      "ttft_seconds": [
+        1.3250429420004366,
+        1.1118379239924252,
+        1.0486300400079926
+      ]
+    },
+    "reasoning-2048": {
+      "class": "reasoning",
+      "requested_input_tokens": 2048,
+      "actual_prompt_tokens": 2048,
+      "n_measured_ok": 3,
+      "n_samples": 4,
+      "tg_tokens_per_s": {
+        "values": [
+          34.10545431555802,
+          34.47291637390936,
+          35.05253418854397
+        ],
+        "mean": 34.54363495933712,
+        "sd": 0.3898640020976969
+      },
+      "per_request_throughput_tokens_per_s": [
+        34.10545431555802,
+        34.47291637390936,
+        35.05253418854397
+      ],
+      "median_token_latency_ms": {
+        "values": [
+          27.76828399510123,
+          27.75453799404204,
+          28.080197997041978
+        ],
+        "median_of_medians": 27.76828399510123
+      },
+      "p95_token_latency_ms": {
+        "values": [
+          41.146941992337815,
+          39.070079001248814,
+          37.96757500094827
+        ],
+        "median_of_p95": 39.070079001248814
+      },
+      "individual_token_timing": [
+        true,
+        true,
+        true
+      ],
+      "ttft_seconds": [
+        1.1017360190016916,
+        1.1089658059936482,
+        1.0912307899998268
+      ]
+    },
+    "code-2048": {
+      "class": "code",
+      "requested_input_tokens": 2048,
+      "actual_prompt_tokens": 2048,
+      "n_measured_ok": 3,
+      "n_samples": 4,
+      "tg_tokens_per_s": {
+        "values": [
+          27.586136085121364,
+          29.16565775963465,
+          28.998898063874222
+        ],
+        "mean": 28.583563969543416,
+        "sd": 0.7085661519338475
+      },
+      "per_request_throughput_tokens_per_s": [
+        27.586136085121364,
+        29.16565775963465,
+        28.998898063874222
+      ],
+      "median_token_latency_ms": {
+        "values": [
+          35.898642003303394,
+          34.99472499242984,
+          34.999249008251354
+        ],
+        "median_of_medians": 34.999249008251354
+      },
+      "p95_token_latency_ms": {
+        "values": [
+          45.9236799943028,
+          43.712269005482085,
+          43.241680003120564
+        ],
+        "median_of_p95": 43.712269005482085
+      },
+      "individual_token_timing": [
+        true,
+        true,
+        true
+      ],
+      "ttft_seconds": [
+        1.2344418319989927,
+        1.1920471589983208,
+        1.1356447209982434
+      ]
+    }
+  },
+  "capacity": null,
+  "ended_utc": "2026-09-17T00:58:45.257472+00:00",
+  "frozen_input_state_after": {
+    "label": "after",
+    "captured_utc": "2026-09-17T00:58:45.257495+00:00",
+    "gpu": {
+      "pstate": "P2",
+      "temperature_c": 76.0,
+      "power_w": 243.23,
+      "memory_used_mib": 21585.0,
+      "memory_free_mib": 2540.0,
+      "util_pct": 94.0,
+      "clock_sm_mhz": 1920.0,
+      "clock_mem_mhz": 9501.0,
+      "clock_gr_mhz": 1920.0
+    },
+    "elastic_status": "time 00:55:15\nS_min 184 S_max 184 floor 184\narena_GB 11.062\nvram_free_GB 4.515\nmass_covered 0.8430\npool [128, 0, 0, 0] pin_used_MB 178\nS [184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184]\n",
+    "server_log_tail": "[2026-09-17 00:58:20] Decode batch, #running-req: 1, #full token: 2432, full token usage: 0.01, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 26.99, #queue-req: 0\n[2026-09-17 00:58:22] Decode batch, #running-req: 1, #full token: 2496, full token usage: 0.01, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 27.40, #queue-req: 0\n[2026-09-17 00:58:23] Decode batch, #running-req: 1, #full token: 2496, full token usage: 0.01, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 27.01, #queue-req: 0\n[2026-09-17 00:58:25] Decode batch, #running-req: 1, #full token: 2560, full token usage: 0.01, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 26.23, #queue-req: 0\n[2026-09-17 00:58:26] INFO:     127.0.0.1:37126 - \"POST /generate HTTP/1.1\" 200 OK\n[2026-09-17 00:58:26] KV lazy commit: tokens 2112 -> 6144 (owner backed 96 MB, torch reserved 11.54 GB, driver free 2.48 GB, capturing=False)\n[2026-09-17 00:58:27] Prefill batch, #new-seq: 1, #new-token: 2048, #cached-token: 0, full token usage: 0.01, mamba usage: 1.00, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 109.77\n[2026-09-17 00:58:27] Decode batch, #running-req: 1, #full token: 2112, full token usage: 0.01, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 15.70, #queue-req: 0\n[2026-09-17 00:58:29] Decode batch, #running-req: 1, #full token: 2112, full token usage: 0.01, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 30.03, #queue-req: 0\n[2026-09-17 00:58:30] Decode batch, #running-req: 1, #full token: 2176, full token usage: 0.01, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 27.53, #queue-req: 0\n[2026-09-17 00:58:31] Decode batch, #running-req: 1, #full token: 2240, full token usage: 0.01, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 33.15, #queue-req: 0\n[2026-09-17 00:58:33] Decode batch, #running-req: 1, #full token: 2240, full token usage: 0.01, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 28.77, #queue-req: 0\n[2026-09-17 00:58:34] Decode batch, #running-req: 1, #full token: 2304, full token usage: 0.01, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 32.53, #queue-req: 0\n[2026-09-17 00:58:35] Decode batch, #running-req: 1, #full token: 2304, full token usage: 0.01, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 28.54, #queue-req: 0\n[2026-09-17 00:58:37] Decode batch, #running-req: 1, #full token: 2368, full token usage: 0.01, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 30.28, #queue-req: 0\n[2026-09-17 00:58:38] Decode batch, #running-req: 1, #full token: 2432, full token usage: 0.01, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 28.01, #queue-req: 0\n[2026-09-17 00:58:40] Decode batch, #running-req: 1, #full token: 2432, full token usage: 0.01, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 28.00, #queue-req: 0\n[2026-09-17 00:58:41] Decode batch, #running-req: 1, #full token: 2496, full token usage: 0.01, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 27.90, #queue-req: 0\n[2026-09-17 00:58:43] Decode batch, #running-req: 1, #full token: 2560, full token usage: 0.01, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 26.97, #queue-req: 0\n[2026-09-17 00:58:44] Decode batch, #running-req: 1, #full token: 2560, full token usage: 0.01, mamba num: 1, mamba usage: 1.00, cuda graph: True, gen throughput (token/s): 27.44, #queue-req: 0"
+  }
+}
