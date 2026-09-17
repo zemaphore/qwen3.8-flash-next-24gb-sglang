@@ -1,5 +1,19 @@
 # Qwen3.8-Flash-Next on one 24 GB GPU
 
+**Current target: RTX 3090 (SM86) only.** The promoted stack runs on pinned
+SGLang main `b02e16a895` plus the six-patch serving series, with a
+235,520-token context, radix prefix reuse and R1–R3 enabled. Start with the
+[current installation, dependencies and rollback](sglang/README.md#main-based-3090-series-current)
+and [main-based patch](sglang/qwen4exp-serving-b02e16a8.patch).
+
+Additional migration verification was waived by the user. **PP14 long-prompt
+validation remains open for possible later work**; see the
+[acceptance record](docs/SGLANG_MAIN_MIGRATION_PLAN.md#current-acceptance-and-deferred-verification-2026-09-17).
+The original hardware results and quick start below are historical provenance,
+not requirements or performance claims for the current 3090 stack.
+
+## Historical origin and measurements
+
 Qwen3.8-Flash-Next is a 176B-parameter mixture-of-experts model (Qwen4-Exp architecture) with 6B active
 parameters per token. This repository is the code side of serving it on a single RTX PRO 4000 Blackwell
 (24 GB, sm_120) with 32 GB of host RAM: quantized with AutoRound to 2.572 bits per weight (2-bit experts
@@ -8,7 +22,7 @@ It contains the serving patch, the layered patch scripts it was built from, the 
 assets, the measurement tools, the design documents with their outcomes and the dated engineering log.
 
 **Weights:** [Hugging Face Hub](https://huggingface.co/HaberstrohSystems/Qwen3.8-Flash-Next-int2-mixed-AutoRound-24GB-SGLang)
-· **Patch:** [`sglang/qwen4exp-serving-73a255206f.patch`](sglang/qwen4exp-serving-73a255206f.patch)
+· **Historical patch:** [`sglang/qwen4exp-serving-73a255206f.patch`](sglang/qwen4exp-serving-73a255206f.patch)
 · **License:** Apache-2.0 (code, [`LICENSE`](LICENSE)) / Qwen Community License 1.0 (weights, on the Hub)
 
 ## Headline numbers
@@ -42,6 +56,9 @@ under the Qwen Community License 1.0:
 The model card there describes the quantization recipe and the serving configuration.
 
 ## Quick start
+
+**Historical reproduction only.** For RTX 3090, follow the
+[current main-based instructions](sglang/README.md#main-based-3090-series-current).
 
 Requirements: one 24 GB GPU of compute capability 12.0 (the tuned Triton configs are for the RTX PRO
 4000 Blackwell), 32 GB host RAM, an NVMe disk for the PLE table, Python 3.12 (the virtualenv's

@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "boot_label": "tg1p_mass_b1",
+  "started_utc": "2026-09-17T04:18:44.514284+00:00",
+  "matrix": "full",
+  "warmups": 1,
+  "measured": 5,
+  "decode_tokens": 512,
+  "url": "http://127.0.0.1:30001/generate",
+  "prompts_json": "/root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/tg0_3090_2026-09-16/prompts/prompts.json",
+  "prompts_json_sha256": "443a5f88a53b34b8dc47d0d11cef25fcbb4d3191a4deffe31c32dca3b05c10a3",
+  "predeclared_order": [
+    [
+      "prose",
+      2048
+    ],
+    [
+      "reasoning",
+      2048
+    ],
+    [
+      "code",
+      2048
+    ],
+    [
+      "code",
+      32768
+    ],
+    [
+      "prose",
+      32768
+    ],
+    [
+      "reasoning",
+      32768
+    ],
+    [
+      "reasoning",
+      131072
+    ],
+    [
+      "code",
+      131072
+    ],
+    [
+      "prose",
+      131072
+    ]
+  ],
+  "frozen_input_state": {
+    "label": "before",
+    "captured_utc": "2026-09-17T04:18:44.522237+00:00",
+    "gpu": {
+      "pstate": "P2",
+      "temperature_c": 63.0,
+      "power_w": 117.04,
+      "memory_used_mib": 19503.0,
+      "memory_free_mib": 4622.0,
+      "util_pct": 0.0,
+      "clock_sm_mhz": 1950.0,
+      "clock_mem_mhz": 9501.0,
+      "clock_gr_mhz": 1950.0
+    },
+    "elastic_status": "time 04:18:38\nS_min 184 S_max 184 floor 184\narena_GB 11.062\nvram_free_GB 4.515\nmass_covered 0.8430\npool [128, 0, 0, 0] pin_used_MB 178\nS [184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184]\n",
+    "server_log_tail": "[2026-09-17 04:18:27] Tree cache initialized: source=default impl=UnifiedRadixCache hybrid_swa=False hybrid_ssm=True hicache_attached=False streaming_wrapped=False\n[2026-09-17 04:18:28] Engine startup timings (s): load_weight=194.81, kv_cache_allocation=0.77, scheduler_e2e=206.17, cuda_graph={prefill=0.00, decode=2.18, target_verify=0.00, draft_prefill=0.00, draft_decode=0.00, draft_extend=0.00}, tokenizer_e2e=211.46\n[2026-09-17 04:18:29] INFO:     Started server process [734374]\n[2026-09-17 04:18:29] INFO:     Waiting for application startup.\n[2026-09-17 04:18:29] Using default chat sampling params from model generation config: {'temperature': 1.0, 'top_k': 20, 'top_p': 0.95}\n[2026-09-17 04:18:30] INFO:     Application startup complete.\n[2026-09-17 04:18:30] INFO:     Uvicorn running on http://0.0.0.0:30001 (Press CTRL+C to quit)\n[2026-09-17 04:18:31] INFO:     127.0.0.1:54402 - \"GET /model_info HTTP/1.1\" 200 OK\n[2026-09-17 04:18:32] Prefill batch, #new-seq: 1, #new-token: 6, #cached-token: 0, full token usage: 0.00, mamba usage: 0.50, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 1.18\n[2026-09-17 04:18:32] INFO:     127.0.0.1:54404 - \"POST /generate HTTP/1.1\" 200 OK\n[2026-09-17 04:18:34] INFO:     127.0.0.1:54414 - \"POST /freeze_gc HTTP/1.1\" 200 OK\n[2026-09-17 04:18:34] The server is fired up and ready to roll!\n[2026-09-17 04:18:38] elastic fill: S=[184], VRAM free 4.52 GB\n[2026-09-17 04:18:38] Prefill batch, #new-seq: 1, #new-token: 1, #cached-token: 0, full token usage: 0.00, mamba usage: 0.00, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 0.17\n[2026-09-17 04:18:38] Prefill batch, #new-seq: 1, #new-token: 1, #cached-token: 0, full token usage: 0.00, mamba usage: 0.00, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 5.12\n[2026-09-17 04:18:39] INFO:     127.0.0.1:39538 - \"GET /health HTTP/1.1\" 200 OK\n[2026-09-17 04:18:39] INFO:     127.0.0.1:39540 - \"GET /health HTTP/1.1\" 200 OK\n[2026-09-17 04:18:44] Prefill batch, #new-seq: 1, #new-token: 3, #cached-token: 0, full token usage: 0.00, mamba usage: 0.50, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 0.51\n[2026-09-17 04:18:44] INFO:     127.0.0.1:39546 - \"POST /generate HTTP/1.1\" 200 OK\n[2026-09-17 04:18:44] INFO:     127.0.0.1:39550 - \"POST /freeze_gc HTTP/1.1\" 200 OK"
+  }
+}

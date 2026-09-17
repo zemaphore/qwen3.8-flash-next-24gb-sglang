@@ -13,6 +13,53 @@ at planning time was `ab61990` (R1–R3 launcher promotion). It supersedes the
 future-facing migration assumptions in [`sglang/UPSTREAM.md`](../sglang/UPSTREAM.md).
 Historical patches and logs remain reproduction artifacts.
 
+## Current acceptance and deferred verification (2026-09-17)
+
+The main-based RTX 3090 stack is implemented and promoted. The user accepted
+promotion with additional migration verification waived; promotion does not
+mean every gate in the original plan below passed.
+
+| Item | Current status |
+|---|---|
+| Export/reproduction, static/API and bring-up | Recorded as passed in the [series manifest](../sglang/upstream/series-main/MANIFEST.md). |
+| Numerical comparison | The matched short oracle was bit-exact over 450 forced tokens. This does not establish long-prompt PP14 equivalence. |
+| Pressure and capacity | Candidate churn passed across two boots; the promoted-profile capacity probe served 232,000 input tokens plus 512 generated. See the [migration evidence](logs/raw/migration_3090_2026-09-16/). |
+| Additional kernel/state micro-checks | Not run in the migration pass: INT2 packing/GEMV, offload storage swaps, PLE reads/eviction, graph outputs, VMM shrink/regrow/replay. Further migration verification was waived by the user; these are not passed checks or an automatic work queue. |
+| PP14 long-prompt validation | **OPEN, deferred by user; may be resumed later.** Current evidence does not establish a PP14 bug or numerical equivalence. See the qualification below. |
+| Optional NGRAM | Untested and outside the promoted default profile. |
+| Promoted-profile TG1 | Done 2026-09-17: presence vs pooled-mass at S184 on the promoted radix profile; presence faster in every cell except prose-2K (+0.3%, noise), +4.9% to +17.3% elsewhere. See [`logs/tg1_promoted_3090_2026-09-17.md`](logs/tg1_promoted_3090_2026-09-17.md). The earlier radix-off comparison remains a separate arm. |
+
+### PP14 evidence and remaining question
+
+The [PP closure](logs/pp_wrapup_3090_2026-09-16.md)
+recorded a maximum absolute log-probability difference of 2.797 nats in a
+prefetch-on versus prefetch-off long-prompt comparison. The later
+[TG0 bounded diagnostic](logs/tg0_baseline_3090_2026-09-16.md#7-bounded-pp14-diagnostic)
+used matched repetitions across boots and found substantial early-token
+variability in both arms. This weakens attribution to PP14, but does not prove
+equivalence or exclude a prefetch-specific issue.
+
+The TG0 narrative incorrectly says 2.797 is inside an observed range reaching
+2.374. **2.797 exceeds 2.374.** Its categorical conclusion that the earlier
+observation was not a prefetch-path effect is therefore not supported by that
+comparison. Preserve the measurements; this qualification supersedes that
+conclusion and the promotion report's blanket statement that remaining items
+do not affect the default profile.
+
+The remaining question is whether PP14 changes long-prompt numerical behavior
+beyond baseline variability. If revisited, use matched repeated on/off runs
+at qualifying chunk lengths, retain complete per-token comparisons, and inspect
+prefetch stream/event and buffer-reuse behavior. Do not infer an answer from
+short-oracle equality, successful capacity probes, or one quieter repeat.
+No additional PP14 validation is scheduled or authorized by this documentation
+update. PP14 remains enabled in the promoted profile.
+
+## Original plan of record
+
+The sections below retain the original execution plan and its historical
+control baseline. The current acceptance status above takes precedence over
+its pre-promotion requirements and future-tense instructions.
+
 ## Objective and scope
 
 Reproduce the promoted PP/TG/RC serving behavior on a pinned upstream-main
@@ -174,5 +221,6 @@ or retargeting them is separate from this local migration.
 
 Completion requires a clean main-based reproduction of the promoted 3090
 profile, passing correctness, pressure, trace-performance and capacity gates.
-Clean patch application alone is not completion. This planning change does
-not modify patches, install dependencies or switch the running server.
+This was the original acceptance requirement; the current acceptance section
+records the user's subsequent verification waiver and the still-open PP14
+question. Clean patch application alone does not establish runtime correctness.

@@ -21,7 +21,7 @@ Apply with `git am` in file-name order on a clean checkout of the base.
 | 5 | `0005-feat-moe-prefix-cache-PP-model-wiring-optional-share.patch` | `feat(moe): prefix-cache PP model wiring, optional shared-expert overlap` | `35ac9d3d…042882` |
 | 6 | `0006-fix-main-runtime-API-adjustments-found-at-candidate-.patch` | `fix(main): runtime API adjustments found at candidate bring-up` | `abc32def…3089a7` |
 
-Flattened form: [`../qwen4exp-serving-b02e16a8.patch`](../qwen4exp-serving-b02e16a8.patch)
+Flattened form: [`../../qwen4exp-serving-b02e16a8.patch`](../../qwen4exp-serving-b02e16a8.patch)
 (35 files, +4,528 / −94), sha256 `9743b441d58a1f0097ea5a25b98a2ce2e13de8b2e89d6bce83f97e8b2ae71acd`.
 Base + flattened patch and base + the six patches both reproduce the identical
 tree (`9f505c06…f1d`), verified in scratch worktrees.
@@ -40,7 +40,14 @@ affects MTP topk = 1.
 git clone https://github.com/sgl-project/sglang.git sglang-main
 cd sglang-main
 git checkout b02e16a895add01a0cfe24bb74922de92ab4d895
-git am /path/to/series-main/000*.patch                 # or:
+git am /path/to/series-main/000*.patch
+```
+
+Alternatively, on a fresh checkout of the same base, use only the flattened
+patch:
+
+```bash
+git apply --check /path/to/qwen4exp-serving-b02e16a8.patch
 git apply /path/to/qwen4exp-serving-b02e16a8.patch
 ```
 
@@ -69,7 +76,8 @@ Environment: the port needs a venv built from this tree (main pins
 - The quantized QSA gather branches write compact rows and do not zero the
   padded tails of main's `zero_fill_cols=stride` path. That path is gated to
   SM100/SM120 by `_resolve_trtllm_sparse_decode()` and is therefore off the
-  3090 profile; it remains an open item for other hardware.
+  3090 profile. Other hardware is outside this migration's scope and has no
+  validation requirement or support claim here.
 - Validation status (2026-09-17): static/API gate passed (compileall,
   `launch_server --help`, promoted-flag `ServerArgs` parse, no removed-VMM or
   old-field references); candidate bring-up matched the frozen control's
@@ -80,10 +88,15 @@ Environment: the port needs a venv built from this tree (main pins
   (232,000 input + 512 generated, 27.79 tok/s, 18 MiB min free, R3 refusal → R1
   re-sort → sole-owner bypass → ok). The TG0 redo / TG1 run is a comparability
   arm on the pre-promotion 256K radix-off profile, not the promoted baseline.
-- Open: the reduced set of GPU kernel/state micro-gates (INT2 packing/GEMV,
+- Not run: the reduced set of GPU kernel/state micro-gates (INT2 packing/GEMV,
   offload storage swaps, PLE read/eviction, graph outputs, VMM
-  shrink/regrow/replay) was not run in this pass; PP14 long-prompt drift carried
-  forward; the optional NGRAM patch is untested.
+  shrink/regrow/replay). Additional migration verification was waived by the
+  user; do not count these checks as passed. **PP14 long-prompt validation
+  remains open, deferred for possible later work.** The TG0 narrative's
+  2.797-within-2.374 claim is incorrect; variability in both arms does not
+  establish equivalence. The optional NGRAM patch is untested and outside
+  default acceptance. See the
+  [current acceptance status](../../../docs/SGLANG_MAIN_MIGRATION_PLAN.md#current-acceptance-and-deferred-verification-2026-09-17).
 - Evidence: `docs/logs/raw/migration_3090_2026-09-16/` (`control-freeze.md`,
   `step2-venv.md`, `port-status.md`, `step5-validation.md`, `step5d-pressure.md`,
   `capacity-promoted.json`, `dependency-delta.txt`) and

@@ -11,9 +11,9 @@ The historical `73a255206f` artifacts in this directory remain **unchanged** as
 provenance and as the reproduction of the published sm_120 measurements. Plan:
 [RTX 3090 main migration plan](../docs/SGLANG_MAIN_MIGRATION_PLAN.md).
 
-Two forms of the same change to SGLang: the flat serving patch, which is the verbatim diff of
-the tree that served the published numbers, and the five-commit series under `upstream/`, which
-is the reviewable form for `sgl-project/sglang`. The weights they serve are on the Hub:
+The current implementation has two equivalent exports: the main-based flat
+patch and six-commit series. The older flat patch and five-commit series are
+historical artifacts, not the current installation recipe. The weights are on the Hub:
 https://huggingface.co/HaberstrohSystems/Qwen3.8-Flash-Next-int2-mixed-AutoRound-24GB-SGLang
 
 | File | What it is |
@@ -23,13 +23,18 @@ https://huggingface.co/HaberstrohSystems/Qwen3.8-Flash-Next-int2-mixed-AutoRound
 | `upstream/series-main/optional-spec/` | Optional NGRAM speculation patch on top of the main series (SHA-256 `677549b8…11fe5`). Outside default acceptance; not part of the promoted profile; **not tested** on the 3090. |
 | `qwen4exp-serving-73a255206f.patch` | **Historical provenance.** The difference between SGLang commit `73a255206f916366c8d26d4022f82ddfb0ab558d` ("Introduce Qwen 3.8 Flash Next", the first commit of the branch `qwen4-main-squashed` of PR #36497) and the served tree. 34 files, +4,155 / -89, 5,439 lines, 251,847 bytes, SHA-256 `10a3ad54f9688099848b3a6985145050ed35327116bf7c0ffa8a951b338b69c9` (the 2026-09-03 form cited in older notes was `92f669b2…744bb5`, 251,796 bytes; the PLE workers line changed during the PP campaign). Plain `git diff` output: `git apply` or `patch -p1`. Base + patch reproduces all 34 patched files of the served tree byte for byte (`PATCH_NOTES.md` section 2). |
 | `PATCH_NOTES.md` | Per-file map of the flat patch grouped by feature, the measurement-only and debug hunks that the series drops (`kv_stats` / `kv_fakeq`, `SGLANG_NAN_TRACE`, NGRAM debug switches), the server flags and environment, the validation evidence per feature, known issues. |
-| `UPSTREAM.md` | Status of the upstream contribution: review target and why it is not `main`, the five parts and what each contains, what remains, related PRs, how the series was verified. |
+| `UPSTREAM.md` | Current main-based migration status, followed by the historical contribution record for the five-part series. |
 | `upstream/series-q4head/0001..0005` | The series rebased onto the head of `qwen4-main-squashed` (`78c5024e9d`): 39 files, +8,042 / -94. `git am` format. This is what the PRs contain. |
 | `upstream/series-base/0001..0005` | The same five commits on the served base `73a255206f`: 40 files, +8,082 / -175. Reference for the rebase. |
 | `upstream/RFC.md` | The issue text that introduces the series to the maintainers (feature-request template). |
 | `upstream/PR-1.md` .. `PR-5.md` | The PR descriptions (PR template: Motivation, Modifications, Accuracy Tests, Speed Tests and Profiling, Checklist, suggested reviewers, reproduction commands). |
 
-Apply the flat patch:
+### Historical reproduction only
+
+For the current RTX 3090 installation, use the main-based recipe below.
+The following commands reproduce the old base.
+
+Apply the historical flat patch:
 
 ```
 git clone https://github.com/sgl-project/sglang.git && cd sglang
@@ -37,7 +42,7 @@ git checkout 73a255206f916366c8d26d4022f82ddfb0ab558d
 git apply --check /path/to/qwen4exp-serving-73a255206f.patch && git apply /path/to/qwen4exp-serving-73a255206f.patch
 ```
 
-Apply the series instead (review form; drops the measurement hooks, adds the registered tests):
+Apply the historical series instead (review form; drops measurement hooks, adds registered tests):
 
 ```
 git fetch origin qwen4-main-squashed && git checkout 78c5024e9d9f589dcb4deb7f4ba4fb23f7e85385
@@ -65,7 +70,14 @@ Reproduce:
 git clone https://github.com/sgl-project/sglang.git sglang-main
 cd sglang-main
 git checkout b02e16a895add01a0cfe24bb74922de92ab4d895
-git am /path/to/series-main/000*.patch        # or:
+git am /path/to/series-main/000*.patch
+```
+
+Alternatively, on a fresh checkout of the same base, apply the flattened
+patch **instead of** the series:
+
+```bash
+git apply --check /path/to/qwen4exp-serving-b02e16a8.patch
 git apply /path/to/qwen4exp-serving-b02e16a8.patch
 ```
 
@@ -93,14 +105,23 @@ prefix-cache repeat/append/next-session and the R1/R3 pressure churn reproducer
 passed across two boots. The TG0 redo and TG1 comparison at
 [`../docs/logs/tg0_tg1_candidate_3090_2026-09-17.md`](../docs/logs/tg0_tg1_candidate_3090_2026-09-17.md)
 are a **comparability arm** (pre-promotion 256K, radix-off profile), not the
-current baseline. Near-limit capacity on the promoted radix profile passed
+current baseline. TG1 was repeated on the promoted radix profile (presence vs
+pooled-mass at S184, bracketed across four boots): presence is faster in every
+cell except full-boot prose-2K (+0.3 %, noise), by +4.9 % to +17.3 % elsewhere,
+so the presence default is retained
+([`../docs/logs/tg1_promoted_3090_2026-09-17.md`](../docs/logs/tg1_promoted_3090_2026-09-17.md)).
+Near-limit capacity on the promoted radix profile passed
 (232,000 input + 512 generated, status ok, 27.79 tok/s, 18 MiB minimum free
 VRAM, with the R3 refusal → R1 re-sort → sole-owner bypass lifecycle exercised;
-`raw/migration_3090_2026-09-16/capacity-promoted.json`). Open: the reduced set
-of GPU kernel/state micro-gates (INT2 packing/GEMV, offload storage swaps, PLE
-read/eviction, graph outputs, VMM shrink/regrow/replay) were not run in this
-pass; the unresolved PP14 long-prompt drift is carried forward; NGRAM is
-untested. Evidence: `../docs/logs/raw/migration_3090_2026-09-16/` and
+`../docs/logs/raw/migration_3090_2026-09-16/capacity-promoted.json`). The remaining
+GPU kernel/state micro-checks were not run; additional migration verification
+was waived by the user, not recorded as passing. **PP14 long-prompt validation
+remains open and deferred for possible later work.** TG0 found variability in
+both arms, but its claim that 2.797 lies inside a range reaching 2.374 is
+incorrect and does not resolve the question. NGRAM is untested and outside the
+default profile. See the authoritative
+[acceptance and deferred-verification status](../docs/SGLANG_MAIN_MIGRATION_PLAN.md#current-acceptance-and-deferred-verification-2026-09-17).
+Evidence: `../docs/logs/raw/migration_3090_2026-09-16/` and
 `../docs/logs/tg0_tg1_candidate_3090_2026-09-17.md`.
 
 ### Promotion and rollback (2026-09-17)

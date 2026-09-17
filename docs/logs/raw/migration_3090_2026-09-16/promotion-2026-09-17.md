@@ -1,5 +1,13 @@
 # Promotion — main-based 3090 default (2026-09-17)
 
+**Status clarification (2026-09-17):** promotion was accepted with additional
+migration verification waived by the user. PP14 long-prompt validation remains
+open and deferred for possible later work. The final paragraph's claim that
+all remaining items "do not affect the default profile" is too strong:
+PP14 is enabled, and its long-prompt numerical equivalence is not established.
+See the [current acceptance record](../../../SGLANG_MAIN_MIGRATION_PLAN.md#current-acceptance-and-deferred-verification-2026-09-17).
+The original promotion record below is retained.
+
 Execution-plan step 6 of
 [`docs/SGLANG_MAIN_MIGRATION_PLAN.md`](../../../SGLANG_MAIN_MIGRATION_PLAN.md).
 

@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "boot_label": "tg1p_mass_b2",
+  "started_utc": "2026-09-17T04:43:46.167332+00:00",
+  "matrix": "short",
+  "warmups": 1,
+  "measured": 3,
+  "decode_tokens": 512,
+  "url": "http://127.0.0.1:30001/generate",
+  "prompts_json": "/root/qwen3.8-flash-next-24gb-sglang/docs/logs/raw/tg0_3090_2026-09-16/prompts/prompts.json",
+  "prompts_json_sha256": "443a5f88a53b34b8dc47d0d11cef25fcbb4d3191a4deffe31c32dca3b05c10a3",
+  "predeclared_order": [
+    [
+      "prose",
+      2048
+    ],
+    [
+      "reasoning",
+      2048
+    ],
+    [
+      "code",
+      2048
+    ]
+  ],
+  "frozen_input_state": {
+    "label": "before",
+    "captured_utc": "2026-09-17T04:43:46.177447+00:00",
+    "gpu": {
+      "pstate": "P2",
+      "temperature_c": 63.0,
+      "power_w": 114.69,
+      "memory_used_mib": 19503.0,
+      "memory_free_mib": 4622.0,
+      "util_pct": 0.0,
+      "clock_sm_mhz": 1725.0,
+      "clock_mem_mhz": 9501.0,
+      "clock_gr_mhz": 1725.0
+    },
+    "elastic_status": "time 04:43:40\nS_min 184 S_max 184 floor 184\narena_GB 11.062\nvram_free_GB 4.515\nmass_covered 0.8430\npool [128, 0, 0, 0] pin_used_MB 178\nS [184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184]\n",
+    "server_log_tail": "[2026-09-17 04:43:32] max_total_num_tokens=235520, chunked_prefill_size=4608, max_prefill_tokens=32768, max_running_requests=1, context_len=235520, available_gpu_mem=4.54 GB\n[2026-09-17 04:43:32] Init Unified Radix Cache. Components: (<ComponentType.FULL: 0>, <ComponentType.MAMBA: 2>). Tree Core: UnifiedTreeCore\n[2026-09-17 04:43:32] Tree cache initialized: source=default impl=UnifiedRadixCache hybrid_swa=False hybrid_ssm=True hicache_attached=False streaming_wrapped=False\n[2026-09-17 04:43:33] Engine startup timings (s): load_weight=189.80, kv_cache_allocation=0.66, scheduler_e2e=200.39, cuda_graph={prefill=0.00, decode=1.73, target_verify=0.00, draft_prefill=0.00, draft_decode=0.00, draft_extend=0.00}, tokenizer_e2e=205.83\n[2026-09-17 04:43:34] INFO:     Started server process [752041]\n[2026-09-17 04:43:34] INFO:     Waiting for application startup.\n[2026-09-17 04:43:34] Using default chat sampling params from model generation config: {'temperature': 1.0, 'top_k': 20, 'top_p': 0.95}\n[2026-09-17 04:43:35] INFO:     Application startup complete.\n[2026-09-17 04:43:35] INFO:     Uvicorn running on http://0.0.0.0:30001 (Press CTRL+C to quit)\n[2026-09-17 04:43:36] INFO:     127.0.0.1:38756 - \"GET /health HTTP/1.1\" 503 Service Unavailable\n[2026-09-17 04:43:36] INFO:     127.0.0.1:38762 - \"GET /model_info HTTP/1.1\" 200 OK\n[2026-09-17 04:43:37] Prefill batch, #new-seq: 1, #new-token: 6, #cached-token: 0, full token usage: 0.00, mamba usage: 0.50, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 1.19\n[2026-09-17 04:43:37] INFO:     127.0.0.1:38768 - \"POST /generate HTTP/1.1\" 200 OK\n[2026-09-17 04:43:39] INFO:     127.0.0.1:38772 - \"POST /freeze_gc HTTP/1.1\" 200 OK\n[2026-09-17 04:43:39] The server is fired up and ready to roll!\n[2026-09-17 04:43:40] elastic fill: S=[184], VRAM free 4.52 GB\n[2026-09-17 04:43:40] Prefill batch, #new-seq: 1, #new-token: 1, #cached-token: 0, full token usage: 0.00, mamba usage: 0.00, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 0.41\n[2026-09-17 04:43:40] INFO:     127.0.0.1:38774 - \"GET /health HTTP/1.1\" 200 OK\n[2026-09-17 04:43:40] INFO:     127.0.0.1:38790 - \"GET /health HTTP/1.1\" 200 OK\n[2026-09-17 04:43:46] Prefill batch, #new-seq: 1, #new-token: 3, #cached-token: 0, full token usage: 0.00, mamba usage: 0.50, #running-req: 0, #queue-req: 0, #pending-token: 0, cuda graph: False, input throughput (token/s): 0.49"
+  }
+}

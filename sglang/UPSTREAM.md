@@ -15,6 +15,12 @@ published sm_120 measurements. Posting or retargeting them against main is a
 separate step outside the 3090 migration. Other hardware measurements below are
 historical provenance, not 3090 migration claims.
 
+Promotion was accepted with additional migration verification waived by the
+user. **PP14 long-prompt validation remains open and deferred**; neither a
+PP14 bug nor numerical equivalence is established. The
+[current acceptance record](../docs/SGLANG_MAIN_MIGRATION_PLAN.md#current-acceptance-and-deferred-verification-2026-09-17)
+distinguishes passed checks, waived work and this unresolved question.
+
 Status of the contribution to `sgl-project/sglang` as of 2026-09-03 (historical). The reviewable
 form of the serving patch is the five-commit series under [`upstream/`](upstream/); the flat patch
 [`qwen4exp-serving-73a255206f.patch`](qwen4exp-serving-73a255206f.patch) is the verbatim served
