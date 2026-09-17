@@ -1,0 +1,5 @@
+evict/rehit: A=6597 tokens (full hit would be 6592); pool=262144
+  a0 cold: cached=0 wall=5.297s
+  12 short fillers (8772 tokens) -> a1 cached=6592 wall=0.555s ids_match=False maxd=0.0 text_eq=False
+  50 x ~6K fillers (333290 tokens, > pool) free_vram=16MiB -> a2 cached=0 wall=4.565s ids_match=False maxd=0.0 text_eq=False
+  a3 rehit: cached=6592 wall=0.579s ids_match_a0=False text_eq_a2=True

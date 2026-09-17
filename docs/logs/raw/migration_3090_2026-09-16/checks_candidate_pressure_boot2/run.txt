@@ -1,0 +1,4 @@
+utc 2026-09-16T22:01:47Z
+nonce 6aab11cb
+args {'url': 'http://127.0.0.1:30011', 'out_dir': 'docs/logs/raw/migration_3090_2026-09-16/checks_candidate_pressure_boot2', 'max_new': 16, 'trials': 6, 'churn_n': 30, 'pool_tokens': 262144, 'capacity_max_k': 10, 'session_turns': 40, 'session_turn_modules': 80, 'tg_depths': '32000,128000,240000', 'tg_gen': 256, 'tg_cold': False, 'two_sessions_turns': '70,20', 'checks': 'churn'}
+page 64
