@@ -1,0 +1,19 @@
+diff --git a/python/sglang/srt/layers/quantization/moe_wna16.py b/python/sglang/srt/layers/quantization/moe_wna16.py
+index 8b5b3c0630..db434b4d48 100644
+--- a/python/sglang/srt/layers/quantization/moe_wna16.py
++++ b/python/sglang/srt/layers/quantization/moe_wna16.py
+@@ -567,10 +567,12 @@ class MoeWNA16Method(FusedMoEMethodBase):
+         (wt13, st13, sw13, ss13), (wt2, st2, sw2, ss2), N13, K13, N2, K2, sbf = self._gemv_tables(layer)
+         inter = N13 // 2
+         c13 = moe_gemv_int2_tab(x, wt13, st13, ids, w, N13, K13, sw13, ss13,
+-                                top_k=top_k, mul_routed_weight=False, scale_bf16=sbf)
++                                top_k=top_k, mul_routed_weight=False, scale_bf16=sbf,
++                                block_n=128, num_warps=8)
+         h = torch.nn.functional.silu(c13[:, :inter]) * c13[:, inter:]
+         c2 = moe_gemv_int2_tab(h, wt2, st2, ids, w, N2, K2, sw2, ss2,
+-                               top_k=1, mul_routed_weight=True, scale_bf16=sbf)
++                               top_k=1, mul_routed_weight=True, scale_bf16=sbf,
++                               block_n=128, num_warps=8)
+         out = c2.view(M_, top_k, N2).sum(dim=1)
+         rsf = self.moe_runner_config.routed_scaling_factor
+         if rsf is not None and rsf != 1.0:
