@@ -1,5 +1,11 @@
 # RTX 3090 token-generation performance plan
 
+**Research continuation (2026-09-17):** TG1 and TG2 outcomes and the TG3b
+candidate now inform the [ranked research backlog](TG_RESEARCH_PLAN_3090.md).
+Use that document for future pilot selection; the original stages below are
+retained as the plan of record. TG3b acceptance is a separate active task.
+PP14 validation remains open and deferred.
+
 Date: 2026-09-16
 Status: TG0 complete (see [report](logs/tg0_baseline_3090_2026-09-16.md)); TG1
 is unblocked by the baseline, TG2 still waits on a material hypothesis. Baseline
