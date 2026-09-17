@@ -218,6 +218,25 @@ upstream are in [`sglang/UPSTREAM.md`](sglang/UPSTREAM.md) and
 against the head of `qwen4-main-squashed` and against the served base), the RFC issue text and
 the five PR descriptions are in [`sglang/upstream/`](sglang/upstream/).
 
+**RTX 3090 main-based migration (current, 2026-09-17).** The promoted 3090 serving
+profile no longer depends on the historical `73a255206f` base: it has been ported
+onto SGLang main `b02e16a895` (model support `52fecfdf`, PR #37500) and is
+exported as the six-patch series
+[`sglang/upstream/series-main/`](sglang/upstream/series-main/) plus the flattened
+[`sglang/qwen4exp-serving-b02e16a8.patch`](sglang/qwen4exp-serving-b02e16a8.patch)
+(35 files, +4,528 / −94; base + either form reproduces the tree `9f505c06…`).
+The 3090 launcher `/root/quant/serve-3090.sh` now runs the main-based
+implementation built from `/root/quant/serve-3090-main.sh` (radix enabled,
+four Mamba slots, 235,520-token pool, `--cuda-graph-backend-prefill disabled`);
+the immediate
+rollback is the frozen snapshot
+`docs/logs/raw/promotion_3090_2026-09-16/serve-3090-flags.sh` (sha256
+`d0866e7c…f57447`). Manifest, dependency delta, feature disposition, validation
+status and rollback: [`sglang/README.md`](sglang/README.md) (Main-based 3090
+series) and [`sglang/upstream/series-main/MANIFEST.md`](sglang/upstream/series-main/MANIFEST.md).
+The RTX PRO 4000 quick start above and `scripts/serve.sh` still describe the
+historical sm_120 configuration and are unchanged.
+
 ## Hardware and software requirements
 
 | Resource | What was used | Notes and sources |

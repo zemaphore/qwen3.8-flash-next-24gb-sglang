@@ -1,16 +1,22 @@
 # Upstream status: the SGLang series for Qwen3.8-Flash-Next on one 24 GB GPU
 
-**Status correction (2026-09-16):** PR #36497 closed unmerged; replacement
-[PR #37500](https://github.com/sgl-project/sglang/pull/37500) landed model support
-on main. The historical review target and future-work assumptions below are
-superseded by the [main migration plan](../docs/SGLANG_MAIN_MIGRATION_PLAN.md).
-The new target is RTX 3090 (SM86) only, using the promoted PP/TG/RC profile with
-R1–R3 enabled. Other hardware measurements below are historical provenance,
-not migration claims or requirements. The existing series remains unchanged;
-the main-based implementation has not started.
+**Status (2026-09-17):** model support is on main — PR #36497 closed unmerged
+and replacement [PR #37500](https://github.com/sgl-project/sglang/pull/37500)
+landed `52fecfdf0908dca24f4c6799ff5967125cc4110e`. The promoted RTX 3090 (SM86)
+profile has been **ported to main** and is the current 3090 stack:
+[`upstream/series-main/`](upstream/series-main/) — six `git am` patches onto
+`b02e16a895…`, with [`MANIFEST.md`](upstream/series-main/MANIFEST.md) — plus the
+flattened [`qwen4exp-serving-b02e16a8.patch`](qwen4exp-serving-b02e16a8.patch)
+(35 files, +4,528 / −94). See [`README.md`](README.md) (Main-based 3090 series)
+for the dependency delta, feature disposition, validation status and rollback.
+The **historical contribution and series described below are unchanged** and are
+not retargeted: they remain the record of the `qwen4-main-squashed` PRs and the
+published sm_120 measurements. Posting or retargeting them against main is a
+separate step outside the 3090 migration. Other hardware measurements below are
+historical provenance, not 3090 migration claims.
 
-Status of the contribution to `sgl-project/sglang` as of 2026-09-03. The reviewable form of the
-serving patch is the five-commit series under [`upstream/`](upstream/); the flat patch
+Status of the contribution to `sgl-project/sglang` as of 2026-09-03 (historical). The reviewable
+form of the serving patch is the five-commit series under [`upstream/`](upstream/); the flat patch
 [`qwen4exp-serving-73a255206f.patch`](qwen4exp-serving-73a255206f.patch) is the verbatim served
 diff and stays as the reproduction artifact ([`PATCH_NOTES.md`](PATCH_NOTES.md)).
 

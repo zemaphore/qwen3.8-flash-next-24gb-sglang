@@ -3,6 +3,15 @@
 # campaign (assets/phase1_state.json; CAMPAIGN.md:413, :454-459) with single-request concurrency.
 # Includes the systemd-run scope, the health wait, one warm-up request and POST /freeze_gc.
 #
+# NOTE (2026-09-17): this is the published sm_120 / RTX PRO 4000 configuration (base
+# 73a255206f, 262,144 tokens, one Mamba slot, radix disabled). It is NOT the current RTX 3090
+# configuration. The 3090 profile has been migrated to SGLang main and carries different flags
+# (235,520-token pool, four Mamba slots, radix enabled, qwen38-flash-230K) plus
+# --cuda-graph-backend-prefill disabled; on that box it is installed as /root/quant/serve-3090.sh
+# from /root/quant/serve-3090-main.sh (sha256 fb72fc95...), with the frozen
+# docs/logs/raw/promotion_3090_2026-09-16/serve-3090-flags.sh (sha256 d0866e7c...) as the
+# immediate rollback. See docs/SGLANG_MAIN_MIGRATION_PLAN.md and sglang/README.md.
+#
 # Set these for your machine.
 SGLANG="${SGLANG:-$HOME/quant/sglang}"                        # patched SGLang checkout (73a255206f + patch)
 VENV="${VENV:-$HOME/quant/venv-sglang}"                       # its virtualenv (torch 2.13.0+cu130, triton 3.7.1)

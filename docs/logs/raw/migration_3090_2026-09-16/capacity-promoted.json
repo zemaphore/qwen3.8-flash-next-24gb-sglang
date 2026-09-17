@@ -1,0 +1,15 @@
+{
+  "target_input": 232000,
+  "requested_gen": 512,
+  "url": "http://127.0.0.1:30011/generate",
+  "prompt_tokens": 232000,
+  "completion_tokens": 512,
+  "stream_events": 512,
+  "error": null,
+  "wall_seconds": 166.393,
+  "free_vram_min_mib": 18.0,
+  "ttft_seconds": 147.985,
+  "tg_tokens_per_s": 27.787,
+  "status": "ok",
+  "output_sha256": "59e6adb907a6a2648a097c26a2f57af661b3008a17a91a7691c24d9506bad3fb"
+}

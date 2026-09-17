@@ -1,5 +1,16 @@
 # SGLang patches
 
+**Status (2026-09-17):** these layered scripts are the **historical
+construction record** for the frozen `73a255206f` served tree; they are not the
+current 3090 implementation and are not needed to reproduce it. The current RTX
+3090 stack is the main-based series
+[`sglang/upstream/series-main/`](../sglang/upstream/series-main/) (base
+`b02e16a895`), exported as six `git am` patches and the flattened
+[`qwen4exp-serving-b02e16a8.patch`](../sglang/qwen4exp-serving-b02e16a8.patch).
+See [`sglang/README.md`](../sglang/README.md) (Main-based 3090 series) for the
+manifest, dependency delta, feature disposition, validation status and rollback.
+The scripts below stay as provenance for how the frozen tree was assembled.
+
 Each script edits the patched SGLang checkout (`$SGLANG`, default `~/quant/sglang`; the `SG = ...`
 line at the top of the file) by exact string replacement and supports `apply`, `revert` and `--check`; the module
 docstring of every script explains its mechanism and its environment variables. `--check` only reads

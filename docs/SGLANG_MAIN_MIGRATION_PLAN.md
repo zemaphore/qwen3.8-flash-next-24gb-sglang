@@ -1,10 +1,17 @@
 # SGLang main migration — RTX 3090
 
-Date: 2026-09-16. Status: planned; implementation and serving migration have
-not started. Repository baseline: `ab61990` (R1–R3 launcher promotion).
-This document supersedes the future-facing migration assumptions in
-[`sglang/UPSTREAM.md`](../sglang/UPSTREAM.md). Historical patches and logs remain
-reproduction artifacts.
+Date: 2026-09-16. **Status (2026-09-17):** implemented and exported. The
+promoted 3090 profile is ported to main `b02e16a895` as
+[`sglang/upstream/series-main/`](../sglang/upstream/series-main/) plus the
+flattened [`qwen4exp-serving-b02e16a8.patch`](../sglang/qwen4exp-serving-b02e16a8.patch);
+the candidate passed the gates recorded under
+[`docs/logs/raw/migration_3090_2026-09-16/`](logs/raw/migration_3090_2026-09-16/)
+and the default launcher has been switched, with the frozen flags-on launcher as
+the immediate rollback ([`sglang/README.md`](../sglang/README.md), Main-based
+3090 series). This document stays as the plan of record; the repository baseline
+at planning time was `ab61990` (R1–R3 launcher promotion). It supersedes the
+future-facing migration assumptions in [`sglang/UPSTREAM.md`](../sglang/UPSTREAM.md).
+Historical patches and logs remain reproduction artifacts.
 
 ## Objective and scope
 

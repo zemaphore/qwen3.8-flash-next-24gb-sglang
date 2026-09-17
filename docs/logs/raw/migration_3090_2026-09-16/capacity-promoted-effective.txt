@@ -1,0 +1,5 @@
+KV lazy backing: token capacity 423488 (profiled) -> 235520 (requested 235520, safety 0.77)
+KV tiers: ring R=8192 slots (int8_g64 over int4_g32), 99 MB, owner 32 KB
+Mamba Cache is allocated. max_mamba_cache_size: 4, conv_state size: 0.01GB, ssm_state size: 0.53GB 
+elastic placement: 48 layers at S=184, free slots {'w13_qweight': 128, 'w2_qweight': 0, 'w13_scales': 0, 'w2_scales': 0}, VRAM free 4.70 GB
+max_total_num_tokens=235520, chunked_prefill_size=4608, max_prefill_tokens=32768, max_running_requests=1, context_len=235520, available_gpu_mem=4.54 GB

@@ -1,5 +1,15 @@
 # SGLang serving patch for Qwen3.8-Flash-Next at 2.572 bpw -- patch notes
 
+**Status (2026-09-17):** this file documents the **historical**
+`qwen4exp-serving-73a255206f.patch` (the served sm_120 tree) and stays as
+provenance. The **current** RTX 3090 implementation is the main-based series in
+[`upstream/series-main/`](upstream/series-main/) (target base `b02e16a895`,
+model support `52fecfdf`, PR #37500); its per-file disposition is in
+`upstream/series-main/MANIFEST.md`, and its dependency delta, validation status
+and rollback are in [`README.md`](README.md) (Main-based 3090 series). The six
+main patches drop the measurement-only hooks described in section 4.12/5 below,
+keep the default-off research features off, and do not port `kv_paged_prefix`.
+
 File: `qwen4exp-serving-73a255206f.patch` (this directory), the verbatim diff of the tree that
 served the published numbers. The reviewable form of the same change is the five-commit series
 under `upstream/` (`UPSTREAM.md`); these notes describe the flat patch, which remains the
@@ -16,9 +26,9 @@ checkout on 2026-09-03, at restart #23) and its base commit:
 | | |
 |---|---|
 | Base commit | `73a255206f916366c8d26d4022f82ddfb0ab558d` "Introduce Qwen 3.8 Flash Next" (Qiaolin-Yu, 2026-08-26 01:36:27 -0700); the first commit of the branch `qwen4-main-squashed` of the open PR #36497 in `sgl-project/sglang`. It is not on `main`. |
-| Size | 34 files changed, 4155 insertions(+), 89 deletions(-) (`git diff --stat HEAD`); 5439 lines, 251,796 bytes |
+| Size | 34 files changed, 4155 insertions(+), 89 deletions(-) (`git diff --stat HEAD`); 5439 lines, 251,847 bytes |
 | New files | 7 (`new file mode` headers): `expert_stream.py` plus the six modules listed in section 3 |
-| SHA-256 | `92f669b2525f9c86190825390fafc2b41a28071c398fcb7fd95716fbce744bb5` |
+| SHA-256 | `10a3ad54f9688099848b3a6985145050ed35327116bf7c0ffa8a951b338b69c9`. The 2026-09-03 form was `92f669b2525f9c86190825390fafc2b41a28071c398fcb7fd95716fbce744bb5` (251,796 bytes); one PLE line (`SGLANG_QWEN4_PLE_WORKERS`) changed during the later PP campaign. |
 | Supersedes | `patches/base/sglang-qwen4exp-2bit.patch` (the pre-campaign baseline: 15 files, 604 lines) |
 | Review form | `upstream/series-q4head/` (on `78c5024e9d`, the head of `qwen4-main-squashed`) and `upstream/series-base/` (on `73a255206f`): the same change split into five commits without the measurement and debug hooks, with registered unit tests |
 

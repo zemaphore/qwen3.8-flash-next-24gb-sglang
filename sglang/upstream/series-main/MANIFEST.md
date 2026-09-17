@@ -70,6 +70,25 @@ Environment: the port needs a venv built from this tree (main pins
   padded tails of main's `zero_fill_cols=stride` path. That path is gated to
   SM100/SM120 by `_resolve_trtllm_sparse_decode()` and is therefore off the
   3090 profile; it remains an open item for other hardware.
-- Validation status: static/API gate passed (compileall, `launch_server --help`,
-  promoted-flag `ServerArgs` parse, no removed-VMM or old-field references).
-  GPU gates are not run yet.
+- Validation status (2026-09-17): static/API gate passed (compileall,
+  `launch_server --help`, promoted-flag `ServerArgs` parse, no removed-VMM or
+  old-field references); candidate bring-up matched the frozen control's
+  effective profile; matched teacher-forced logprob A/B vs the frozen control
+  was bit-exact (MAX 0.0000 / MEAN 0.00000 over 450 forced tokens); prefix-cache
+  repeat/append/next-session and the R1/R3 pressure churn reproducer passed
+  across two boots; near-limit capacity on the promoted radix profile passed
+  (232,000 input + 512 generated, 27.79 tok/s, 18 MiB min free, R3 refusal → R1
+  re-sort → sole-owner bypass → ok). The TG0 redo / TG1 run is a comparability
+  arm on the pre-promotion 256K radix-off profile, not the promoted baseline.
+- Open: the reduced set of GPU kernel/state micro-gates (INT2 packing/GEMV,
+  offload storage swaps, PLE read/eviction, graph outputs, VMM
+  shrink/regrow/replay) was not run in this pass; PP14 long-prompt drift carried
+  forward; the optional NGRAM patch is untested.
+- Evidence: `docs/logs/raw/migration_3090_2026-09-16/` (`control-freeze.md`,
+  `step2-venv.md`, `port-status.md`, `step5-validation.md`, `step5d-pressure.md`,
+  `capacity-promoted.json`, `dependency-delta.txt`) and
+  `docs/logs/tg0_tg1_candidate_3090_2026-09-17.md`.
+  Promotion/rollback: [`../../README.md`](../../README.md)
+  (Main-based 3090 series); immediate rollback
+  `docs/logs/raw/promotion_3090_2026-09-16/serve-3090-flags.sh`
+  (sha256 `d0866e7c…f57447`).
