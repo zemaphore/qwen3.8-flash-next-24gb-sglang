@@ -1,0 +1,90 @@
+{
+  "url": "http://127.0.0.1:30001/generate",
+  "decode": 512,
+  "sets": {
+    "code_cal1": {
+      "prompt_tokens": 2048,
+      "completion_tokens": 512,
+      "cached_tokens": 0,
+      "rows": 511,
+      "distinct_rows": 511,
+      "rows_equal_capture_constant": false,
+      "wall_seconds": 16.4782360149984,
+      "class": "code",
+      "prompt_ids_sha256": "5173ed99e173494769d833ac507f4c7e37f8f6ca899b02bad9d715399fd6fd7d",
+      "output_ids_len": 512,
+      "expected_rows": 511,
+      "row_token_alignment_ok": true
+    },
+    "code_cal2": {
+      "prompt_tokens": 2048,
+      "completion_tokens": 512,
+      "cached_tokens": 0,
+      "rows": 511,
+      "distinct_rows": 511,
+      "rows_equal_capture_constant": false,
+      "wall_seconds": 15.617838408012176,
+      "class": "code",
+      "prompt_ids_sha256": "4938993edc0313521f98599cffc21ab554f46ab38d8b96e11b7a67f529b28ccb",
+      "output_ids_len": 512,
+      "expected_rows": 511,
+      "row_token_alignment_ok": true
+    },
+    "reasoning_cal1": {
+      "prompt_tokens": 2048,
+      "completion_tokens": 512,
+      "cached_tokens": 0,
+      "rows": 511,
+      "distinct_rows": 511,
+      "rows_equal_capture_constant": false,
+      "wall_seconds": 15.006973537005251,
+      "class": "reasoning",
+      "prompt_ids_sha256": "67d0030609dc2d75b171b1d6117aaf34a2ee48605875ad2e0abc272dbdec1b94",
+      "output_ids_len": 512,
+      "expected_rows": 511,
+      "row_token_alignment_ok": true
+    },
+    "reasoning_cal2": {
+      "prompt_tokens": 2048,
+      "completion_tokens": 512,
+      "cached_tokens": 0,
+      "rows": 511,
+      "distinct_rows": 511,
+      "rows_equal_capture_constant": false,
+      "wall_seconds": 17.501660147012444,
+      "class": "reasoning",
+      "prompt_ids_sha256": "95764cff5c86a6b31d416d919885176b8ebf65188021aa89c1b32ae5349f9eb1",
+      "output_ids_len": 512,
+      "expected_rows": 511,
+      "row_token_alignment_ok": true
+    },
+    "code_held_fresh": {
+      "prompt_tokens": 2048,
+      "completion_tokens": 512,
+      "cached_tokens": 0,
+      "rows": 511,
+      "distinct_rows": 511,
+      "rows_equal_capture_constant": false,
+      "wall_seconds": 14.574722095989273,
+      "class": "code",
+      "prompt_ids_sha256": "83ffbdc133e7072e7f92c86d3945e4d8af90efb2d16768d82cb2e8f54aaab9cd",
+      "output_ids_len": 512,
+      "expected_rows": 511,
+      "row_token_alignment_ok": true
+    },
+    "reasoning_held_fresh": {
+      "prompt_tokens": 2048,
+      "completion_tokens": 512,
+      "cached_tokens": 0,
+      "rows": 511,
+      "distinct_rows": 511,
+      "rows_equal_capture_constant": false,
+      "wall_seconds": 14.532023783001932,
+      "class": "reasoning",
+      "prompt_ids_sha256": "0d3ad6d240e4ae3c7408767926d4a8549543f3554932209e26982a1805992200",
+      "output_ids_len": 512,
+      "expected_rows": 511,
+      "row_token_alignment_ok": true
+    }
+  }
+}

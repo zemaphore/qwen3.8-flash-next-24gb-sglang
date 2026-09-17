@@ -1,0 +1,50 @@
+{
+  "url": "http://127.0.0.1:30001/generate",
+  "decode": 96,
+  "sets": {
+    "code_cal": {
+      "prompt_tokens": 2048,
+      "completion_tokens": 96,
+      "cached_tokens": 0,
+      "rows": 95,
+      "distinct_rows": 95,
+      "rows_equal_capture_constant": false,
+      "wall_seconds": 5.505807666006149,
+      "class": "code",
+      "prompt_ids_sha256": "5173ed99e173494769d833ac507f4c7e37f8f6ca899b02bad9d715399fd6fd7d"
+    },
+    "code_held": {
+      "prompt_tokens": 2048,
+      "completion_tokens": 96,
+      "cached_tokens": 0,
+      "rows": 95,
+      "distinct_rows": 95,
+      "rows_equal_capture_constant": false,
+      "wall_seconds": 4.389701423002407,
+      "class": "code",
+      "prompt_ids_sha256": "fadd3e1a1ecc06a121ebf3d3675d0ff4ee8213839bfb26b1bad1c1d77336c0c6"
+    },
+    "reasoning_cal": {
+      "prompt_tokens": 2048,
+      "completion_tokens": 96,
+      "cached_tokens": 0,
+      "rows": 95,
+      "distinct_rows": 95,
+      "rows_equal_capture_constant": false,
+      "wall_seconds": 4.396606859998428,
+      "class": "reasoning",
+      "prompt_ids_sha256": "67d0030609dc2d75b171b1d6117aaf34a2ee48605875ad2e0abc272dbdec1b94"
+    },
+    "reasoning_held": {
+      "prompt_tokens": 2048,
+      "completion_tokens": 96,
+      "cached_tokens": 0,
+      "rows": 95,
+      "distinct_rows": 95,
+      "rows_equal_capture_constant": false,
+      "wall_seconds": 4.860712514011539,
+      "class": "reasoning",
+      "prompt_ids_sha256": "11aa589ee0045e8f85a101b4d99d9833812091cce5cc0b51336b0f3960d5986e"
+    }
+  }
+}

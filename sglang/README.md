@@ -132,10 +132,22 @@ main-based implementation with the promoted radix profile: tree
 4 Mamba slots, 235,520-token pool, `qwen38-flash-230K`, R1–R3 on, and
 `--cuda-graph-backend-prefill disabled` (main no longer auto-disables prefill
 graphs for a multimodal model). The installed launcher is
-`serve-3090-main.sh` (sha256 `fb72fc95…49eccd`, port 30001); the distinct
+`serve-3090-main.sh` (port 30001; sha256 `0d1cd1fb…a8d2d` after the TG3b
+placement promotion below, previously `fb72fc95…49eccd`); the distinct
 candidate form is `serve-3090-main-candidate.sh` (port 30011, separate
 `SGLANG_CACHE_DIR` and elastic control). The promoted boot verified the
 effective profile (`max_total_num_tokens=235520`, page 64, ring 8192, S184).
+
+**Placement promotion (2026-09-17):** the launcher default
+`SGLANG_MOE_PLACEMENT` is now `assets/expert_decode_selection.pt`
+(sha256 `e68dd563…84f1c4`), a top-184-per-layer asset ranked by 512-token
+decode selection count from four equal-weight calibration prompts
+(`docs/logs/tg3_static_decode_placement_3090_2026-09-17.md`). Presence S184
+(`assets/expert_presence_code.pt`) remains available via the environment
+override and is the rollback default. The TG3b acceptance check reduced total
+wall time −9.2 % (code) and −8.5 % (reasoning) on 32K conversations with lower
+aggregate decode; it is an operational accept, not full verification. PP14
+remains deferred.
 
 Rollback, source, environment and launcher together:
 

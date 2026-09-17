@@ -1,0 +1,20 @@
+{
+  "url": "http://127.0.0.1:30001/generate",
+  "decode": 256,
+  "sets": {
+    "reasoning_held": {
+      "prompt_tokens": 2048,
+      "completion_tokens": 256,
+      "cached_tokens": 0,
+      "rows": 255,
+      "distinct_rows": 255,
+      "rows_equal_capture_constant": false,
+      "wall_seconds": 9.529733963994659,
+      "class": "reasoning",
+      "prompt_ids_sha256": "11aa589ee0045e8f85a101b4d99d9833812091cce5cc0b51336b0f3960d5986e",
+      "output_ids_len": 256,
+      "expected_rows": 255,
+      "row_token_alignment_ok": true
+    }
+  }
+}
